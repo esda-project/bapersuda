@@ -1,0 +1,2395 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIANGGARAN — Sistem Informasi Anggaran SKPD</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ===== CSS VARIABLES ===== */
+:root {
+  --c-bg: #f0f4f8;
+  --c-surface: #ffffff;
+  --c-surface2: #f7fafc;
+  --c-border: #e2e8f0;
+  --c-text: #1a202c;
+  --c-text-muted: #718096;
+  --c-primary: #1a56db;
+  --c-primary-dark: #1340b0;
+  --c-primary-light: #ebf2ff;
+  --c-success: #0d9488;
+  --c-success-light: #e6faf8;
+  --c-warning: #d97706;
+  --c-warning-light: #fffbeb;
+  --c-danger: #dc2626;
+  --c-danger-light: #fef2f2;
+  --c-accent: #7c3aed;
+  --c-accent-light: #ede9fe;
+  --c-sidebar-bg: #0f172a;
+  --c-sidebar-text: #94a3b8;
+  --c-sidebar-active: #1e40af;
+  --c-sidebar-hover: #1e293b;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.10);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.13);
+  --radius: 10px;
+  --radius-lg: 16px;
+  --font: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --sidebar-w: 240px;
+  --transition: 0.2s ease;
+}
+.dark {
+  --c-bg: #0f172a;
+  --c-surface: #1e293b;
+  --c-surface2: #162032;
+  --c-border: #2d3748;
+  --c-text: #f1f5f9;
+  --c-text-muted: #94a3b8;
+  --c-primary-light: #1e3a5f;
+  --c-success-light: #0d4a44;
+  --c-warning-light: #3d2800;
+  --c-danger-light: #3d0a0a;
+  --c-accent-light: #2e1065;
+  --c-sidebar-bg: #0a0f1e;
+  --c-sidebar-hover: #1e293b;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.4);
+}
+
+/* ===== RESET ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--font);background:var(--c-bg);color:var(--c-text);font-size:14px;line-height:1.5}
+button{cursor:pointer;font-family:inherit}
+input,select,textarea{font-family:inherit;font-size:14px}
+a{text-decoration:none;color:inherit}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--c-border)}
+th{background:var(--c-surface2);font-weight:600;font-size:13px;position:sticky;top:0;z-index:1}
+tr:hover td{background:var(--c-primary-light)}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--c-border);border-radius:3px}
+
+/* ===== SUPABASE CONFIG SCREEN ===== */
+#configScreen {
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 50%,#1e40af 100%);
+}
+.config-card {
+  background:var(--c-surface);border-radius:var(--radius-lg);padding:40px;
+  width:100%;max-width:500px;box-shadow:var(--shadow-lg);
+}
+.config-card h2{font-size:20px;font-weight:700;color:var(--c-primary);margin-bottom:6px}
+.config-card p{font-size:13px;color:var(--c-text-muted);margin-bottom:20px}
+.config-info{background:var(--c-primary-light);border-radius:8px;padding:12px;font-size:12px;color:var(--c-primary);margin-bottom:20px;line-height:1.8}
+.config-info code{background:rgba(26,86,219,.15);padding:1px 5px;border-radius:4px;font-family:var(--font-mono)}
+.db-status{display:flex;align-items:center;gap:6px;font-size:12px;padding:8px 12px;border-radius:6px;margin-top:12px}
+.db-status.ok{background:var(--c-success-light);color:var(--c-success)}
+.db-status.err{background:var(--c-danger-light);color:var(--c-danger)}
+.db-status.loading{background:var(--c-warning-light);color:var(--c-warning)}
+.sync-indicator{position:fixed;top:8px;right:80px;font-size:11px;padding:3px 10px;border-radius:20px;z-index:9999;transition:all .3s}
+.sync-indicator.syncing{background:#fef3c7;color:#b45309;display:flex;align-items:center;gap:5px}
+.sync-indicator.synced{background:#d1fae5;color:#065f46;display:flex;align-items:center;gap:5px}
+.sync-indicator.error{background:#fee2e2;color:#991b1b;display:flex;align-items:center;gap:5px}
+.sync-indicator.hidden{display:none}
+
+/* ===== LOGIN SCREEN ===== */
+#loginScreen {
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 50%,#1e40af 100%);
+}
+.login-card {
+  background:var(--c-surface);border-radius:var(--radius-lg);padding:40px;
+  width:100%;max-width:440px;box-shadow:var(--shadow-lg);
+}
+.login-logo {text-align:center;margin-bottom:28px}
+.login-logo h1{font-size:26px;font-weight:700;color:var(--c-primary);letter-spacing:-0.5px}
+.login-logo p{color:var(--c-text-muted);font-size:13px;margin-top:4px}
+.login-badge{display:inline-block;background:var(--c-primary-light);color:var(--c-primary);font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;margin-bottom:6px;letter-spacing:1px}
+.login-fields{display:flex;flex-direction:column;gap:14px;margin-bottom:20px}
+.field-group label{display:block;font-size:12px;font-weight:600;color:var(--c-text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+.field-group input,.field-group select{width:100%;padding:10px 13px;border:1.5px solid var(--c-border);border-radius:8px;background:var(--c-surface2);color:var(--c-text);transition:border-color var(--transition)}
+.field-group input:focus,.field-group select:focus{outline:none;border-color:var(--c-primary)}
+.login-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn-primary{width:100%;padding:12px;background:var(--c-primary);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;letter-spacing:.3px;transition:background var(--transition)}
+.btn-primary:hover{background:var(--c-primary-dark)}
+.login-footer{text-align:center;margin-top:16px;font-size:12px;color:var(--c-text-muted)}
+
+/* ===== MAIN APP LAYOUT ===== */
+#app{display:none;height:100vh;flex-direction:row}
+#app.visible{display:flex}
+
+/* Sidebar */
+.sidebar {
+  width:var(--sidebar-w);flex-shrink:0;background:var(--c-sidebar-bg);
+  display:flex;flex-direction:column;overflow-y:auto;z-index:100;
+  transition:width var(--transition);
+}
+.sidebar-brand{padding:20px 18px;border-bottom:1px solid rgba(255,255,255,.07)}
+.sidebar-brand h2{color:#fff;font-size:15px;font-weight:700;letter-spacing:-.3px}
+.sidebar-brand p{color:var(--c-sidebar-text);font-size:11px;margin-top:2px}
+.sidebar-user{padding:12px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.07)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--c-primary);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0}
+.sidebar-user-info{min-width:0}
+.sidebar-user-info .name{color:#fff;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-user-info .role{color:var(--c-sidebar-text);font-size:11px}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section{padding:10px 18px 4px;font-size:10px;font-weight:700;letter-spacing:1.5px;color:rgba(148,163,184,.5);text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;color:var(--c-sidebar-text);cursor:pointer;transition:all var(--transition);border-left:3px solid transparent;font-size:13px}
+.nav-item:hover{background:var(--c-sidebar-hover);color:#fff}
+.nav-item.active{background:var(--c-sidebar-active);color:#fff;border-left-color:#60a5fa}
+.nav-item .icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.07)}
+.sidebar-meta{font-size:11px;color:rgba(148,163,184,.5);line-height:1.8}
+#themeToggle{width:100%;padding:8px;background:rgba(255,255,255,.06);border:none;border-radius:6px;color:var(--c-sidebar-text);font-size:12px;text-align:left;margin-top:8px;transition:background var(--transition)}
+#themeToggle:hover{background:rgba(255,255,255,.12)}
+
+/* Main content */
+.main-content{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{
+  padding:12px 24px;background:var(--c-surface);border-bottom:1px solid var(--c-border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+  box-shadow:var(--shadow-sm);
+}
+.topbar-left h3{font-size:16px;font-weight:700;color:var(--c-text)}
+.topbar-left p{font-size:12px;color:var(--c-text-muted);margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.topbar-badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-tahun{background:var(--c-primary-light);color:var(--c-primary)}
+.badge-tahapan{background:var(--c-warning-light);color:var(--c-warning)}
+.page-content{flex:1;overflow-y:auto;padding:20px 24px}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;border:none;transition:all var(--transition);cursor:pointer;white-space:nowrap}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-blue{background:var(--c-primary);color:#fff}.btn-blue:hover{background:var(--c-primary-dark)}
+.btn-green{background:var(--c-success);color:#fff}.btn-green:hover{opacity:.9}
+.btn-red{background:var(--c-danger);color:#fff}.btn-red:hover{opacity:.9}
+.btn-gray{background:var(--c-border);color:var(--c-text)}.btn-gray:hover{background:#cbd5e0}
+.btn-outline{background:transparent;border:1.5px solid var(--c-border);color:var(--c-text)}.btn-outline:hover{border-color:var(--c-primary);color:var(--c-primary)}
+
+/* ===== CARDS & STATS ===== */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.stat-card{background:var(--c-surface);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow-sm);border:1px solid var(--c-border);position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius) var(--radius) 0 0}
+.stat-card.blue::before{background:var(--c-primary)}
+.stat-card.green::before{background:var(--c-success)}
+.stat-card.orange::before{background:var(--c-warning)}
+.stat-card.red::before{background:var(--c-danger)}
+.stat-card.purple::before{background:var(--c-accent)}
+.stat-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--c-text-muted);margin-bottom:6px}
+.stat-value{font-size:22px;font-weight:700;color:var(--c-text);font-family:var(--font-mono);letter-spacing:-.5px}
+.stat-sub{font-size:11px;color:var(--c-text-muted);margin-top:3px}
+.stat-icon{position:absolute;right:16px;top:14px;font-size:24px;opacity:.12}
+
+/* ===== PROGRESS BAR ===== */
+.progress-bar{height:6px;background:var(--c-border);border-radius:3px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;border-radius:3px;transition:width 0.5s ease}
+.fill-blue{background:var(--c-primary)}
+.fill-green{background:var(--c-success)}
+.fill-orange{background:var(--c-warning)}
+.fill-red{background:var(--c-danger)}
+
+/* ===== CHART CONTAINERS ===== */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.chart-card{background:var(--c-surface);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);border:1px solid var(--c-border)}
+.chart-card h4{font-size:13px;font-weight:700;margin-bottom:12px;color:var(--c-text)}
+.bar-chart-wrap{display:flex;flex-direction:column;gap:8px}
+.bar-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.bar-label{width:140px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-muted)}
+.bar-outer{flex:1;height:18px;background:var(--c-border);border-radius:4px;overflow:hidden;position:relative}
+.bar-inner{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;font-size:10px;color:#fff;font-weight:600;min-width:20px;transition:width 0.5s ease}
+.bar-val{margin-left:6px;font-family:var(--font-mono);color:var(--c-text);font-size:11px}
+
+/* ===== AI ANALYSIS ===== */
+.ai-card{background:linear-gradient(135deg,var(--c-accent-light),var(--c-primary-light));border:1px solid var(--c-accent);border-radius:var(--radius);padding:16px;margin-bottom:20px}
+.ai-card-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.ai-card-header h4{font-size:14px;font-weight:700;color:var(--c-accent)}
+.ai-card-body{font-size:13px;color:var(--c-text);line-height:1.7}
+.ai-loading{display:flex;align-items:center;gap:8px;color:var(--c-text-muted);font-size:13px}
+.spinner{width:16px;height:16px;border:2px solid var(--c-border);border-top-color:var(--c-primary);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== FORM MODAL ===== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--c-surface);border-radius:var(--radius-lg);width:100%;max-width:640px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal-header{padding:18px 20px;border-bottom:1px solid var(--c-border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--c-surface);z-index:1}
+.modal-header h3{font-size:16px;font-weight:700}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--c-text-muted);line-height:1}
+.modal-body{padding:20px}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--c-border);display:flex;justify-content:flex-end;gap:8px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid.col1{grid-template-columns:1fr}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group.span2{grid-column:1/-1}
+.form-label{font-size:12px;font-weight:600;color:var(--c-text-muted);text-transform:uppercase;letter-spacing:.4px}
+.form-input,.form-select,.form-textarea{padding:9px 12px;border:1.5px solid var(--c-border);border-radius:7px;background:var(--c-surface2);color:var(--c-text);width:100%;transition:border-color var(--transition)}
+.form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--c-primary)}
+.form-input[readonly]{background:var(--c-border);color:var(--c-text-muted);cursor:default}
+.form-textarea{resize:vertical;min-height:70px}
+.form-hint{font-size:11px;color:var(--c-text-muted)}
+
+/* ===== TABLES ===== */
+.table-wrap{background:var(--c-surface);border-radius:var(--radius);border:1px solid var(--c-border);box-shadow:var(--shadow-sm);overflow:hidden}
+.table-toolbar{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--c-border);flex-wrap:wrap}
+.table-toolbar h4{font-size:14px;font-weight:700}
+.toolbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.search-input{padding:7px 12px;border:1.5px solid var(--c-border);border-radius:7px;background:var(--c-surface2);color:var(--c-text);width:200px;font-size:13px}
+.search-input:focus{outline:none;border-color:var(--c-primary)}
+.table-scroll{overflow-x:auto;max-height:450px;overflow-y:auto}
+.table-scroll table th{background:var(--c-surface2)!important}
+td.mono{font-family:var(--font-mono);font-size:12px}
+td.right{text-align:right}
+td.center{text-align:center}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-blue{background:var(--c-primary-light);color:var(--c-primary)}
+.badge-green{background:var(--c-success-light);color:var(--c-success)}
+.badge-orange{background:var(--c-warning-light);color:var(--c-warning)}
+.badge-red{background:var(--c-danger-light);color:var(--c-danger)}
+.action-btns{display:flex;gap:4px}
+.empty-state{text-align:center;padding:40px;color:var(--c-text-muted)}
+.empty-state .empty-icon{font-size:40px;margin-bottom:8px}
+
+/* ===== PAGE SECTIONS ===== */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.page-header h2{font-size:20px;font-weight:700}
+.section-card{background:var(--c-surface);border-radius:var(--radius);border:1px solid var(--c-border);padding:16px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
+.section-card h4{font-size:14px;font-weight:700;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--c-border)}
+
+/* ===== LRA SPECIFIC ===== */
+.lra-header-box{background:var(--c-surface2);border:1px solid var(--c-border);border-radius:var(--radius);padding:14px;margin-bottom:16px}
+.lra-header-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px}
+.lra-header-grid .lbl{color:var(--c-text-muted);font-weight:600}
+.lra-table td,.lra-table th{font-size:12px;padding:7px 10px}
+.lra-total td{font-weight:700;background:var(--c-primary-light)!important}
+
+/* ===== ANGGARAN KAS ===== */
+.kas-table td{font-size:12px;padding:6px 8px}
+.kas-table th{font-size:11px}
+.kas-input{width:100%;padding:4px 6px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-surface);color:var(--c-text);font-family:var(--font-mono);font-size:12px;text-align:right}
+.kas-input:focus{outline:none;border-color:var(--c-primary)}
+
+/* ===== REKAP ===== */
+.rekap-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+/* ===== PENGGUNA ===== */
+.user-card{background:var(--c-surface2);border-radius:var(--radius);padding:14px;border:1px solid var(--c-border);display:flex;align-items:center;gap:12px}
+.user-role-badge{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase}
+
+/* ===== TOAST ===== */
+#toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity var(--transition);pointer-events:none;display:flex;align-items:center;gap:8px;max-width:320px}
+#toast.show{opacity:1}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:768px){
+  .sidebar{position:fixed;left:-var(--sidebar-w);transition:left var(--transition);height:100vh}
+  .sidebar.open{left:0}
+  .chart-grid,.rekap-grid{grid-template-columns:1fr}
+  .form-grid{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .page-content{padding:14px}
+}
+@media(max-width:480px){
+  .stats-grid{grid-template-columns:1fr}
+  .login-row{grid-template-columns:1fr}
+}
+
+/* ===== PRINT ===== */
+@media print {
+  body * { visibility: hidden; }
+  #pageContent, #pageContent * { visibility: visible; }
+  #pageContent {
+    position: fixed;
+    inset: 0;
+    padding: 20px;
+    overflow: visible;
+    background: #fff;
+    color: #000;
+  }
+  .btn, .page-header button, .table-toolbar button,
+  .action-btns, .search-input { display: none !important; }
+  .table-scroll { max-height: none !important; overflow: visible !important; }
+  .table-wrap { box-shadow: none; border: 1px solid #ccc; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== SYNC INDICATOR ===== -->
+<div class="sync-indicator hidden" id="syncIndicator"></div>
+
+<!-- ===== SUPABASE CONFIG SCREEN ===== -->
+<div id="configScreen" style="display:none">
+  <div class="config-card">
+    <h2>⚙️ Konfigurasi Supabase</h2>
+    <p>Hubungkan SIANGGARAN ke database Supabase Anda untuk penyimpanan data terpusat dan multi-pengguna.</p>
+    <div class="config-info">
+      <b>📋 Langkah setup:</b><br>
+      1. Buat project di <a href="https://supabase.com" target="_blank" style="color:var(--c-primary)">supabase.com</a><br>
+      2. Copy <code>Project URL</code> dan <code>anon public key</code> dari Settings → API<br>
+      3. Jalankan SQL migration di bawah ini di SQL Editor Supabase<br>
+      4. Klik <b>Simpan & Sambungkan</b>
+    </div>
+    <div class="login-fields">
+      <div class="field-group">
+        <label>Supabase Project URL</label>
+        <input type="text" id="cfgUrl" placeholder="https://xxxxxxxxxxxx.supabase.co" style="font-family:monospace">
+      </div>
+      <div class="field-group">
+        <label>Supabase Anon Key</label>
+        <input type="text" id="cfgKey" placeholder="eyJhbGciOiJIUzI1NiIs..." style="font-family:monospace">
+      </div>
+    </div>
+    <div id="cfgStatus"></div>
+    <button class="btn-primary" onclick="saveSupabaseConfig()" style="margin-top:12px">🔌 Simpan & Sambungkan</button>
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:6px;align-items:center">
+      <button onclick="showSQLMigration()" style="background:none;border:none;color:var(--c-primary);font-size:12px;cursor:pointer;text-decoration:underline">📄 Lihat SQL Migration Script (instalasi baru)</button>
+      <button onclick="showSQLPatch()" style="background:none;border:none;color:#d97706;font-size:12px;cursor:pointer;text-decoration:underline">🔧 Lihat SQL Patch (perbaiki tabel yang sudah ada)</button>
+    </div>
+    <div id="sqlMigrationBox" style="display:none;margin-top:12px;background:var(--c-surface2);border-radius:8px;padding:14px;border:1px solid var(--c-border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:700">SQL Migration — jalankan di Supabase SQL Editor</span>
+        <button onclick="copySQLMigration()" class="btn btn-sm btn-outline">📋 Copy</button>
+      </div>
+      <pre id="sqlMigrationText" style="font-size:10px;overflow-x:auto;white-space:pre;line-height:1.5;color:var(--c-text-muted);max-height:300px;overflow-y:auto"></pre>
+    </div>
+    <div id="sqlPatchBox" style="display:none;margin-top:12px;background:#fffbeb;border-radius:8px;padding:14px;border:1px solid #d97706">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;font-weight:700;color:#b45309">🔧 SQL Patch — tambah kolom yang kurang</span>
+        <button onclick="copySQLPatch()" class="btn btn-sm btn-outline">📋 Copy</button>
+      </div>
+      <p style="font-size:11px;color:#92400e;margin-bottom:8px">Jalankan script ini jika muncul error <b>"could not find column"</b>. Aman dijalankan berulang kali.</p>
+      <pre id="sqlPatchText" style="font-size:10px;overflow-x:auto;white-space:pre;line-height:1.5;color:#78350f;max-height:300px;overflow-y:auto;background:#fef3c7;padding:8px;border-radius:4px"></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LOGIN SCREEN ===== -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-badge">PEMERINTAH DAERAH</div>
+      <h1>💼 SIANGGARAN</h1>
+      <p>Sistem Informasi Anggaran SKPD</p>
+      <p style="font-size:11px;margin-top:6px;color:#aaa">Bagian Perekonomian dan Sumber Daya Alam</p>
+    </div>
+    <div class="login-fields">
+      <div class="login-row">
+        <div class="field-group">
+          <label>Tahun Anggaran</label>
+          <select id="loginTahun">
+            <option>2026</option><option>2025</option><option>2024</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Tahapan</label>
+          <select id="loginTahapan">
+            <option>Murni</option><option>Pergeseran</option><option>Perubahan</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Username</label>
+        <input type="text" id="loginUser" placeholder="Username" value="admin">
+      </div>
+      <div class="field-group">
+        <label>Password</label>
+        <input type="password" id="loginPass" placeholder="Password" value="admin123">
+      </div>
+      <div class="field-group">
+        <label>Mode Tampilan</label>
+        <select id="loginMode">
+          <option value="light">☀️ Terang</option>
+          <option value="dark">🌙 Gelap</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="doLogin()">Masuk ke Sistem</button>
+    <p class="login-footer">Demo: username <b>admin</b> / password <b>admin123</b></p>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div id="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h2>💼 SIANGGARAN</h2>
+      <p id="sbSkpd">Bagian Perekonomian & SDA</p>
+    </div>
+    <div class="sidebar-user">
+      <div class="avatar" id="sbAvatar">A</div>
+      <div class="sidebar-user-info">
+        <div class="name" id="sbUserName">Administrator</div>
+        <div class="role" id="sbUserRole">Admin</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Utama</div>
+      <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+        <span class="icon">📊</span> Dashboard
+      </div>
+      <div class="nav-section">Input Data</div>
+      <div class="nav-item" onclick="showPage('anggaran')" id="nav-anggaran">
+        <span class="icon">📋</span> Input Anggaran
+      </div>
+      <div class="nav-item" onclick="showPage('kas')" id="nav-kas">
+        <span class="icon">💰</span> Anggaran Kas
+      </div>
+      <div class="nav-item" onclick="showPage('realisasi')" id="nav-realisasi">
+        <span class="icon">📑</span> Input Realisasi
+      </div>
+      <div class="nav-section">Laporan</div>
+      <div class="nav-item" onclick="showPage('rekap')" id="nav-rekap">
+        <span class="icon">📈</span> Rekap Realisasi
+      </div>
+      <div class="nav-item" onclick="showPage('lra')" id="nav-lra">
+        <span class="icon">📄</span> Laporan LRA
+      </div>
+      <div class="nav-section">Admin</div>
+      <div class="nav-item" onclick="showPage('pengguna')" id="nav-pengguna">
+        <span class="icon">👥</span> Pengguna
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-meta">
+        <div id="sbTahun">TA: 2026</div>
+        <div id="sbTahapan">Tahapan: Murni</div>
+        <div id="sbWaktu"></div>
+      </div>
+      <button id="themeToggle" onclick="toggleTheme()">🌙 Ganti Mode Gelap</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px">
+        <button style="padding:8px;background:rgba(16,185,129,.15);border:none;border-radius:6px;color:#34d399;font-size:11px;cursor:pointer;font-family:inherit" onclick="exportJSON()" title="Export seluruh data ke file JSON">
+          ⬇️ Export
+        </button>
+        <button style="padding:8px;background:rgba(96,165,250,.15);border:none;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer;font-family:inherit" onclick="document.getElementById('importFileInput').click()" title="Import data dari file JSON">
+          ⬆️ Import
+        </button>
+      </div>
+      <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importJSON(this)">
+      <button style="width:100%;padding:8px;background:rgba(220,38,38,.15);border:none;border-radius:6px;color:#f87171;font-size:12px;margin-top:6px;cursor:pointer;font-family:inherit" onclick="doLogout()">
+        🚪 Keluar
+      </button>
+      <button style="width:100%;padding:6px;background:rgba(148,163,184,.1);border:none;border-radius:6px;color:rgba(148,163,184,.7);font-size:10px;margin-top:4px;cursor:pointer;font-family:inherit" onclick="resetSupabaseConfig()" title="Ganti konfigurasi Supabase">
+        ⚙️ Ubah Konfigurasi DB
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h3 id="topbarTitle">Dashboard</h3>
+        <p id="topbarSub">Ringkasan anggaran dan realisasi</p>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-badge badge-tahun" id="tbTahun">TA 2026</span>
+        <span class="topbar-badge badge-tahapan" id="tbTahapan">Murni</span>
+      </div>
+    </div>
+
+    <div class="page-content" id="pageContent">
+      <!-- Pages rendered here -->
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODALS ===== -->
+<div class="modal-overlay" id="modalAnggaran">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalAnggaranTitle">Tambah Data Anggaran</h3>
+      <button class="modal-close" onclick="closeModal('modalAnggaran')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Program</label>
+          <select class="form-select" id="fProgram" onchange="onProgramChange()">
+            <option value="">-- Pilih Program --</option>
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Kegiatan</label>
+          <select class="form-select" id="fKegiatan" onchange="onKegiatanChange()">
+            <option value="">-- Pilih Kegiatan --</option>
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Sub Kegiatan</label>
+          <select class="form-select" id="fSubKegiatan" onchange="onSubKegiatanChange()">
+            <option value="">-- Pilih Sub Kegiatan --</option>
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Belanja</label>
+          <select class="form-select" id="fBelanja" onchange="onBelanjaChange()">
+            <option value="">-- Pilih Belanja --</option>
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Kode Rekening (Otomatis)</label>
+          <input class="form-input" id="fKodeRekening" readonly placeholder="Otomatis dari Sub Kegiatan + Belanja + Sumber Dana">
+          <span class="form-hint">Format: [Sub Kegiatan].[Belanja].[Sumber Dana] — satu belanja bisa didaftarkan 2× dengan sumber dana berbeda</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pagu Murni (Rp)</label>
+          <input class="form-input" id="fPaguMurni" type="number" min="0" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pagu Pergeseran (Rp)</label>
+          <input class="form-input" id="fPaguPergeseran" type="number" min="0" placeholder="0 (opsional)">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pagu Perubahan (Rp)</label>
+          <input class="form-input" id="fPaguPerubahan" type="number" min="0" placeholder="0 (opsional)">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sumber Dana</label>
+          <select class="form-select" id="fSumberDana" onchange="updateKodeRekening()">
+            <option>PAD</option><option>DBH CHT</option>
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">PPTK</label>
+          <select class="form-select" id="fPPTK">
+            <option>TENGKO WOLOK, S.T.</option>
+            <option>DIYAH WAHYUNI, S.E., M.M.</option>
+            <option>SARI ANAS PUTRI, S.E.</option>
+          </select>
+        </div>
+        <input type="hidden" id="fAnggaranId">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal('modalAnggaran')">Batal</button>
+      <button class="btn btn-blue" onclick="saveAnggaran()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalRealisasi">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalRealisasiTitle">Input Transaksi Realisasi</h3>
+      <button class="modal-close" onclick="closeModal('modalRealisasi')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tanggal Transaksi</label>
+          <input class="form-input" id="rTanggal" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tanggal SP2D</label>
+          <input class="form-input" id="rTanggalSP2D" type="date">
+          <span class="form-hint">Kosongkan jika belum SP2D</span>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Uraian Transaksi</label>
+          <textarea class="form-textarea" id="rUraian" placeholder="Uraian belanja..."></textarea>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Sub Kegiatan</label>
+          <select class="form-select" id="rSubKegiatan" onchange="onRSubKegiatanChange()">
+            <option value="">-- Pilih Sub Kegiatan --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sumber Dana</label>
+          <select class="form-select" id="rSumberDana" onchange="onRSumberDanaChange()">
+            <option value="">-- Pilih Sumber Dana --</option>
+            <option>PAD</option><option>DBH CHT</option>
+          </select>
+          <span class="form-hint">Pilih sumber dana untuk memfilter belanja</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Belanja</label>
+          <select class="form-select" id="rBelanja" onchange="onRBelanjaChange()">
+            <option value="">-- Pilih Belanja --</option>
+          </select>
+        </div>
+        <div class="form-group span2" id="rInfoPagu" style="display:none">
+          <div style="padding:8px 12px;background:var(--c-primary-light);border-radius:6px;font-size:12px">
+            <span id="rPaguInfo">—</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nominal Realisasi (Rp)</label>
+          <input class="form-input" id="rNominal" type="number" min="0" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">PPTK</label>
+          <select class="form-select" id="rPPTK">
+            <option>TENGKO WOLOK, S.T.</option>
+            <option>DIYAH WAHYUNI, S.E., M.M.</option>
+            <option>SARI ANAS PUTRI, S.E.</option>
+          </select>
+        </div>
+        <input type="hidden" id="rId">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal('modalRealisasi')">Batal</button>
+      <button class="btn btn-blue" onclick="saveRealisasi()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalPengguna">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalPenggunaTitle">Tambah Pengguna</h3>
+      <button class="modal-close" onclick="closeModal('modalPengguna')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Nama Lengkap</label>
+          <input class="form-input" id="pNama" placeholder="Nama pengguna">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input class="form-input" id="pUsername" placeholder="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input class="form-input" id="pPassword" type="password" placeholder="Password baru">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role / Hak Akses</label>
+          <select class="form-select" id="pRole">
+            <option value="admin">Admin (Full Access)</option>
+            <option value="input">Operator Input</option>
+            <option value="view">Viewer (Read Only)</option>
+          </select>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Jabatan / Keterangan</label>
+          <input class="form-input" id="pJabatan" placeholder="Misal: Kasubag Anggaran">
+        </div>
+        <input type="hidden" id="pId">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal('modalPengguna')">Batal</button>
+      <button class="btn btn-blue" onclick="savePengguna()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ========================================
+// MASTER DATA (dari Kode_Rekening.xlsx)
+// ========================================
+const MASTER = {
+  programKegSubkeg: [{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.02","kegiatan":"Administrasi Keuangan Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.02.0002","sub_kegiatan":"Penyediaan Administrasi Pelaksanaan Tugas ASN"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.02","kegiatan":"Administrasi Keuangan Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.02.0003","sub_kegiatan":"Pelaksanaan Penatausahaan dan Pengujian/Verifikasi Keuangan SKPD"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.03","kegiatan":"Administrasi Barang Milik Daerah pada Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.03.0006","sub_kegiatan":"Penatausahaan Barang Milik Daerah pada SKPD"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.05","kegiatan":"Administrasi Kepegawaian Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.05.0002","sub_kegiatan":"Pengadaan Pakaian Dinas beserta Atribut Kelengkapannya"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.05","kegiatan":"Administrasi Kepegawaian Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.05.0009","sub_kegiatan":"Pendidikan dan Pelatihan Pegawai Berdasarkan Tugas dan Fungsi"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.06","kegiatan":"Administrasi Umum Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.06.0002","sub_kegiatan":"Penyediaan Peralatan dan Perlengkapan Kantor"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.06","kegiatan":"Administrasi Umum Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.06.0003","sub_kegiatan":"Penyediaan Peralatan Rumah Tangga"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.06","kegiatan":"Administrasi Umum Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.06.0004","sub_kegiatan":"Penyediaan Bahan Logistik Kantor"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.06","kegiatan":"Administrasi Umum Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.06.0005","sub_kegiatan":"Penyediaan Barang Cetakan dan Penggandaan"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.06","kegiatan":"Administrasi Umum Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.06.0007","sub_kegiatan":"Penyediaan Bahan/Material"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.06","kegiatan":"Administrasi Umum Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.06.0008","sub_kegiatan":"Fasilitasi Kunjungan Tamu"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.06","kegiatan":"Administrasi Umum Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.06.0009","sub_kegiatan":"Penyelenggaraan Rapat Koordinasi dan Konsultasi SKPD"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.06","kegiatan":"Administrasi Umum Perangkat Daerah","kode_sub_kegiatan":"4.01.01.2.06.0010","sub_kegiatan":"Penatausahaan Arsip Dinamis pada SKPD"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.07","kegiatan":"Pengadaan Barang Milik Daerah Penunjang Urusan Pemerintah Daerah","kode_sub_kegiatan":"4.01.01.2.07.0001","sub_kegiatan":"Pengadaan Kendaraan Perorangan Dinas atau Kendaraan Dinas Jabatan"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.07","kegiatan":"Pengadaan Barang Milik Daerah Penunjang Urusan Pemerintah Daerah","kode_sub_kegiatan":"4.01.01.2.07.0002","sub_kegiatan":"Pengadaan Kendaraan Dinas Operasional atau Lapangan"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.07","kegiatan":"Pengadaan Barang Milik Daerah Penunjang Urusan Pemerintah Daerah","kode_sub_kegiatan":"4.01.01.2.07.0005","sub_kegiatan":"Pengadaan Mebel"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.07","kegiatan":"Pengadaan Barang Milik Daerah Penunjang Urusan Pemerintah Daerah","kode_sub_kegiatan":"4.01.01.2.07.0006","sub_kegiatan":"Pengadaan Peralatan dan Mesin Lainnya"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.07","kegiatan":"Pengadaan Barang Milik Daerah Penunjang Urusan Pemerintah Daerah","kode_sub_kegiatan":"4.01.01.2.07.0010","sub_kegiatan":"Pengadaan Sarana dan Prasarana Gedung Kantor atau Bangunan Lainnya"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.07","kegiatan":"Pengadaan Barang Milik Daerah Penunjang Urusan Pemerintah Daerah","kode_sub_kegiatan":"4.01.01.2.07.0011","sub_kegiatan":"Pengadaan Sarana dan Prasarana Pendukung Gedung Kantor atau Bangunan Lainnya"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.08","kegiatan":"Penyediaan Jasa Penunjang Urusan Pemerintahan Daerah","kode_sub_kegiatan":"4.01.01.2.08.0001","sub_kegiatan":"Penyediaan Jasa Surat Menyurat"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.08","kegiatan":"Penyediaan Jasa Penunjang Urusan Pemerintahan Daerah","kode_sub_kegiatan":"4.01.01.2.08.0002","sub_kegiatan":"Penyediaan Jasa Komunikasi, Sumber Daya Air dan Listrik"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.08","kegiatan":"Penyediaan Jasa Penunjang Urusan Pemerintahan Daerah","kode_sub_kegiatan":"4.01.01.2.08.0004","sub_kegiatan":"Penyediaan Jasa Pelayanan Umum Kantor"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.09","kegiatan":"Pemeliharaan Barang Milik Daerah Penunjang Urusan Pemerintahan Daerah","kode_sub_kegiatan":"4.01.01.2.09.0001","sub_kegiatan":"Penyediaan Jasa Pemeliharaan, Biaya Pemeliharaan, Pajak, dan Perizinan Kendaraan Dinas Operasional atau Lapangan"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.09","kegiatan":"Pemeliharaan Barang Milik Daerah Penunjang Urusan Pemerintahan Daerah","kode_sub_kegiatan":"4.01.01.2.09.0006","sub_kegiatan":"Pemeliharaan Peralatan dan Mesin Lainnya"},{"kode_program":"4.01.01","program":"PROGRAM PENUNJANG URUSAN PEMERINTAHAN DAERAH KABUPATEN/KOTA","kode_kegiatan":"4.01.01.2.09","kegiatan":"Pemeliharaan Barang Milik Daerah Penunjang Urusan Pemerintahan Daerah","kode_sub_kegiatan":"4.01.01.2.09.0009","sub_kegiatan":"Pemeliharaan/Rehabilitasi Gedung Kantor dan Bangunan Lainnya"},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.01","kegiatan":"Pelaksanaan Kebijakan Perekonomian","kode_sub_kegiatan":"4.01.03.2.01.0001","sub_kegiatan":"Koordinasi, Sinkronisasi, Monitoring dan Evaluasi Kebijakan Pengelolaan BUMD dan BLUD"},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.01","kegiatan":"Pelaksanaan Kebijakan Perekonomian","kode_sub_kegiatan":"4.01.03.2.01.0002","sub_kegiatan":"Pengendalian dan Distribusi Perekonomian"},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.01","kegiatan":"Pelaksanaan Kebijakan Perekonomian","kode_sub_kegiatan":"4.01.03.2.01.0003","sub_kegiatan":"Perencanaan dan Pengawasan Ekonomi Mikro Kecil"},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.01","kegiatan":"Pelaksanaan Kebijakan Perekonomian","kode_sub_kegiatan":"4.01.03.2.01.0004","sub_kegiatan":"Koordinasi, Sinkronisasi dan Evaluasi Kebijakan Pembentukan BLUD"},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.01","kegiatan":"Pelaksanaan Kebijakan Perekonomian","kode_sub_kegiatan":"4.01.03.2.01.0005","sub_kegiatan":"Koordinasi, Sinkronisasi dan Evaluasi Kebijakan Pendirian BUMD"},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.01","kegiatan":"Pelaksanaan Kebijakan Perekonomian","kode_sub_kegiatan":"4.01.03.2.01.0006","sub_kegiatan":"Koordinasi, Sinkronisasi dan Evaluasi Pelaksanaan Tugas Tim Percepatan Akses Keuangan Daerah (TPAKD)"},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.04","kegiatan":"Pemantauan Kebijakan Sumber Daya Alam","kode_sub_kegiatan":"4.01.03.2.04.0001","sub_kegiatan":"Koordinasi, Sinkronisasi dan Evaluasi Kebijakan Pertanian, Kehutanan, Kelautan, dan Perikanan"},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.04","kegiatan":"Pemantauan Kebijakan Sumber Daya Alam","kode_sub_kegiatan":"4.01.03.2.04.0002","sub_kegiatan":" Koordinasi, Sinkronisasi dan Evaluasi Kebijakan Pertambangan dan Lingkungan Hidup "},{"kode_program":"4.01.03","program":"PROGRAM PEREKONOMIAN DAN PEMBANGUNAN","kode_kegiatan":"4.01.03.2.04","kegiatan":" Pemantauan Kebijakan Sumber Daya Alam ","kode_sub_kegiatan":"4.01.03.2.04.0003","sub_kegiatan":" Koordinasi, Sinkronisasi dan Evaluasi Kebijakan Energi dan Air "}],
+  belanja: [{"kode_belanja":"5.1.02.01.001.00012","nama_belanja":"Belanja Bahan-Bahan Lainnya"},{"kode_belanja":"5.1.02.01.001.00018","nama_belanja":"Belanja Suku Cadang-Suku Cadang Alat Studio dan Komunikasi"},{"kode_belanja":"5.1.02.01.001.00024","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor-Alat Tulis Kantor"},{"kode_belanja":"5.1.02.01.001.00025","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor- Kertas dan Cover"},{"kode_belanja":"5.1.02.01.001.00026","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor- Bahan Cetak"},{"kode_belanja":"5.1.02.01.001.00027","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor-Benda Pos"},{"kode_belanja":"5.1.02.01.001.00029","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor-Bahan Komputer"},{"kode_belanja":"5.1.02.01.001.00030","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor-Perabot Kantor"},{"kode_belanja":"5.1.02.01.001.00031","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor-Alat Listrik"},{"kode_belanja":"5.1.02.01.001.00032","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor-Perlengkapan Dinas"},{"kode_belanja":"5.1.02.01.001.00035","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor- Suvenir/Cendera Mata"},{"kode_belanja":"5.1.02.01.001.00036","nama_belanja":"Belanja Alat/Bahan untuk Kegiatan Kantor-Alat/Bahan untuk Kegiatan Kantor Lainnya"},{"kode_belanja":"5.1.02.01.001.00037","nama_belanja":"Belanja Obat-Obatan-Obat"},{"kode_belanja":"5.1.02.01.001.00038","nama_belanja":"Belanja Obat-Obatan-Obat-Obatan Lainnya"},{"kode_belanja":"5.1.02.01.001.00043","nama_belanja":"Belanja Natura dan Pakan-Natura"},{"kode_belanja":"5.1.02.01.001.00044","nama_belanja":"Belanja Natura dan Pakan-Pakan"},{"kode_belanja":"5.1.02.01.001.00045","nama_belanja":"Belanja Natura dan Pakan-Natura dan Pakan Lainnya"},{"kode_belanja":"5.1.02.01.001.00052","nama_belanja":"Belanja Makanan dan Minuman Rapat"},{"kode_belanja":"5.1.02.01.001.00053","nama_belanja":"Belanja Makanan dan Minuman Jamuan Tamu"},{"kode_belanja":"5.1.02.01.001.00054","nama_belanja":"Belanja Penambah Daya Tahan Tubuh"},{"kode_belanja":"5.1.02.01.001.00058","nama_belanja":"Belanja Makanan dan Minuman Aktivitas Lapangan"},{"kode_belanja":"5.1.02.01.001.00063","nama_belanja":"Belanja Pakaian Dinas Harian (PDH)"},{"kode_belanja":"5.1.02.01.001.00073","nama_belanja":"Belanja Pakaian KORPRI"},{"kode_belanja":"5.1.02.01.001.00074","nama_belanja":"Belanja Pakaian Adat Daerah"},{"kode_belanja":"5.1.02.01.001.00075","nama_belanja":"Belanja Pakaian Batik Tradisional"},{"kode_belanja":"5.1.02.01.001.00076","nama_belanja":"Belanja Pakaian Olahraga"},{"kode_belanja":"5.1.02.01.004.00035","nama_belanja":"Belanja Peralatan dan Mesin-Alat Angkutan-Alat Angkutan Darat Bermotor-Kendaraan Dinas Bermotor Perorangan"},{"kode_belanja":"5.1.02.01.004.00036","nama_belanja":"Belanja Peralatan dan Mesin-Alat Angkutan-Alat Angkutan Darat Bermotor-Kendaraan Bermotor Penumpang"},{"kode_belanja":"5.1.02.01.004.00038","nama_belanja":"Belanja Peralatan dan Mesin-Alat Angkutan-Alat Angkutan Darat Bermotor-Kendaraan Bermotor Beroda Dua"},{"kode_belanja":"5.1.02.01.004.00118","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Mebel"},{"kode_belanja":"5.1.02.01.004.00119","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Pengukur Waktu"},{"kode_belanja":"5.1.02.01.004.00120","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Pembersih"},{"kode_belanja":"5.1.02.01.004.00121","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Pendingin"},{"kode_belanja":"5.1.02.01.004.00122","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Dapur"},{"kode_belanja":"5.1.02.01.004.00123","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Rumah Tangga Lainnya (Home Use)"},{"kode_belanja":"5.1.02.01.004.00124","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Pemadam Kebakaran"},{"kode_belanja":"5.1.02.01.004.00125","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Meja Kerja Pejabat"},{"kode_belanja":"5.1.02.01.004.00126","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Meja Rapat Pejabat"},{"kode_belanja":"5.1.02.01.004.00127","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Kursi Kerja Pejabat"},{"kode_belanja":"5.1.02.01.004.00128","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Kursi Rapat Pejabat"},{"kode_belanja":"5.1.02.01.004.00129","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Kursi Hadap Depan Meja Kerja Pejabat"},{"kode_belanja":"5.1.02.01.004.00130","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Kursi Tamu di Ruangan Pejabat"},{"kode_belanja":"5.1.02.01.004.00131","nama_belanja":"Belanja Peralatan dan Mesin-Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Lemari dan Arsip Pejabat"},{"kode_belanja":"5.1.02.01.004.00132","nama_belanja":"Belanja Peralatan dan Mesin-Alat Studio, Komunikasi, dan Pemancar-Alat Studio-Peralatan Studio Audio"},{"kode_belanja":"5.1.02.01.004.00133","nama_belanja":"Belanja Peralatan dan Mesin-Alat Studio, Komunikasi, dan Pemancar-Alat Studio-Peralatan Studio Video dan Film"},{"kode_belanja":"5.1.02.01.004.00137","nama_belanja":"Belanja Peralatan dan Mesin-Alat Studio, Komunikasi, dan Pemancar-Alat Studio-Alat Studio Lainnya"},{"kode_belanja":"5.1.02.01.004.00405","nama_belanja":"Belanja Peralatan dan Mesin-Komputer-Komputer Unit-Personal Computer"},{"kode_belanja":"5.1.02.01.004.00409","nama_belanja":"Belanja Peralatan dan Mesin-Komputer-Peralatan Komputer-Peralatan Personal Computer"},{"kode_belanja":"5.1.02.01.004.00410","nama_belanja":"Belanja Peralatan dan Mesin-Komputer-Peralatan Komputer-Peralatan Jaringan"},{"kode_belanja":"5.1.02.01.004.00411","nama_belanja":"Belanja Peralatan dan Mesin-Komputer-Peralatan Komputer-Peralatan Komputer Lainnya"},{"kode_belanja":"5.1.02.02.001.00001","nama_belanja":"Belanja Jasa Pengelolaan BMD yang Tidak Menghasilkan Pendapatan"},{"kode_belanja":"5.1.02.02.001.00003","nama_belanja":"Honorarium Narasumber atau Pembahas, Moderator, Pembawa Acara, dan Panitia"},{"kode_belanja":"5.1.02.02.001.00004","nama_belanja":"Honorarium Tim Pelaksana Kegiatan dan Sekretariat Tim Pelaksana Kegiatan"},{"kode_belanja":"5.1.02.02.001.00005","nama_belanja":"Honorarium Pemberi Keterangan Ahli, Saksi Ahli, dan Beracara"},{"kode_belanja":"5.1.02.02.001.00006","nama_belanja":"Honorarium Penyuluhan atau Pendampingan"},{"kode_belanja":"5.1.02.02.001.00028","nama_belanja":"Belanja Jasa Tenaga Pelayanan Umum"},{"kode_belanja":"5.1.02.02.001.00029","nama_belanja":"Belanja Jasa Tenaga Ahli"},{"kode_belanja":"5.1.02.02.001.00030","nama_belanja":"Belanja Jasa Tenaga Kebersihan"},{"kode_belanja":"5.1.02.02.001.00038","nama_belanja":"Belanja Jasa Tata Rias"},{"kode_belanja":"5.1.02.02.001.00047","nama_belanja":"Belanja Jasa Penyelenggaraan Acara"},{"kode_belanja":"5.1.02.02.001.00054","nama_belanja":"Belanja Jasa Jalan/Tol"},{"kode_belanja":"5.1.02.02.001.00064","nama_belanja":"Belanja Paket/Pengiriman"},{"kode_belanja":"5.1.02.02.001.00067","nama_belanja":"Belanja Pembayaran Pajak, Bea, dan Perizinan"},{"kode_belanja":"5.1.02.02.001.00080","nama_belanja":"Belanja Honorarium Penanggungjawaban Pengelola Keuangan"},{"kode_belanja":"5.1.02.02.001.00081","nama_belanja":"Belanja Honorarium Pengadaan Barang/Jasa"},{"kode_belanja":"5.1.02.02.004.00035","nama_belanja":"Belanja Sewa Kendaraan Dinas Bermotor Perorangan"},{"kode_belanja":"5.1.02.02.004.00036","nama_belanja":"Belanja Sewa Kendaraan Bermotor Penumpang"},{"kode_belanja":"5.1.02.02.004.00038","nama_belanja":"Belanja Sewa Kendaraan Bermotor Beroda Dua"},{"kode_belanja":"5.1.02.02.004.00116","nama_belanja":"Belanja Sewa Alat Penyimpan Perlengkapan Kantor"},{"kode_belanja":"5.1.02.02.004.00117","nama_belanja":"Belanja Sewa Alat Kantor Lainnya"},{"kode_belanja":"5.1.02.02.004.00118","nama_belanja":"Belanja Sewa Mebel"},{"kode_belanja":"5.1.02.02.004.00119","nama_belanja":"Belanja Sewa Alat Pengukur Waktu"},{"kode_belanja":"5.1.02.02.004.00120","nama_belanja":"Belanja Sewa Alat Pembersih"},{"kode_belanja":"5.1.02.02.004.00121","nama_belanja":"Belanja Sewa Alat Pendingin"},{"kode_belanja":"5.1.02.02.004.00122","nama_belanja":"Belanja Sewa Alat Dapur"},{"kode_belanja":"5.1.02.02.004.00123","nama_belanja":"Belanja Sewa Alat Rumah Tangga Lainnya (Home Use)"},{"kode_belanja":"5.1.02.02.004.00124","nama_belanja":"Belanja Sewa Alat Pemadam Kebakaran"},{"kode_belanja":"5.1.02.02.004.00125","nama_belanja":"Belanja Sewa Meja Kerja Pejabat"},{"kode_belanja":"5.1.02.02.004.00126","nama_belanja":"Belanja Sewa Meja Rapat Pejabat"},{"kode_belanja":"5.1.02.02.004.00127","nama_belanja":"Belanja Sewa Kursi Kerja Pejabat"},{"kode_belanja":"5.1.02.02.004.00128","nama_belanja":"Belanja Sewa Kursi Rapat Pejabat"},{"kode_belanja":"5.1.02.02.004.00129","nama_belanja":"Belanja Sewa Kursi Hadap Depan Meja Kerja Pejabat"},{"kode_belanja":"5.1.02.02.004.00130","nama_belanja":"Belanja Sewa Kursi Tamu di Ruangan Pejabat"},{"kode_belanja":"5.1.02.02.004.00131","nama_belanja":"Belanja Sewa Lemari dan Arsip Pejabat"},{"kode_belanja":"5.1.02.02.004.00132","nama_belanja":"Belanja Sewa Peralatan Studio Audio"},{"kode_belanja":"5.1.02.02.004.00133","nama_belanja":"Belanja Sewa Peralatan Studio Video dan Film"},{"kode_belanja":"5.1.02.02.004.00137","nama_belanja":"Belanja Sewa Alat Studio Lainnya"},{"kode_belanja":"5.1.02.02.004.00405","nama_belanja":"Belanja Sewa Personal Computer"},{"kode_belanja":"5.1.02.02.004.00409","nama_belanja":"Belanja Sewa Peralatan Personal Computer"},{"kode_belanja":"5.1.02.02.004.00410","nama_belanja":"Belanja Sewa Peralatan Jaringan"},{"kode_belanja":"5.1.02.02.004.00411","nama_belanja":"Belanja Sewa Peralatan Komputer Lainnya"},{"kode_belanja":"5.1.02.02.005.00009","nama_belanja":"Belanja Sewa Bangunan Gedung Tempat Pertemuan"},{"kode_belanja":"5.1.02.02.005.00043","nama_belanja":"Belanja Sewa Hotel"},{"kode_belanja":"5.1.02.02.009.00011","nama_belanja":"Belanja Jasa Konsultansi Berorientasi Layanan-Jasa Survei"},{"kode_belanja":"5.1.02.02.009.00012","nama_belanja":"Belanja Jasa Konsultansi Berorientasi Layanan-Jasa Studi Penelitian dan Bantuan Teknik"},{"kode_belanja":"5.1.02.02.009.00013","nama_belanja":"Belanja Jasa Konsultansi Berorientasi Layanan-Jasa Konsultansi Manajemen"},{"kode_belanja":"5.1.02.02.009.00014","nama_belanja":"Belanja Jasa Konsultansi Berorientasi Layanan-Jasa Khusus"},{"kode_belanja":"5.1.02.02.012.00001","nama_belanja":"Belanja Kursus Singkat/Pelatihan"},{"kode_belanja":"5.1.02.02.015.00005","nama_belanja":"Belanja Sewa Aset Tidak Berwujud-Software"},{"kode_belanja":"5.1.02.03.002.00035","nama_belanja":"Belanja Pemeliharaan Alat Angkutan-Alat Angkutan Darat Bermotor-Kendaraan Dinas Bermotor Perorangan"},{"kode_belanja":"5.1.02.03.002.00036","nama_belanja":"Belanja Pemeliharaan Alat Angkutan-Alat Angkutan Darat Bermotor-Kendaraan Bermotor Penumpang"},{"kode_belanja":"5.1.02.03.002.00038","nama_belanja":"Belanja Pemeliharaan Alat Angkutan-Alat Angkutan Darat Bermotor-Kendaraan Bermotor Beroda Dua"},{"kode_belanja":"5.1.02.03.002.00116","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Alat Kantor-Alat Penyimpan Perlengkapan Kantor"},{"kode_belanja":"5.1.02.03.002.00117","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Alat Kantor-Alat Kantor Lainnya"},{"kode_belanja":"5.1.02.03.002.00118","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Mebel"},{"kode_belanja":"5.1.02.03.002.00119","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Pengukur Waktu"},{"kode_belanja":"5.1.02.03.002.00121","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Pendingin"},{"kode_belanja":"5.1.02.03.002.00122","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Dapur"},{"kode_belanja":"5.1.02.03.002.00123","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Rumah Tangga Lainnya (Home Use)"},{"kode_belanja":"5.1.02.03.002.00124","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Alat Rumah Tangga-Alat Pemadam Kebakaran"},{"kode_belanja":"5.1.02.03.002.00125","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Meja Kerja Pejabat"},{"kode_belanja":"5.1.02.03.002.00126","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Meja Rapat Pejabat"},{"kode_belanja":"5.1.02.03.002.00127","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Kursi Kerja Pejabat"},{"kode_belanja":"5.1.02.03.002.00128","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Kursi Rapat Pejabat"},{"kode_belanja":"5.1.02.03.002.00129","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Kursi Hadap Depan Meja Kerja Pejabat"},{"kode_belanja":"5.1.02.03.002.00130","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Kursi Tamu di Ruangan Pejabat"},{"kode_belanja":"5.1.02.03.002.00131","nama_belanja":"Belanja Pemeliharaan Alat Kantor dan Rumah Tangga-Meja dan Kursi Kerja/Rapat Pejabat-Lemari dan Arsip Pejabat"},{"kode_belanja":"5.1.02.03.002.00132","nama_belanja":"Belanja Pemeliharaan Alat Studio, Komunikasi, dan Pemancar-Alat Studio-Peralatan Studio Audio"},{"kode_belanja":"5.1.02.03.002.00133","nama_belanja":"Belanja Pemeliharaan Alat Studio, Komunikasi, dan Pemancar-Alat Studio-Peralatan Studio Video dan Film"},{"kode_belanja":"5.1.02.03.002.00134","nama_belanja":"Belanja Pemeliharaan Alat Studio, Komunikasi, dan Pemancar-Alat Studio-Peralatan Studio Gambar"},{"kode_belanja":"5.1.02.03.002.00137","nama_belanja":"Belanja Pemeliharaan Alat Studio, Komunikasi, dan Pemancar-Alat Studio-Alat Studio Lainnya"},{"kode_belanja":"5.1.02.03.002.00405","nama_belanja":"Belanja Pemeliharaan Komputer-Komputer Unit-Personal Computer"},{"kode_belanja":"5.1.02.03.002.00409","nama_belanja":"Belanja Pemeliharaan Komputer-Peralatan Komputer-Peralatan Personal Computer"},{"kode_belanja":"5.1.02.03.002.00410","nama_belanja":"Belanja Pemeliharaan Komputer-Peralatan Komputer-Peralatan Jaringan"},{"kode_belanja":"5.1.02.03.002.00411","nama_belanja":"Belanja Pemeliharaan Komputer-Peralatan Komputer-Peralatan Komputer Lainnya"},{"kode_belanja":"5.1.02.03.003.00001","nama_belanja":"Belanja Pemeliharaan Bangunan Gedung-Bangunan Gedung Tempat Kerja-Bangunan Gedung Kantor"},{"kode_belanja":"5.1.02.04.001.00001","nama_belanja":"Belanja Perjalanan Dinas Biasa"},{"kode_belanja":"5.1.02.04.001.00003","nama_belanja":"Belanja Perjalanan Dinas Dalam Kota"},{"kode_belanja":"5.1.02.04.001.00004","nama_belanja":"Belanja Perjalanan Dinas Paket Meeting Dalam Kota"},{"kode_belanja":"5.1.02.04.001.00005","nama_belanja":"Belanja Perjalanan Dinas Paket Meeting Luar Kota"},{"kode_belanja":"5.2.02.02.001.00001","nama_belanja":"Belanja Modal Kendaraan Dinas Bermotor Perorangan"},{"kode_belanja":"5.2.02.02.001.00002","nama_belanja":"Belanja Modal Kendaraan Bermotor Penumpang"},{"kode_belanja":"5.2.02.02.001.00004","nama_belanja":"Belanja Modal Kendaraan Bermotor Beroda Dua"},{"kode_belanja":"5.2.02.05.001.00004","nama_belanja":"Belanja Modal Alat Penyimpan Perlengkapan Kantor"},{"kode_belanja":"5.2.02.05.001.00005","nama_belanja":"Belanja Modal Alat Kantor Lainnya"},{"kode_belanja":"5.2.02.05.002.00001","nama_belanja":"Belanja Modal Mebel"},{"kode_belanja":"5.2.02.05.002.00003","nama_belanja":"Belanja Modal Alat Pembersih"},{"kode_belanja":"5.2.02.05.002.00004","nama_belanja":"Belanja Modal Alat Pendingin"},{"kode_belanja":"5.2.02.05.002.00005","nama_belanja":"Belanja Modal Alat Dapur"},{"kode_belanja":"5.2.02.05.002.00006","nama_belanja":"Belanja Modal Alat Rumah Tangga Lainnya (Home Use)"},{"kode_belanja":"5.2.02.05.002.00007","nama_belanja":"Belanja Modal Alat Pemadam Kebakaran"},{"kode_belanja":"5.2.02.05.003.00001","nama_belanja":"Belanja Modal Meja Kerja Pejabat"},{"kode_belanja":"5.2.02.05.003.00002","nama_belanja":"Belanja Modal Meja Rapat Pejabat"},{"kode_belanja":"5.2.02.05.003.00003","nama_belanja":"Belanja Modal Kursi Kerja Pejabat"},{"kode_belanja":"5.2.02.05.003.00004","nama_belanja":"Belanja Modal Kursi Rapat Pejabat"},{"kode_belanja":"5.2.02.05.003.00005","nama_belanja":"Belanja Modal Kursi Hadap Depan Meja Kerja Pejabat"},{"kode_belanja":"5.2.02.05.003.00006","nama_belanja":"Belanja Modal Kursi Tamu di Ruangan Pejabat"},{"kode_belanja":"5.2.02.05.003.00007","nama_belanja":"Belanja Modal Lemari dan Arsip Pejabat"},{"kode_belanja":"5.2.02.06.001.00001","nama_belanja":"Belanja Modal Peralatan Studio Audio"},{"kode_belanja":"5.2.02.06.001.00002","nama_belanja":"Belanja Modal Peralatan Studio Video dan Film"},{"kode_belanja":"5.2.02.06.001.00006","nama_belanja":"Belanja Modal Alat Studio Lainnya"},{"kode_belanja":"5.2.02.10.001.00002","nama_belanja":"Belanja Modal Personal Computer"},{"kode_belanja":"5.2.02.10.002.00003","nama_belanja":"Belanja Modal Peralatan Personal Computer"},{"kode_belanja":"5.2.02.10.002.00004","nama_belanja":"Belanja Modal Peralatan Jaringan"},{"kode_belanja":"5.2.02.10.002.00005","nama_belanja":"Belanja Modal Peralatan Komputer Lainnya"}],
+  pptk: ["TENGKO WOLOK, S.T.","DIYAH WAHYUNI, S.E., M.M.","SARI ANAS PUTRI, S.E."],
+  kpa: "Dra. EMILYATI, M.Si",
+  sumberDana: ["PAD","DBH CHT"]
+};
+
+// ========================================
+// APP STATE
+// ========================================
+const STATE = {
+  tahun: '2026',
+  tahapan: 'Murni',
+  user: null,
+  darkMode: false,
+  currentPage: 'dashboard',
+  // Data stores
+  anggaran: [], // [{id,kode_program,program,kode_kegiatan,kegiatan,kode_sub_kegiatan,sub_kegiatan,kode_belanja,nama_belanja,kode_rekening,pagu_murni,pagu_pergeseran,pagu_perubahan,sumber_dana,pptk}]
+  realisasi: [], // [{id,tanggal,tanggal_sp2d,uraian,kode_sub_kegiatan,kode_belanja,kode_rekening,nominal,pptk}]
+  kasAnggaran: {}, // {kode_rekening: {jan,feb,...,des}}
+  pengguna: [
+    {id:1,nama:'Administrator',username:'admin',password:'admin123',role:'admin',jabatan:'Admin Sistem'},
+    {id:2,nama:'TENGKO WOLOK, S.T.',username:'tengko',password:'pptk123',role:'input',jabatan:'PPTK'},
+  ],
+  aiAnalysisCache: null
+};
+
+// ========================================
+// UTILS
+// ========================================
+const fmt = n => isNaN(n)||n===null||n===undefined ? '-' : new Intl.NumberFormat('id-ID').format(Math.round(n));
+const fmtPct = n => isNaN(n)||n===null ? '0%' : Math.round(n)+'%';
+const genId = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); });
+
+function getPagu(row) {
+  if (STATE.tahapan === 'Perubahan' && row.pagu_perubahan != null && row.pagu_perubahan !== '') return row.pagu_perubahan;
+  if (STATE.tahapan === 'Pergeseran' && row.pagu_pergeseran != null && row.pagu_pergeseran !== '') return row.pagu_pergeseran;
+  return row.pagu_murni || 0;
+}
+
+function getTotalPagu() { return STATE.anggaran.reduce((s,r) => s+getPagu(r),0); }
+
+function getTotalRealisasi(upToDate) {
+  return STATE.realisasi
+    .filter(r => r.tanggal_sp2d && (!upToDate || r.tanggal_sp2d <= upToDate))
+    .reduce((s,r) => s+r.nominal,0);
+}
+
+function getRealisasiByRekening(kodeRek, upToDate) {
+  return STATE.realisasi
+    .filter(r => r.kode_rekening === kodeRek && r.tanggal_sp2d && (!upToDate || r.tanggal_sp2d <= upToDate))
+    .reduce((s,r) => s+r.nominal,0);
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.innerHTML = (type==='success'?'✅':'❌') + ' ' + msg;
+  t.className = 'show';
+  setTimeout(() => t.className = '', 2500);
+}
+
+// ========================================
+// SUPABASE CONFIG & CLIENT
+// ========================================
+let sbClient = null; // Supabase client instance (renamed to avoid conflict with global supabase namespace)
+
+const SQL_MIGRATION = `-- SIANGGARAN Supabase Migration
+-- Jalankan script ini di SQL Editor Supabase Anda
+-- Script ini aman dijalankan berulang kali (idempotent)
+
+-- Tabel pengguna (custom, bukan Supabase Auth)
+CREATE TABLE IF NOT EXISTS pengguna (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nama TEXT NOT NULL,
+  username TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'input',
+  jabatan TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Tabel anggaran
+CREATE TABLE IF NOT EXISTS anggaran (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tahun TEXT NOT NULL,
+  kode_program TEXT,
+  program TEXT,
+  kode_kegiatan TEXT,
+  kegiatan TEXT,
+  kode_sub_kegiatan TEXT,
+  sub_kegiatan TEXT,
+  kode_belanja TEXT,
+  nama_belanja TEXT,
+  kode_rekening TEXT NOT NULL,
+  pagu_murni NUMERIC DEFAULT 0,
+  pagu_pergeseran NUMERIC,
+  pagu_perubahan NUMERIC,
+  sumber_dana TEXT,
+  pptk TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Tabel realisasi
+CREATE TABLE IF NOT EXISTS realisasi (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tahun TEXT NOT NULL,
+  tanggal DATE,
+  tanggal_sp2d DATE,
+  uraian TEXT,
+  kode_sub_kegiatan TEXT,
+  kode_belanja TEXT,
+  sumber_dana TEXT,
+  kode_rekening TEXT,
+  nama_belanja TEXT,
+  nominal NUMERIC DEFAULT 0,
+  pptk TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Tabel kas anggaran (JSON per rekening)
+CREATE TABLE IF NOT EXISTS kas_anggaran (
+  id TEXT PRIMARY KEY,
+  tahun TEXT NOT NULL,
+  kode_rekening TEXT NOT NULL,
+  data JSONB DEFAULT '{}',
+  UNIQUE(tahun, kode_rekening)
+);
+
+-- Tabel app settings
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
+-- ============================================================
+-- PATCH: Tambah kolom yang mungkin belum ada di tabel lama
+-- (Aman dijalankan meski kolom sudah ada — menggunakan DO block)
+-- ============================================================
+DO $$
+BEGIN
+  -- Patch tabel realisasi
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='sumber_dana') THEN
+    ALTER TABLE realisasi ADD COLUMN sumber_dana TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='nama_belanja') THEN
+    ALTER TABLE realisasi ADD COLUMN nama_belanja TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='kode_sub_kegiatan') THEN
+    ALTER TABLE realisasi ADD COLUMN kode_sub_kegiatan TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='kode_belanja') THEN
+    ALTER TABLE realisasi ADD COLUMN kode_belanja TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='tahun') THEN
+    ALTER TABLE realisasi ADD COLUMN tahun TEXT;
+  END IF;
+  -- Patch tabel anggaran
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='sumber_dana') THEN
+    ALTER TABLE anggaran ADD COLUMN sumber_dana TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='pagu_pergeseran') THEN
+    ALTER TABLE anggaran ADD COLUMN pagu_pergeseran NUMERIC;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='pagu_perubahan') THEN
+    ALTER TABLE anggaran ADD COLUMN pagu_perubahan NUMERIC;
+  END IF;
+END $$;
+
+-- RLS: Disable for simplicity (enable & configure as needed)
+ALTER TABLE pengguna DISABLE ROW LEVEL SECURITY;
+ALTER TABLE anggaran DISABLE ROW LEVEL SECURITY;
+ALTER TABLE realisasi DISABLE ROW LEVEL SECURITY;
+ALTER TABLE kas_anggaran DISABLE ROW LEVEL SECURITY;
+ALTER TABLE app_settings DISABLE ROW LEVEL SECURITY;
+
+-- Seed default admin user
+INSERT INTO pengguna (id, nama, username, password, role, jabatan)
+VALUES (gen_random_uuid(), 'Administrator', 'admin', 'admin123', 'admin', 'Admin Sistem')
+ON CONFLICT (username) DO NOTHING;
+
+INSERT INTO pengguna (id, nama, username, password, role, jabatan)
+VALUES (gen_random_uuid(), 'TENGKO WOLOK, S.T.', 'tengko', 'pptk123', 'input', 'PPTK')
+ON CONFLICT (username) DO NOTHING;
+`;
+
+function getSupabaseConfig() {
+  try {
+    const c = localStorage.getItem('sianggaranSupabaseConfig');
+    return c ? JSON.parse(c) : null;
+  } catch(e){ return null; }
+}
+
+function initSupabase(url, key) {
+  try {
+    sbClient = window.supabase.createClient(url, key, {
+      realtime: { enabled: false },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { headers: { 'X-Client-Info': 'sianggaran/1.0' } }
+    });
+    return true;
+  } catch(e) {
+    console.error('Supabase init error:', e);
+    return false;
+  }
+}
+
+async function saveSupabaseConfig() {
+  const url = document.getElementById('cfgUrl').value.trim();
+  const key = document.getElementById('cfgKey').value.trim();
+  const statusEl = document.getElementById('cfgStatus');
+
+  if (!url || !key) {
+    statusEl.innerHTML = '<div class="db-status err">❌ URL dan Key wajib diisi</div>';
+    return;
+  }
+  statusEl.innerHTML = '<div class="db-status loading"><div class="spinner"></div>Menguji koneksi...</div>';
+
+  if (!initSupabase(url, key)) {
+    statusEl.innerHTML = '<div class="db-status err">❌ Gagal inisialisasi Supabase client</div>';
+    return;
+  }
+
+  // Test connection
+  try {
+    const { error } = await sbClient.from('pengguna').select('id').limit(1);
+    if (error) throw error;
+    localStorage.setItem('sianggaranSupabaseConfig', JSON.stringify({url, key}));
+    statusEl.innerHTML = '<div class="db-status ok">✅ Koneksi berhasil! Mengalihkan ke login...</div>';
+    setTimeout(() => {
+      document.getElementById('configScreen').style.display = 'none';
+      document.getElementById('loginScreen').style.display = '';
+    }, 1000);
+  } catch(e) {
+    statusEl.innerHTML = `<div class="db-status err">❌ ${e.message || 'Koneksi gagal. Cek URL/Key dan pastikan SQL migration sudah dijalankan.'}</div>`;
+  }
+}
+
+const SQL_PATCH = `-- SIANGGARAN SQL Patch
+-- Jalankan script ini jika tabel sudah ada tapi muncul error "could not find column"
+-- AMAN dijalankan berulang kali, tidak merusak data yang sudah ada
+
+DO $$
+BEGIN
+  -- PATCH tabel realisasi
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='sumber_dana') THEN
+    ALTER TABLE realisasi ADD COLUMN sumber_dana TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='nama_belanja') THEN
+    ALTER TABLE realisasi ADD COLUMN nama_belanja TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='kode_sub_kegiatan') THEN
+    ALTER TABLE realisasi ADD COLUMN kode_sub_kegiatan TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='kode_belanja') THEN
+    ALTER TABLE realisasi ADD COLUMN kode_belanja TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='tahun') THEN
+    ALTER TABLE realisasi ADD COLUMN tahun TEXT;
+  END IF;
+  -- PATCH tabel anggaran
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='sumber_dana') THEN
+    ALTER TABLE anggaran ADD COLUMN sumber_dana TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='pagu_pergeseran') THEN
+    ALTER TABLE anggaran ADD COLUMN pagu_pergeseran NUMERIC;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='pagu_perubahan') THEN
+    ALTER TABLE anggaran ADD COLUMN pagu_perubahan NUMERIC;
+  END IF;
+  RAISE NOTICE 'Patch selesai. Semua kolom sudah tersedia.';
+END $$;
+
+-- Refresh PostgREST schema cache (wajib setelah ALTER TABLE)
+NOTIFY pgrst, 'reload schema';
+`;
+
+function showSQLMigration() {
+  const box = document.getElementById('sqlMigrationBox');
+  const patchBox = document.getElementById('sqlPatchBox');
+  document.getElementById('sqlMigrationText').textContent = SQL_MIGRATION;
+  const isHidden = box.style.display === 'none';
+  box.style.display = isHidden ? '' : 'none';
+  if (isHidden && patchBox) patchBox.style.display = 'none';
+}
+
+function copySQLMigration() {
+  navigator.clipboard.writeText(SQL_MIGRATION).then(() => showToast('SQL migration di-copy ✅'));
+}
+
+function showSQLPatch() {
+  const box = document.getElementById('sqlPatchBox');
+  const migBox = document.getElementById('sqlMigrationBox');
+  document.getElementById('sqlPatchText').textContent = SQL_PATCH;
+  const isHidden = box.style.display === 'none';
+  box.style.display = isHidden ? '' : 'none';
+  if (isHidden && migBox) migBox.style.display = 'none';
+}
+
+function copySQLPatch() {
+  navigator.clipboard.writeText(SQL_PATCH).then(() => showToast('SQL patch di-copy ✅'));
+}
+
+// ========================================
+// SYNC INDICATOR
+// ========================================
+function setSyncIndicator(state, msg) {
+  const el = document.getElementById('syncIndicator');
+  if (state === 'hidden') { el.className = 'sync-indicator hidden'; return; }
+  el.className = 'sync-indicator ' + state;
+  el.innerHTML = state === 'syncing' ? `<div class="spinner" style="width:10px;height:10px;border-width:1.5px"></div>${msg}` : msg;
+  if (state === 'synced') setTimeout(() => setSyncIndicator('hidden'), 2000);
+}
+
+// ========================================
+// SUPABASE CRUD OPERATIONS
+// ========================================
+async function loadDataFromSupabase() {
+  if (!sbClient) return false;
+  setSyncIndicator('syncing', 'Memuat data...');
+  try {
+    const [angRes, realRes, kasRes, pengRes] = await Promise.all([
+      sbClient.from('anggaran').select('*').eq('tahun', STATE.tahun),
+      sbClient.from('realisasi').select('*').eq('tahun', STATE.tahun),
+      sbClient.from('kas_anggaran').select('*').eq('tahun', STATE.tahun),
+      sbClient.from('pengguna').select('*'),
+    ]);
+    if (angRes.error) throw angRes.error;
+    if (realRes.error) throw realRes.error;
+    if (kasRes.error) throw kasRes.error;
+    if (pengRes.error) throw pengRes.error;
+
+    STATE.anggaran = angRes.data || [];
+    STATE.realisasi = realRes.data || [];
+
+    // Reconstruct kasAnggaran from rows
+    STATE.kasAnggaran = {};
+    (kasRes.data || []).forEach(row => {
+      STATE.kasAnggaran[row.kode_rekening] = row.data || {};
+    });
+
+    if ((pengRes.data || []).length > 0) STATE.pengguna = pengRes.data;
+
+    setSyncIndicator('synced', '✅ Data dimuat');
+    return true;
+  } catch(e) {
+    console.error('Load error:', e);
+    setSyncIndicator('error', '⚠️ Gagal muat data: ' + e.message);
+    return false;
+  }
+}
+
+async function saveAnggaranToSupabase(obj) {
+  if (!sbClient) return;
+  setSyncIndicator('syncing', 'Menyimpan...');
+  const row = {...obj, tahun: STATE.tahun};
+  const { error } = await sbClient.from('anggaran').upsert(row, {onConflict: 'id'});
+  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  setSyncIndicator('synced', '✅ Tersimpan');
+}
+
+async function deleteAnggaranFromSupabase(id) {
+  if (!sbClient) return;
+  setSyncIndicator('syncing', 'Menghapus...');
+  const { error } = await sbClient.from('anggaran').delete().eq('id', id);
+  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  setSyncIndicator('synced', '✅ Dihapus');
+}
+
+async function saveRealisasiToSupabase(obj) {
+  if (!sbClient) return;
+  setSyncIndicator('syncing', 'Menyimpan...');
+  const row = {...obj, tahun: STATE.tahun};
+  const { error } = await sbClient.from('realisasi').upsert(row, {onConflict: 'id'});
+  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  setSyncIndicator('synced', '✅ Tersimpan');
+}
+
+async function deleteRealisasiFromSupabase(id) {
+  if (!sbClient) return;
+  setSyncIndicator('syncing', 'Menghapus...');
+  const { error } = await sbClient.from('realisasi').delete().eq('id', id);
+  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  setSyncIndicator('synced', '✅ Dihapus');
+}
+
+async function saveKasToSupabase() {
+  if (!sbClient) return;
+  setSyncIndicator('syncing', 'Menyimpan kas...');
+  const rows = Object.entries(STATE.kasAnggaran).map(([kode_rekening, data]) => ({
+    id: STATE.tahun + '_' + kode_rekening,
+    tahun: STATE.tahun,
+    kode_rekening,
+    data,
+  }));
+  if (rows.length === 0) { setSyncIndicator('hidden'); return; }
+  const { error } = await sbClient.from('kas_anggaran').upsert(rows, {onConflict: 'id'});
+  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); return; }
+  setSyncIndicator('synced', '✅ Kas disimpan');
+}
+
+async function savePenggunaToSupabase(obj) {
+  if (!sbClient) return;
+  setSyncIndicator('syncing', 'Menyimpan...');
+  const { error } = await sbClient.from('pengguna').upsert(obj, {onConflict: 'id'});
+  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  setSyncIndicator('synced', '✅ Tersimpan');
+}
+
+async function deletePenggunaFromSupabase(id) {
+  if (!sbClient) return;
+  setSyncIndicator('syncing', 'Menghapus...');
+  const { error } = await sbClient.from('pengguna').delete().eq('id', id);
+  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  setSyncIndicator('synced', '✅ Dihapus');
+}
+
+// ========================================
+// LEGACY STATE FUNCTIONS (kept for fallback)
+// ========================================
+function saveState() {
+  try { localStorage.setItem('sianggaranState', JSON.stringify(STATE)); } catch(e){}
+}
+
+function loadState() {
+  try {
+    const s = localStorage.getItem('sianggaranState');
+    if (s) {
+      const d = JSON.parse(s);
+      // Only load non-data settings from localStorage (dark mode, etc)
+      if (d.darkMode !== undefined) STATE.darkMode = d.darkMode;
+    }
+  } catch(e){}
+}
+
+function unique(arr, key) {
+  const seen = new Set();
+  return arr.filter(x => {const v=x[key]; if(seen.has(v)) return false; seen.add(v); return true;});
+}
+
+// ========================================
+// LOGIN / LOGOUT
+// ========================================
+async function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value.trim();
+
+  // Fetch pengguna from Supabase if connected
+  if (sbClient) {
+    setSyncIndicator('syncing', 'Login...');
+    try {
+      const { data, error } = await sbClient.from('pengguna').select('*').eq('username', u).eq('password', p).single();
+      if (error || !data) { setSyncIndicator('hidden'); showToast('Username atau password salah','error'); return; }
+      STATE.pengguna = (await sbClient.from('pengguna').select('*')).data || STATE.pengguna;
+      var user = data;
+    } catch(e) {
+      showToast('Gagal login: ' + e.message, 'error'); return;
+    }
+  } else {
+    var user = STATE.pengguna.find(x => x.username===u && x.password===p);
+    if (!user) { showToast('Username atau password salah','error'); return; }
+  }
+
+  STATE.tahun = document.getElementById('loginTahun').value;
+  STATE.tahapan = document.getElementById('loginTahapan').value;
+  STATE.user = user;
+  const mode = document.getElementById('loginMode').value;
+  if (mode === 'dark') { document.documentElement.classList.add('dark'); STATE.darkMode = true; }
+  else { document.documentElement.classList.remove('dark'); STATE.darkMode = false; }
+  saveState();
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  updateSidebar();
+  showPage('dashboard');
+  startClock();
+
+  // Load data from Supabase
+  if (sbClient) {
+    await loadDataFromSupabase();
+    showPage('dashboard');
+  }
+}
+
+// ========================================
+// EXPORT / IMPORT JSON
+// ========================================
+function exportJSON() {
+  const exportData = {
+    _meta: {
+      app: 'SIANGGARAN',
+      versi: '2.0',
+      tanggal_export: new Date().toISOString(),
+      tahun: STATE.tahun,
+      tahapan: STATE.tahapan,
+      skpd: 'Bagian Perekonomian dan Sumber Daya Alam',
+    },
+    anggaran: STATE.anggaran,
+    realisasi: STATE.realisasi,
+    kasAnggaran: STATE.kasAnggaran,
+    pengguna: STATE.pengguna.map(u=>({...u, password: '***'})), // mask passwords
+  };
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `SIANGGARAN_${STATE.tahun}_${STATE.tahapan}_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Data berhasil di-export ✅');
+}
+
+function importJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (!confirm(`Import data dari "${file.name}"?\n\nPeringatan: Data yang ada saat ini akan DIGANTIKAN dengan data dari file import. Pastikan Anda sudah export data lama sebagai backup.`)) {
+    input.value = ''; return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const d = JSON.parse(e.target.result);
+      // Validasi struktur
+      if (!d.anggaran || !d.realisasi) {
+        showToast('Format file tidak valid — bukan file SIANGGARAN','error'); return;
+      }
+      if (d.anggaran) STATE.anggaran = d.anggaran;
+      if (d.realisasi) STATE.realisasi = d.realisasi;
+      if (d.kasAnggaran) STATE.kasAnggaran = d.kasAnggaran;
+      // Pengguna hanya di-import jika tidak ada masking password
+      if (d.pengguna && d.pengguna.every(u=>u.password !== '***')) {
+        STATE.pengguna = d.pengguna;
+      }
+      if (d._meta?.tahun) STATE.tahun = d._meta.tahun;
+      if (d._meta?.tahapan) STATE.tahapan = d._meta.tahapan;
+      saveState();
+      updateSidebar();
+      showPage(STATE.currentPage);
+      showToast(`Import berhasil: ${STATE.anggaran.length} rekening, ${STATE.realisasi.length} transaksi ✅`);
+    } catch(err) {
+      showToast('Gagal membaca file: ' + err.message, 'error');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function doLogout() {
+  saveState();
+  document.getElementById('loginScreen').style.display = '';
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+}
+
+function toggleTheme() {
+  STATE.darkMode = !STATE.darkMode;
+  document.documentElement.classList.toggle('dark', STATE.darkMode);
+  const btn = document.getElementById('themeToggle');
+  btn.textContent = STATE.darkMode ? '☀️ Ganti Mode Terang' : '🌙 Ganti Mode Gelap';
+}
+
+function updateSidebar() {
+  const u = STATE.user;
+  document.getElementById('sbAvatar').textContent = u.nama.charAt(0).toUpperCase();
+  document.getElementById('sbUserName').textContent = u.nama;
+  document.getElementById('sbUserRole').textContent = u.role === 'admin' ? 'Administrator' : u.role === 'input' ? 'Operator' : 'Viewer';
+  document.getElementById('sbTahun').textContent = 'TA: ' + STATE.tahun;
+  document.getElementById('sbTahapan').textContent = 'Tahapan: ' + STATE.tahapan;
+  document.getElementById('tbTahun').textContent = 'TA ' + STATE.tahun;
+  document.getElementById('tbTahapan').textContent = STATE.tahapan;
+}
+
+function startClock() {
+  setInterval(() => {
+    const now = new Date();
+    document.getElementById('sbWaktu').textContent = now.toLocaleTimeString('id-ID');
+  }, 1000);
+}
+
+// ========================================
+// NAVIGATION
+// ========================================
+const PAGE_META = {
+  dashboard: {title:'Dashboard',sub:'Ringkasan anggaran dan realisasi SKPD'},
+  anggaran: {title:'Input Anggaran',sub:'Kelola data pagu anggaran SKPD'},
+  kas: {title:'Anggaran Kas',sub:'Rencana penyerapan anggaran per bulan'},
+  realisasi: {title:'Input Realisasi',sub:'Catat transaksi realisasi belanja'},
+  rekap: {title:'Rekap Realisasi',sub:'Rekapitulasi seluruh realisasi anggaran'},
+  lra: {title:'Laporan LRA',sub:'Laporan Realisasi Anggaran resmi SKPD'},
+  pengguna: {title:'Manajemen Pengguna',sub:'Kelola akun dan hak akses pengguna'},
+};
+
+function showPage(page) {
+  STATE.currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const nav = document.getElementById('nav-'+page);
+  if (nav) nav.classList.add('active');
+  const meta = PAGE_META[page] || {title:page,sub:''};
+  document.getElementById('topbarTitle').textContent = meta.title;
+  document.getElementById('topbarSub').textContent = meta.sub;
+  const content = document.getElementById('pageContent');
+  const renders = {
+    dashboard: renderDashboard,
+    anggaran: renderAnggaran,
+    kas: renderKas,
+    realisasi: renderRealisasi,
+    rekap: renderRekap,
+    lra: renderLRA,
+    pengguna: renderPengguna,
+  };
+  if (renders[page]) content.innerHTML = renders[page]();
+  else content.innerHTML = '<p>Halaman tidak ditemukan.</p>';
+  if (page === 'dashboard') initDashboardCharts();
+}
+
+// ========================================
+// DASHBOARD
+// ========================================
+function renderDashboard() {
+  const totalPagu = getTotalPagu();
+  const totalReal = getTotalRealisasi();
+  const sisa = totalPagu - totalReal;
+  const pct = totalPagu > 0 ? (totalReal/totalPagu*100) : 0;
+  const pctFill = Math.min(pct,100);
+  const pctClass = pct < 30 ? 'fill-red' : pct < 60 ? 'fill-orange' : pct < 85 ? 'fill-blue' : 'fill-green';
+
+  // Top 5 & Bottom 5 belanja by capaian % (realisasi rekening / total pagu)
+  const totalPaguDash = getTotalPagu();
+  const byRek = {};
+  // Mulai dari data anggaran (semua rekening, termasuk yang realisasinya 0)
+  STATE.anggaran.forEach(a=>{
+    const real = getRealisasiByRekening(a.kode_rekening);
+    const pct = totalPaguDash > 0 ? (real / totalPaguDash * 100) : 0;
+    byRek[a.kode_rekening] = {
+      nama: a.nama_belanja || a.kode_rekening,
+      sumber_dana: a.sumber_dana,
+      real,
+      pct: parseFloat(pct.toFixed(2)),
+    };
+  });
+  // Tambahkan realisasi dari transaksi yang mungkin tidak match anggaran
+  STATE.realisasi.filter(r=>r.tanggal_sp2d).forEach(r=>{
+    if(!byRek[r.kode_rekening]) {
+      byRek[r.kode_rekening]={nama:r.nama_belanja||r.kode_rekening,sumber_dana:r.sumber_dana||'-',real:0,pct:0};
+    }
+  });
+  const rekList = Object.values(byRek).sort((a,b)=>b.pct-a.pct);
+  const top5 = rekList.slice(0,5);
+  const bot5 = [...rekList].sort((a,b)=>a.pct-b.pct).slice(0,5);
+  const maxPct = top5.length ? Math.max(top5[0].pct, 0.01) : 1;
+
+  // By PPTK
+  const byPPTK = {};
+  STATE.realisasi.filter(r=>r.tanggal_sp2d).forEach(r=>{
+    if(!byPPTK[r.pptk]) byPPTK[r.pptk]=0;
+    byPPTK[r.pptk]+=r.nominal;
+  });
+
+  // By sumber dana
+  const bySD = {};
+  STATE.anggaran.forEach(a=>{
+    if(!bySD[a.sumber_dana]) bySD[a.sumber_dana]={pagu:0,real:0};
+    bySD[a.sumber_dana].pagu+=getPagu(a);
+    bySD[a.sumber_dana].real+=getRealisasiByRekening(a.kode_rekening);
+  });
+
+  // Bulanan
+  const bulanNama = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const realBulan = Array(12).fill(0);
+  STATE.realisasi.filter(r=>r.tanggal_sp2d).forEach(r=>{
+    const m = new Date(r.tanggal_sp2d).getMonth();
+    if(!isNaN(m)) realBulan[m]+=r.nominal;
+  });
+  const maxBulan = Math.max(...realBulan,1);
+
+  return `
+<div class="stats-grid">
+  <div class="stat-card blue">
+    <div class="stat-icon">📋</div>
+    <div class="stat-label">Pagu Anggaran (${STATE.tahapan})</div>
+    <div class="stat-value">${fmt(totalPagu)}</div>
+    <div class="stat-sub">Total ${STATE.anggaran.length} rekening belanja</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-icon">✅</div>
+    <div class="stat-label">Total Realisasi</div>
+    <div class="stat-value">${fmt(totalReal)}</div>
+    <div class="stat-sub">${fmtPct(pct)} dari pagu anggaran</div>
+    <div class="progress-bar"><div class="progress-fill ${pctClass}" style="width:${pctFill}%"></div></div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-icon">⏳</div>
+    <div class="stat-label">Sisa Anggaran</div>
+    <div class="stat-value">${fmt(sisa)}</div>
+    <div class="stat-sub">${fmtPct(100-pct)} belum terealisasi</div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-icon">📊</div>
+    <div class="stat-label">Capaian Realisasi</div>
+    <div class="stat-value">${fmtPct(pct)}</div>
+    <div class="stat-sub">${STATE.tahun} s/d hari ini</div>
+    <div class="progress-bar"><div class="progress-fill ${pctClass}" style="width:${pctFill}%"></div></div>
+  </div>
+</div>
+
+<div class="ai-card">
+  <div class="ai-card-header">
+    <span>🤖</span>
+    <h4>Analisa AI — Capaian Realisasi Anggaran</h4>
+    <button class="btn btn-sm btn-outline" onclick="runAIAnalysis()" style="margin-left:auto">Refresh Analisis</button>
+  </div>
+  <div class="ai-card-body" id="aiAnalysisBody">
+    <div class="ai-loading"><div class="spinner"></div>Memuat analisis AI...</div>
+  </div>
+</div>
+
+<div class="chart-grid">
+  <div class="chart-card">
+    <h4>📈 Capaian Tertinggi (Top 5)</h4>
+    <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px">% = Realisasi rekening / Total Pagu</div>
+    <div class="bar-chart-wrap" id="chartTop5">
+      ${top5.length ? top5.map(r=>`
+        <div class="bar-row">
+          <div class="bar-label" title="${r.nama} [${r.sumber_dana||''}]">${r.nama.split('-')[0]}</div>
+          <div class="bar-outer"><div class="bar-inner fill-blue" style="width:${Math.max(r.pct/maxPct*100,4)}%">${r.pct}%</div></div>
+          <div class="bar-val">${fmt(r.real)}</div>
+        </div>`).join('') : '<div class="empty-state">Belum ada data realisasi</div>'}
+    </div>
+  </div>
+  <div class="chart-card">
+    <h4>📉 Capaian Terendah (Bottom 5)</h4>
+    <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px">% = Realisasi rekening / Total Pagu</div>
+    <div class="bar-chart-wrap" id="chartBot5">
+      ${bot5.length ? bot5.map(r=>`
+        <div class="bar-row">
+          <div class="bar-label" title="${r.nama} [${r.sumber_dana||''}]">${r.nama.split('-')[0]}</div>
+          <div class="bar-outer"><div class="bar-inner fill-orange" style="width:${Math.max(r.pct/maxPct*100,r.pct>0?2:1)}%">${r.pct}%</div></div>
+          <div class="bar-val">${fmt(r.real)}</div>
+        </div>`).join('') : '<div class="empty-state">Belum ada data realisasi</div>'}
+    </div>
+  </div>
+</div>
+
+<div class="chart-grid">
+  <div class="chart-card">
+    <h4>👤 Rekap per PPTK</h4>
+    ${Object.entries(byPPTK).length ? Object.entries(byPPTK).map(([p,v])=>`
+      <div class="bar-row" style="margin-bottom:8px">
+        <div class="bar-label" style="width:160px">${p.split(',')[0]}</div>
+        <div class="bar-outer"><div class="bar-inner fill-green" style="width:${Math.max(v/Math.max(...Object.values(byPPTK))*100,4)}%"></div></div>
+        <div class="bar-val">${fmt(v)}</div>
+      </div>`).join('') : '<div class="empty-state">Belum ada data</div>'}
+  </div>
+  <div class="chart-card">
+    <h4>💳 Rekap per Sumber Dana</h4>
+    ${Object.entries(bySD).length ? Object.entries(bySD).map(([sd,v])=>`
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:4px">
+          <span>${sd}</span><span class="badge badge-blue">Pagu: ${fmt(v.pagu)}</span>
+        </div>
+        <div class="bar-outer"><div class="bar-inner fill-blue" style="width:${v.pagu>0?Math.max(v.real/v.pagu*100,4):0}%"></div></div>
+        <div style="font-size:11px;color:var(--c-text-muted);margin-top:3px">Real: ${fmt(v.real)} | Sisa: ${fmt(v.pagu-v.real)}</div>
+      </div>`).join('') : '<div class="empty-state">Belum ada data</div>'}
+  </div>
+</div>
+
+<div class="section-card">
+  <h4>📅 Realisasi Bulanan — ${STATE.tahun}</h4>
+  <div class="bar-chart-wrap">
+    ${bulanNama.map((n,i)=>`
+      <div class="bar-row">
+        <div class="bar-label" style="width:36px">${n}</div>
+        <div class="bar-outer"><div class="bar-inner fill-blue" style="width:${Math.max(realBulan[i]/maxBulan*100,realBulan[i]>0?2:0)}%"></div></div>
+        <div class="bar-val">${realBulan[i]>0?fmt(realBulan[i]):'-'}</div>
+      </div>`).join('')}
+  </div>
+</div>`;
+}
+
+function initDashboardCharts() {
+  runAIAnalysis();
+}
+
+async function runAIAnalysis() {
+  const el = document.getElementById('aiAnalysisBody');
+  if (!el) return;
+  el.innerHTML = '<div class="ai-loading"><div class="spinner"></div>Memuat analisis AI...</div>';
+
+  const totalPagu = getTotalPagu();
+  const totalReal = getTotalRealisasi();
+  const pct = totalPagu > 0 ? (totalReal/totalPagu*100).toFixed(1) : 0;
+  const sisa = totalPagu - totalReal;
+
+  const now = new Date();
+  const bulanBerjalan = now.getMonth()+1;
+  const targetBulan = ((bulanBerjalan/12)*100).toFixed(1);
+
+  const byRek = {};
+  STATE.realisasi.filter(r=>r.tanggal_sp2d).forEach(r=>{
+    if(!byRek[r.kode_rekening]) byRek[r.kode_rekening]={nama:r.nama_belanja||r.kode_rekening,total:0};
+    byRek[r.kode_rekening].total+=r.nominal;
+  });
+
+  const summary = `
+Data Anggaran SKPD Bagian Perekonomian dan SDA TA ${STATE.tahun} (Tahapan: ${STATE.tahapan}):
+- Total Pagu: Rp ${fmt(totalPagu)}
+- Total Realisasi: Rp ${fmt(totalReal)}
+- Capaian: ${pct}%
+- Sisa: Rp ${fmt(sisa)}
+- Bulan berjalan: ${bulanBerjalan} (target proporsional ${targetBulan}%)
+- Jumlah rekening belanja: ${STATE.anggaran.length}
+- Jumlah transaksi: ${STATE.realisasi.length}
+  `;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        system:`Kamu adalah analis keuangan pemerintah daerah yang ahli dalam analisis LRA (Laporan Realisasi Anggaran) SKPD. Berikan analisis singkat, tajam, dan actionable dalam Bahasa Indonesia. Format output: paragraf singkat 3-4 kalimat, tanpa header berlebihan. Fokus pada: status capaian vs target proporsional, risiko penyerapan, dan rekomendasi tindakan.`,
+        messages:[{role:'user',content:`Analisis capaian realisasi anggaran berikut dan berikan rekomendasi:\n${summary}`}]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content?.find(c=>c.type==='text')?.text || 'Tidak ada analisis.';
+    el.innerHTML = `<div style="line-height:1.8">${text.replace(/\n/g,'<br>')}</div>`;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--c-text-muted)">⚠️ Tidak dapat terhubung ke AI. Pastikan koneksi internet tersedia dan API key terkonfigurasi di Supabase.<br><br><b>Ringkasan Manual:</b><br>Capaian realisasi saat ini ${pct}% dari total pagu Rp ${fmt(totalPagu)}. ${pct<targetBulan?'Realisasi masih di bawah target proporsional '+targetBulan+'%. Perlu percepatan penyerapan anggaran.':'Realisasi sudah memenuhi target proporsional bulan berjalan.'}</div>`;
+  }
+}
+
+// ========================================
+// INPUT ANGGARAN
+// ========================================
+function renderAnggaran() {
+  const programs = unique(MASTER.programKegSubkeg,'kode_program');
+  const data = STATE.anggaran;
+  const totalPagu = getTotalPagu(); // Denominator: total pagu seluruh anggaran
+  let rows = '';
+  if (data.length === 0) {
+    rows = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>Belum ada data anggaran. Klik Tambah untuk menginput.</p></div></td></tr>`;
+  } else {
+    rows = data.map((a,i)=>{
+      const pagu = getPagu(a);
+      const real = getRealisasiByRekening(a.kode_rekening);
+      // Capaian = realisasi belanja ini / total pagu seluruh anggaran (sesuai permintaan)
+      const pct = totalPagu>0?(real/totalPagu*100).toFixed(1):0;
+      // Serapan lokal (per rekening) untuk info tambahan
+      const serapan = pagu>0?(real/pagu*100).toFixed(1):0;
+      return `<tr>
+        <td class="center">${i+1}</td>
+        <td class="mono" style="font-size:11px">${a.kode_rekening||'-'}</td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.nama_belanja}">${a.nama_belanja||'-'}</td>
+        <td style="font-size:11px;color:var(--c-text-muted)">${a.sub_kegiatan||''}</td>
+        <td class="center"><span class="badge ${a.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${a.sumber_dana||'-'}</span></td>
+        <td class="right mono">${fmt(pagu)}</td>
+        <td class="right mono">${fmt(real)}</td>
+        <td class="center" title="Capaian thd total pagu: ${pct}% | Serapan rekening: ${serapan}%">
+          <span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span>
+        </td>
+        <td>
+          <div class="action-btns">
+            <button class="btn btn-sm btn-outline" onclick="editAnggaran(${i})">✏️</button>
+            <button class="btn btn-sm btn-red" onclick="hapusAnggaran(${i})">🗑️</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  return `
+<div class="page-header">
+  <h2>📋 Input Anggaran</h2>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-blue" onclick="openModalAnggaran()">➕ Tambah Rekening</button>
+    <button class="btn btn-outline" onclick="cetakAnggaran()">🖨️ Cetak</button>
+  </div>
+</div>
+<div class="section-card" style="padding:10px 14px;margin-bottom:12px">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:13px">
+    <div><span style="color:var(--c-text-muted)">Total Pagu (${STATE.tahapan}):</span><br><b>${fmt(getTotalPagu())}</b></div>
+    <div><span style="color:var(--c-text-muted)">Total Realisasi:</span><br><b>${fmt(getTotalRealisasi())}</b></div>
+    <div><span style="color:var(--c-text-muted)">Sisa Anggaran:</span><br><b>${fmt(getTotalPagu()-getTotalRealisasi())}</b></div>
+    <div><span style="color:var(--c-text-muted)">Jumlah Rekening:</span><br><b>${STATE.anggaran.length}</b></div>
+  </div>
+</div>
+<div class="table-wrap">
+  <div class="table-toolbar">
+    <h4>Daftar Rekening Belanja</h4>
+    <input class="search-input" placeholder="Cari rekening..." oninput="filterAnggaran(this.value)">
+  </div>
+  <div class="table-scroll">
+    <table id="tblAnggaran">
+      <thead><tr>
+        <th style="width:40px">#</th>
+        <th>Kode Rekening</th>
+        <th>Nama Belanja</th>
+        <th>Sub Kegiatan</th>
+        <th class="center">Sumber Dana</th>
+        <th class="right">Pagu (${STATE.tahapan})</th>
+        <th class="right">Realisasi</th>
+        <th class="center" title="Capaian = Realisasi rekening ini / Total pagu seluruh anggaran">% Capaian *</th>
+        <th style="width:80px">Aksi</th>
+      </tr></thead>
+      <tbody id="tbodyAnggaran">${rows}</tbody>
+    </table>
+  </div>
+  <div style="padding:8px 12px;font-size:11px;color:var(--c-text-muted);border-top:1px solid var(--c-border)">
+    * % Capaian = Realisasi rekening / Total Pagu Seluruh Anggaran (Rp ${fmt(getTotalPagu())}). Arahkan kursor ke badge untuk melihat % serapan per rekening.
+  </div>
+</div>`;
+}
+
+function filterAnggaran(q) {
+  const rows = document.querySelectorAll('#tbodyAnggaran tr');
+  q = q.toLowerCase();
+  rows.forEach(r => { r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+}
+
+function openModalAnggaran(idx) {
+  document.getElementById('fProgram').innerHTML = '<option value="">-- Pilih Program --</option>' +
+    unique(MASTER.programKegSubkeg,'kode_program').map(r=>`<option value="${r.kode_program}">${r.kode_program} — ${r.program}</option>`).join('');
+  document.getElementById('fKegiatan').innerHTML = '<option value="">-- Pilih Kegiatan --</option>';
+  document.getElementById('fSubKegiatan').innerHTML = '<option value="">-- Pilih Sub Kegiatan --</option>';
+  document.getElementById('fBelanja').innerHTML = '<option value="">-- Pilih Belanja --</option>' +
+    MASTER.belanja.map(b=>`<option value="${b.kode_belanja}">${b.kode_belanja} — ${b.nama_belanja}</option>`).join('');
+  document.getElementById('fKodeRekening').value = '';
+  document.getElementById('fPaguMurni').value = '';
+  document.getElementById('fPaguPergeseran').value = '';
+  document.getElementById('fPaguPerubahan').value = '';
+  document.getElementById('fAnggaranId').value = '';
+  document.getElementById('modalAnggaranTitle').textContent = 'Tambah Data Anggaran';
+
+  if (idx !== undefined) {
+    const a = STATE.anggaran[idx];
+    document.getElementById('modalAnggaranTitle').textContent = 'Edit Data Anggaran';
+    document.getElementById('fAnggaranId').value = idx;
+    document.getElementById('fProgram').value = a.kode_program;
+    onProgramChange();
+    setTimeout(()=>{
+      document.getElementById('fKegiatan').value = a.kode_kegiatan;
+      onKegiatanChange();
+      setTimeout(()=>{
+        document.getElementById('fSubKegiatan').value = a.kode_sub_kegiatan;
+        document.getElementById('fBelanja').value = a.kode_belanja;
+        document.getElementById('fKodeRekening').value = a.kode_rekening;
+        document.getElementById('fPaguMurni').value = a.pagu_murni||0;
+        document.getElementById('fPaguPergeseran').value = a.pagu_pergeseran||0;
+        document.getElementById('fPaguPerubahan').value = a.pagu_perubahan||0;
+        document.getElementById('fSumberDana').value = a.sumber_dana;
+        document.getElementById('fPPTK').value = a.pptk;
+      },50);
+    },50);
+  }
+  document.getElementById('modalAnggaran').classList.add('open');
+}
+
+function editAnggaran(i) { openModalAnggaran(i); }
+
+async function hapusAnggaran(i) {
+  if (!confirm('Hapus rekening belanja ini?')) return;
+  const id = STATE.anggaran[i].id;
+  STATE.anggaran.splice(i,1);
+  saveState();
+  if (sbClient) {
+    try { await deleteAnggaranFromSupabase(id); } catch(e) { showToast('Gagal hapus: '+e.message,'error'); return; }
+  }
+  showToast('Data anggaran dihapus');
+  showPage('anggaran');
+}
+
+function onProgramChange() {
+  const kp = document.getElementById('fProgram').value;
+  const keg = unique(MASTER.programKegSubkeg.filter(r=>r.kode_program===kp),'kode_kegiatan');
+  document.getElementById('fKegiatan').innerHTML = '<option value="">-- Pilih Kegiatan --</option>' +
+    keg.map(r=>`<option value="${r.kode_kegiatan}">${r.kode_kegiatan} — ${r.kegiatan}</option>`).join('');
+  document.getElementById('fSubKegiatan').innerHTML = '<option value="">-- Pilih Sub Kegiatan --</option>';
+}
+
+function onKegiatanChange() {
+  const kp = document.getElementById('fProgram').value;
+  const kk = document.getElementById('fKegiatan').value;
+  const subs = MASTER.programKegSubkeg.filter(r=>r.kode_program===kp && r.kode_kegiatan===kk);
+  document.getElementById('fSubKegiatan').innerHTML = '<option value="">-- Pilih Sub Kegiatan --</option>' +
+    subs.map(r=>`<option value="${r.kode_sub_kegiatan}">${r.kode_sub_kegiatan} — ${r.sub_kegiatan}</option>`).join('');
+  updateKodeRekening();
+}
+
+function onSubKegiatanChange() { updateKodeRekening(); }
+
+function onBelanjaChange() { updateKodeRekening(); }
+
+function updateKodeRekening() {
+  const sk = document.getElementById('fSubKegiatan').value;
+  const bel = document.getElementById('fBelanja').value;
+  const sd = document.getElementById('fSumberDana').value;
+  if (sk && bel && sd) {
+    // Sertakan sumber dana dalam kode rekening agar belanja yang sama bisa punya 2 sumber dana
+    const sdSuffix = sd.replace(/\s+/g,'_');
+    document.getElementById('fKodeRekening').value = sk + '.' + bel + '.' + sdSuffix;
+  } else if (sk && bel) {
+    document.getElementById('fKodeRekening').value = sk + '.' + bel;
+  } else {
+    document.getElementById('fKodeRekening').value = '';
+  }
+}
+
+async function saveAnggaran() {
+  const idx = document.getElementById('fAnggaranId').value;
+  const kp = document.getElementById('fProgram').value;
+  const kk = document.getElementById('fKegiatan').value;
+  const sk = document.getElementById('fSubKegiatan').value;
+  const bel = document.getElementById('fBelanja').value;
+  const sd = document.getElementById('fSumberDana').value;
+  if (!kp||!kk||!sk||!bel) { showToast('Lengkapi semua pilihan','error'); return; }
+
+  const pku = MASTER.programKegSubkeg.find(r=>r.kode_sub_kegiatan===sk);
+  const belObj = MASTER.belanja.find(b=>b.kode_belanja===bel);
+  const sdSuffix = sd.replace(/\s+/g,'_');
+  const kodeRek = sk + '.' + bel + '.' + sdSuffix;
+
+  const obj = {
+    id: idx !== '' ? STATE.anggaran[parseInt(idx)].id : genId(),
+    kode_program: kp,
+    program: pku?.program||'',
+    kode_kegiatan: kk,
+    kegiatan: pku?.kegiatan||'',
+    kode_sub_kegiatan: sk,
+    sub_kegiatan: pku?.sub_kegiatan||'',
+    kode_belanja: bel,
+    nama_belanja: belObj?.nama_belanja||'',
+    kode_rekening: kodeRek,
+    pagu_murni: parseFloat(document.getElementById('fPaguMurni').value)||0,
+    pagu_pergeseran: (() => { const v = document.getElementById('fPaguPergeseran').value; return v === '' || v === null ? null : (parseFloat(v)||0); })(),
+    pagu_perubahan: (() => { const v = document.getElementById('fPaguPerubahan').value; return v === '' || v === null ? null : (parseFloat(v)||0); })(),
+    sumber_dana: sd,
+    pptk: document.getElementById('fPPTK').value,
+  };
+
+  if (idx !== '') {
+    STATE.anggaran[parseInt(idx)] = obj;
+  } else {
+    if (STATE.anggaran.find(a=>a.kode_rekening===kodeRek)) {
+      showToast('Rekening dengan sumber dana yang sama sudah ada!','error'); return;
+    }
+    STATE.anggaran.push(obj);
+  }
+  saveState();
+  closeModal('modalAnggaran');
+  showToast('Menyimpan...','success');
+  if (sbClient) {
+    try { await saveAnggaranToSupabase(obj); showToast('Data anggaran disimpan ✅'); }
+    catch(e) { showToast('Gagal simpan ke Supabase: '+e.message,'error'); }
+  } else {
+    showToast('Data anggaran disimpan (lokal) ✅');
+  }
+  showPage('anggaran');
+}
+
+function cetakAnggaran() { window.print(); }
+
+
+// ========================================
+// ANGGARAN KAS
+// ========================================
+const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+
+function renderKas() {
+  if (STATE.anggaran.length === 0) return `<div class="empty-state" style="margin-top:60px"><div class="empty-icon">💰</div><p>Input data anggaran terlebih dahulu sebelum mengisi anggaran kas.</p></div>`;
+
+  const rows = STATE.anggaran.map((a,i) => {
+    const kas = STATE.kasAnggaran[a.kode_rekening] || {};
+    const pagu = getPagu(a);
+    const totalKas = BULAN.reduce((s,_,m)=>s+(kas[m]||0),0);
+    const sisa = pagu - totalKas;
+    const bCells = BULAN.map((_,m)=>`<td><input class="kas-input" type="number" min="0" value="${kas[m]||''}" onchange="updateKas('${a.kode_rekening}',${m},this.value)" placeholder="0"></td>`).join('');
+    return `<tr>
+      <td class="mono" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.kode_rekening}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${a.nama_belanja}">${a.nama_belanja}</td>
+      <td class="right mono" style="font-size:12px">${fmt(pagu)}</td>
+      ${bCells}
+      <td class="right mono" style="font-size:12px;font-weight:700">${fmt(totalKas)}</td>
+      <td class="right mono" style="font-size:12px;color:${sisa<0?'var(--c-danger)':'var(--c-success)'}">${fmt(sisa)}</td>
+    </tr>`;
+  }).join('');
+
+  const totalBulan = BULAN.map((_,m) => STATE.anggaran.reduce((s,a)=>{
+    const kas = STATE.kasAnggaran[a.kode_rekening]||{};
+    return s+(kas[m]||0);
+  },0));
+
+  const totalTotalKas = totalBulan.reduce((s,v)=>s+v,0);
+  const totalPagu = getTotalPagu();
+
+  return `
+<div class="page-header">
+  <h2>💰 Anggaran Kas</h2>
+  <button class="btn btn-blue" onclick="simpanKas()">💾 Simpan Semua</button>
+</div>
+<div class="section-card" style="padding:10px 14px;margin-bottom:12px">
+  <div style="font-size:13px;color:var(--c-text-muted)">⚠️ Isi rencana penyerapan per bulan untuk setiap rekening. Total anggaran kas harus ≤ pagu yang tersedia.</div>
+</div>
+<div class="table-wrap">
+  <div class="table-scroll" style="max-height:600px">
+    <table class="kas-table">
+      <thead><tr>
+        <th>Kode Rekening</th>
+        <th>Nama Belanja</th>
+        <th class="right">Pagu</th>
+        ${BULAN.map(b=>`<th class="center">${b}</th>`).join('')}
+        <th class="right">Total Kas</th>
+        <th class="right">Sisa</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700;background:var(--c-primary-light)">
+        <td colspan="2">TOTAL</td>
+        <td class="right mono">${fmt(totalPagu)}</td>
+        ${totalBulan.map(v=>`<td class="right mono" style="font-size:12px">${v>0?fmt(v):'-'}</td>`).join('')}
+        <td class="right mono">${fmt(totalTotalKas)}</td>
+        <td class="right mono" style="color:${totalPagu-totalTotalKas<0?'var(--c-danger)':'var(--c-success)'}">${fmt(totalPagu-totalTotalKas)}</td>
+      </tr></tfoot>
+    </table>
+  </div>
+</div>`;
+}
+
+function updateKas(kodeRek, bulan, val) {
+  if (!STATE.kasAnggaran[kodeRek]) STATE.kasAnggaran[kodeRek] = {};
+  STATE.kasAnggaran[kodeRek][bulan] = parseFloat(val)||0;
+}
+
+async function simpanKas() {
+  saveState();
+  if (sbClient) {
+    await saveKasToSupabase();
+  } else {
+    showToast('Anggaran kas disimpan (lokal)');
+  }
+}
+
+// ========================================
+// INPUT REALISASI
+// ========================================
+function renderRealisasi() {
+  const rows = STATE.realisasi.length === 0
+    ? `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📑</div><p>Belum ada transaksi realisasi.</p></div></td></tr>`
+    : STATE.realisasi.map((r,i)=>`<tr>
+        <td class="center">${i+1}</td>
+        <td>${r.tanggal||'-'}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.uraian}">${r.uraian||'-'}</td>
+        <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="mono">${r.kode_rekening||'-'}</td>
+        <td class="right mono">${fmt(r.nominal)}</td>
+        <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
+        <td>${r.pptk?.split(',')[0]||'-'}</td>
+        <td>${r.tanggal_sp2d||'-'}</td>
+        <td class="center"><span class="badge ${r.tanggal_sp2d?'badge-green':'badge-orange'}">${r.tanggal_sp2d?'SP2D':'Proses'}</span></td>
+        <td><div class="action-btns">
+          <button class="btn btn-sm btn-outline" onclick="editRealisasi(${i})">✏️</button>
+          <button class="btn btn-sm btn-red" onclick="hapusRealisasi(${i})">🗑️</button>
+        </div></td>
+      </tr>`).join('');
+
+  return `
+<div class="page-header">
+  <h2>📑 Input Realisasi</h2>
+  <button class="btn btn-blue" onclick="openModalRealisasi()">➕ Tambah Transaksi</button>
+</div>
+<div class="table-wrap">
+  <div class="table-toolbar">
+    <h4>Daftar Transaksi (${STATE.realisasi.length} transaksi)</h4>
+    <div class="toolbar-right">
+      <input class="search-input" placeholder="Cari transaksi..." oninput="filterRealisasi(this.value)">
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table id="tblRealisasi">
+      <thead><tr>
+        <th style="width:40px">#</th>
+        <th>Tanggal</th>
+        <th>Uraian</th>
+        <th>Kode Rekening</th>
+        <th class="right">Nominal</th>
+        <th class="center">Sumber Dana</th>
+        <th>PPTK</th>
+        <th>Tgl SP2D</th>
+        <th class="center">Status</th>
+        <th>Aksi</th>
+      </tr></thead>
+      <tbody id="tbodyRealisasi">${rows}</tbody>
+    </table>
+  </div>
+</div>`;
+}
+
+function filterRealisasi(q) {
+  document.querySelectorAll('#tbodyRealisasi tr').forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(q.toLowerCase())?'':'none';});
+}
+
+function openModalRealisasi(idx) {
+  // Populate sub kegiatan from existing anggaran
+  const subKegList = unique(STATE.anggaran,'kode_sub_kegiatan');
+  document.getElementById('rSubKegiatan').innerHTML = '<option value="">-- Pilih Sub Kegiatan --</option>' +
+    subKegList.map(a=>`<option value="${a.kode_sub_kegiatan}">${a.kode_sub_kegiatan} — ${a.sub_kegiatan}</option>`).join('');
+  document.getElementById('rSumberDana').value = '';
+  document.getElementById('rBelanja').innerHTML = '<option value="">-- Pilih Belanja --</option>';
+  document.getElementById('rTanggal').value = new Date().toISOString().split('T')[0];
+  document.getElementById('rTanggalSP2D').value = '';
+  document.getElementById('rUraian').value = '';
+  document.getElementById('rNominal').value = '';
+  document.getElementById('rId').value = '';
+  document.getElementById('rInfoPagu').style.display = 'none';
+  document.getElementById('modalRealisasiTitle').textContent = 'Input Transaksi Realisasi';
+
+  if (idx !== undefined) {
+    const r = STATE.realisasi[idx];
+    document.getElementById('modalRealisasiTitle').textContent = 'Edit Transaksi';
+    document.getElementById('rId').value = idx;
+    document.getElementById('rTanggal').value = r.tanggal;
+    document.getElementById('rTanggalSP2D').value = r.tanggal_sp2d||'';
+    document.getElementById('rUraian').value = r.uraian;
+    document.getElementById('rNominal').value = r.nominal;
+    document.getElementById('rPPTK').value = r.pptk;
+    document.getElementById('rSubKegiatan').value = r.kode_sub_kegiatan;
+    // Set sumber dana dari data realisasi (lookup dari anggaran)
+    const angRow = STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening);
+    const sd = r.sumber_dana || angRow?.sumber_dana || '';
+    onRSubKegiatanChange();
+    setTimeout(()=>{
+      document.getElementById('rSumberDana').value = sd;
+      onRSumberDanaChange();
+      setTimeout(()=>{ document.getElementById('rBelanja').value = r.kode_belanja; onRBelanjaChange(); },50);
+    },50);
+  }
+  document.getElementById('modalRealisasi').classList.add('open');
+}
+
+function editRealisasi(i) { openModalRealisasi(i); }
+
+async function hapusRealisasi(i) {
+  if (!confirm('Hapus transaksi ini?')) return;
+  const id = STATE.realisasi[i].id;
+  STATE.realisasi.splice(i,1); saveState();
+  if (sbClient) {
+    try { await deleteRealisasiFromSupabase(id); } catch(e) { showToast('Gagal hapus: '+e.message,'error'); return; }
+  }
+  showToast('Transaksi dihapus'); showPage('realisasi');
+}
+
+function onRSubKegiatanChange() {
+  const sk = document.getElementById('rSubKegiatan').value;
+  // Reset sumber dana dan belanja saat sub kegiatan berubah
+  document.getElementById('rSumberDana').value = '';
+  document.getElementById('rBelanja').innerHTML = '<option value="">-- Pilih Sumber Dana dulu --</option>';
+  document.getElementById('rInfoPagu').style.display = 'none';
+  // Cek apakah ada sub kegiatan ini yang punya lebih dari 1 sumber dana
+  const sdList = [...new Set(STATE.anggaran.filter(a=>a.kode_sub_kegiatan===sk).map(a=>a.sumber_dana))];
+  const sdEl = document.getElementById('rSumberDana');
+  sdEl.innerHTML = '<option value="">-- Pilih Sumber Dana --</option>' +
+    sdList.map(sd=>`<option value="${sd}">${sd}</option>`).join('');
+  if (sdList.length === 1) {
+    // Jika hanya 1 sumber dana, langsung pilih otomatis
+    sdEl.value = sdList[0];
+    onRSumberDanaChange();
+  }
+}
+
+function onRSumberDanaChange() {
+  const sk = document.getElementById('rSubKegiatan').value;
+  const sd = document.getElementById('rSumberDana').value;
+  const angList = STATE.anggaran.filter(a=>a.kode_sub_kegiatan===sk && a.sumber_dana===sd);
+  document.getElementById('rBelanja').innerHTML = '<option value="">-- Pilih Belanja --</option>' +
+    angList.map(a=>`<option value="${a.kode_belanja}" data-koderek="${a.kode_rekening}">${a.kode_belanja} — ${a.nama_belanja}</option>`).join('');
+  document.getElementById('rInfoPagu').style.display = 'none';
+}
+
+function onRBelanjaChange() {
+  const sk = document.getElementById('rSubKegiatan').value;
+  const bel = document.getElementById('rBelanja').value;
+  const sd = document.getElementById('rSumberDana').value;
+  if (!sk||!bel||!sd) { document.getElementById('rInfoPagu').style.display='none'; return; }
+  const angRow = STATE.anggaran.find(a=>a.kode_sub_kegiatan===sk && a.kode_belanja===bel && a.sumber_dana===sd);
+  if (angRow) {
+    const pagu = getPagu(angRow);
+    const real = getRealisasiByRekening(angRow.kode_rekening);
+    const sisa = pagu - real;
+    document.getElementById('rPaguInfo').innerHTML = `<b>Pagu ${sd}:</b> ${fmt(pagu)} | <b>Realisasi:</b> ${fmt(real)} | <b>Sisa:</b> <span style="color:${sisa<0?'var(--c-danger)':'var(--c-success)'};font-weight:700">${fmt(sisa)}</span>`;
+    document.getElementById('rInfoPagu').style.display = '';
+  }
+}
+
+async function saveRealisasi() {
+  const sk = document.getElementById('rSubKegiatan').value;
+  const bel = document.getElementById('rBelanja').value;
+  const sd = document.getElementById('rSumberDana').value;
+  const nominal = parseFloat(document.getElementById('rNominal').value)||0;
+  if (!sk||!bel||!sd||!nominal) { showToast('Lengkapi data transaksi (termasuk sumber dana)','error'); return; }
+
+  const angRow = STATE.anggaran.find(a=>a.kode_sub_kegiatan===sk && a.kode_belanja===bel && a.sumber_dana===sd);
+  const idx = document.getElementById('rId').value;
+
+  if (angRow) {
+    const pagu = getPagu(angRow);
+    const realExisting = getRealisasiByRekening(angRow.kode_rekening);
+    const realExcludeThis = idx !== '' ? realExisting - (STATE.realisasi[parseInt(idx)]?.nominal||0) : realExisting;
+    if (realExcludeThis + nominal > pagu) {
+      const sisa = pagu - realExcludeThis;
+      if (!confirm(`⚠️ Nominal melebihi sisa pagu ${sd} sebesar ${fmt(sisa)}. Tetap simpan?`)) return;
+    }
+  }
+
+  const obj = {
+    id: idx !== '' ? STATE.realisasi[parseInt(idx)].id : genId(),
+    tanggal: document.getElementById('rTanggal').value,
+    tanggal_sp2d: document.getElementById('rTanggalSP2D').value||null,
+    uraian: document.getElementById('rUraian').value,
+    kode_sub_kegiatan: sk,
+    kode_belanja: bel,
+    sumber_dana: sd,
+    kode_rekening: angRow?.kode_rekening || (sk+'.'+bel+'.'+sd.replace(/\s+/g,'_')),
+    nama_belanja: angRow?.nama_belanja||'',
+    nominal,
+    pptk: document.getElementById('rPPTK').value,
+  };
+
+  if (idx!=='') STATE.realisasi[parseInt(idx)]=obj;
+  else STATE.realisasi.push(obj);
+  saveState(); closeModal('modalRealisasi');
+  if (sbClient) {
+    try { await saveRealisasiToSupabase(obj); showToast('Transaksi disimpan ✅'); }
+    catch(e) { showToast('Gagal simpan ke Supabase: '+e.message,'error'); return; }
+  } else {
+    showToast('Transaksi disimpan (lokal) ✅');
+  }
+  showPage('realisasi');
+}
+
+// ========================================
+// REKAP REALISASI
+// ========================================
+function renderRekap() {
+  const totalPagu = getTotalPagu();
+  const totalReal = getTotalRealisasi();
+  const sisa = totalPagu - totalReal;
+  const pct = totalPagu>0?(totalReal/totalPagu*100).toFixed(1):0;
+
+  // Rekap per subkegiatan
+  const bySubkeg = {};
+  STATE.anggaran.forEach(a=>{
+    if(!bySubkeg[a.kode_sub_kegiatan]) bySubkeg[a.kode_sub_kegiatan]={nama:a.sub_kegiatan,pagu:0,real:0};
+    bySubkeg[a.kode_sub_kegiatan].pagu+=getPagu(a);
+    bySubkeg[a.kode_sub_kegiatan].real+=getRealisasiByRekening(a.kode_rekening);
+  });
+
+  // Rekap per PPTK (pagu side)
+  const byPPTK = {};
+  STATE.anggaran.forEach(a=>{
+    if(!byPPTK[a.pptk]) byPPTK[a.pptk]={pagu:0,real:0};
+    byPPTK[a.pptk].pagu+=getPagu(a);
+    byPPTK[a.pptk].real+=getRealisasiByRekening(a.kode_rekening);
+  });
+
+  // Rekap per sumber dana — pagu dari anggaran, realisasi dari transaksi yang ber-sumber-dana sesuai
+  const bySD = {};
+  STATE.anggaran.forEach(a=>{
+    const sd = a.sumber_dana||'Lainnya';
+    if(!bySD[sd]) bySD[sd]={pagu:0,real:0};
+    bySD[sd].pagu+=getPagu(a);
+    bySD[sd].real+=getRealisasiByRekening(a.kode_rekening);
+  });
+
+  // Triwulan
+  const twLabel = ['TW I (Jan-Mar)','TW II (Apr-Jun)','TW III (Jul-Sep)','TW IV (Okt-Des)'];
+  const twMonths = [[0,1,2],[3,4,5],[6,7,8],[9,10,11]];
+  const twReal = twMonths.map(ms => STATE.realisasi.filter(r=>{
+    if(!r.tanggal_sp2d) return false;
+    const m = new Date(r.tanggal_sp2d).getMonth();
+    return ms.includes(m);
+  }).reduce((s,r)=>s+r.nominal,0));
+
+  return `
+<div class="page-header"><h2>📈 Rekap Realisasi</h2><button class="btn btn-outline" onclick="window.print()">🖨️ Cetak</button></div>
+
+<div class="section-card">
+  <h4>Ringkasan Keseluruhan</h4>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+    ${[['Pagu Anggaran',totalPagu,'blue'],['Total Realisasi',totalReal,'green'],['Sisa Anggaran',sisa,'orange'],['Capaian',null,'purple']].map(([l,v,c])=>`
+      <div class="stat-card ${c}" style="padding:12px">
+        <div class="stat-label">${l}</div>
+        <div class="stat-value" style="font-size:16px">${l==='Capaian'?pct+'%':fmt(v)}</div>
+      </div>`).join('')}
+  </div>
+</div>
+
+<div class="rekap-grid">
+  <div class="table-wrap">
+    <div class="table-toolbar"><h4>Per Sub Kegiatan</h4></div>
+    <div class="table-scroll" style="max-height:300px">
+      <table>
+        <thead><tr><th>Sub Kegiatan</th><th class="right">Pagu</th><th class="right">Realisasi</th><th class="center" title="Realisasi sub kegiatan / Total Pagu">% Capaian *</th></tr></thead>
+        <tbody>
+          ${Object.entries(bySubkeg).map(([k,v])=>{
+            const p=(totalPagu>0?(v.real/totalPagu*100).toFixed(1):0);
+            return `<tr><td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v.nama}">${v.nama}</td>
+              <td class="right mono" style="font-size:12px">${fmt(v.pagu)}</td>
+              <td class="right mono" style="font-size:12px">${fmt(v.real)}</td>
+              <td class="center"><span class="badge ${p>=85?'badge-green':p>=60?'badge-blue':p>=30?'badge-orange':'badge-red'}">${p}%</span></td></tr>`;
+          }).join('')||'<tr><td colspan="4" class="empty-state">Belum ada data</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-toolbar"><h4>Per PPTK</h4></div>
+    <div class="table-scroll" style="max-height:300px">
+      <table>
+        <thead><tr><th>PPTK</th><th class="right">Pagu</th><th class="right">Realisasi</th><th class="center" title="Realisasi PPTK / Total Pagu">% Capaian *</th></tr></thead>
+        <tbody>
+          ${Object.entries(byPPTK).map(([p,v])=>{
+            const pct=(totalPagu>0?(v.real/totalPagu*100).toFixed(1):0);
+            return `<tr><td style="font-size:12px">${p}</td>
+              <td class="right mono" style="font-size:12px">${fmt(v.pagu)}</td>
+              <td class="right mono" style="font-size:12px">${fmt(v.real)}</td>
+              <td class="center"><span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span></td></tr>`;
+          }).join('')||'<tr><td colspan="4" class="empty-state">Belum ada data</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="rekap-grid" style="margin-top:14px">
+  <div class="table-wrap">
+    <div class="table-toolbar"><h4>Per Sumber Dana</h4></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Sumber Dana</th><th class="right">Pagu</th><th class="right">Realisasi</th><th class="right">Sisa</th><th class="center" title="Realisasi SD / Total Pagu">% Capaian *</th></tr></thead>
+        <tbody>
+          ${Object.entries(bySD).map(([sd,v])=>{
+            const pct=(totalPagu>0?(v.real/totalPagu*100).toFixed(1):0);
+            return `<tr><td>${sd}</td>
+              <td class="right mono" style="font-size:12px">${fmt(v.pagu)}</td>
+              <td class="right mono" style="font-size:12px">${fmt(v.real)}</td>
+              <td class="right mono" style="font-size:12px">${fmt(v.pagu-v.real)}</td>
+              <td class="center"><span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span></td></tr>`;
+          }).join('')||'<tr><td colspan="5" class="empty-state">Belum ada data</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-toolbar"><h4>Rekap Triwulanan</h4></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Triwulan</th><th class="right">Realisasi</th><th class="right">Kumulatif</th><th class="center" title="Kumulatif / Total Pagu">% Kumulatif</th></tr></thead>
+        <tbody>
+          ${twLabel.map((l,i)=>{
+            const kum = twReal.slice(0,i+1).reduce((s,v)=>s+v,0);
+            const kumPct = totalPagu>0?(kum/totalPagu*100).toFixed(1):0;
+            return `<tr><td>${l}</td><td class="right mono" style="font-size:12px">${fmt(twReal[i])}</td><td class="right mono" style="font-size:12px">${fmt(kum)}</td><td class="center"><span class="badge badge-blue">${kumPct}%</span></td></tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div style="padding:6px 12px;font-size:11px;color:var(--c-text-muted)">* % Capaian = Realisasi / Total Pagu Seluruh Anggaran (Rp ${fmt(totalPagu)})</div>`;
+}
+
+// ========================================
+// LRA
+// ========================================
+function renderLRA() {
+  const now = new Date().toISOString().split('T')[0];
+  return `
+<div class="page-header">
+  <h2>📄 Laporan Realisasi Anggaran (LRA)</h2>
+  <div style="display:flex;gap:8px;align-items:center">
+    <label style="font-size:13px;font-weight:600">Sampai Tanggal:</label>
+    <input type="date" id="lraTanggal" class="form-input" style="width:160px" value="${now}" onchange="refreshLRA()">
+    <button class="btn btn-blue" onclick="refreshLRA()">🔄 Tampilkan</button>
+    <button class="btn btn-outline" onclick="window.print()">🖨️ Cetak PDF</button>
+  </div>
+</div>
+<div id="lraContent">${buildLRATable(now)}</div>`;
+}
+
+function refreshLRA() {
+  const d = document.getElementById('lraTanggal').value;
+  document.getElementById('lraContent').innerHTML = buildLRATable(d);
+}
+
+function buildLRATable(upToDate) {
+  // Get prev month last day
+  const dt = new Date(upToDate);
+  const prevMonthEnd = new Date(dt.getFullYear(), dt.getMonth(), 0).toISOString().split('T')[0];
+
+  // Cek nama belanja mana yang punya duplikat (muncul lebih dari 1 sumber dana pada sub kegiatan yang sama)
+  const belanjaCount = {};
+  STATE.anggaran.forEach(a=>{
+    const key = a.kode_sub_kegiatan + '|' + a.kode_belanja;
+    belanjaCount[key] = (belanjaCount[key]||0) + 1;
+  });
+
+  let totalPagu=0, totalBulanLalu=0, totalBulanIni=0, totalJumlah=0, totalSisa=0;
+  const rows = STATE.anggaran.map(row=>{
+    const pagu = getPagu(row);
+    const bulanLalu = getRealisasiByRekening(row.kode_rekening, prevMonthEnd);
+    const bulanIni = getRealisasiByRekening(row.kode_rekening, upToDate) - bulanLalu;
+    const jumlah = bulanLalu + bulanIni;
+    const sisa = pagu - jumlah;
+    totalPagu+=pagu; totalBulanLalu+=bulanLalu; totalBulanIni+=bulanIni; totalJumlah+=jumlah; totalSisa+=sisa;
+    // Jika satu belanja punya 2 sumber dana, tampilkan label sumber dana
+    const key = row.kode_sub_kegiatan + '|' + row.kode_belanja;
+    const showSD = belanjaCount[key] > 1;
+    const namaBelanja = showSD ? `${row.nama_belanja} <span class="badge ${row.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}" style="font-size:10px">${row.sumber_dana}</span>` : row.nama_belanja;
+    return `<tr>
+      <td class="mono" style="font-size:11px">${row.kode_rekening}</td>
+      <td style="font-size:12px;max-width:200px" title="${row.nama_belanja} [${row.sumber_dana}]">${namaBelanja}</td>
+      <td class="right mono" style="font-size:12px">${fmt(pagu)}</td>
+      <td class="right mono" style="font-size:12px">${fmt(row.pagu_murni)}</td>
+      <td class="right mono" style="font-size:12px">${fmt(row.pagu_pergeseran||0)}</td>
+      <td class="right mono" style="font-size:12px">${fmt(row.pagu_perubahan||0)}</td>
+      <td class="right mono" style="font-size:12px">${fmt(bulanLalu)}</td>
+      <td class="right mono" style="font-size:12px">${fmt(bulanIni)}</td>
+      <td class="right mono" style="font-size:12px;font-weight:600">${fmt(jumlah)}</td>
+      <td class="right mono" style="font-size:12px;color:${sisa<0?'var(--c-danger)':''}">${fmt(sisa)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="10"><div class="empty-state">Belum ada data anggaran.</div></td></tr>`;
+
+  return `
+<div class="lra-header-box">
+  <div style="text-align:center;margin-bottom:10px">
+    <h3 style="font-size:16px;font-weight:700">LAPORAN REALISASI ANGGARAN</h3>
+    <p style="font-size:13px">SKPD: Bagian Perekonomian dan Sumber Daya Alam — Tahun Anggaran ${STATE.tahun}</p>
+    <p style="font-size:13px">Untuk Periode Sampai Dengan: <b>${new Date(upToDate).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'})}</b></p>
+    <p style="font-size:12px;color:var(--c-text-muted)">Tahapan: ${STATE.tahapan} | KPA: ${MASTER.kpa}</p>
+  </div>
+</div>
+<div class="table-wrap">
+  <div class="table-scroll" style="max-height:520px">
+    <table class="lra-table">
+      <thead>
+        <tr>
+          <th rowspan="2">Kode Rekening</th>
+          <th rowspan="2">Uraian</th>
+          <th rowspan="2" class="right">Pagu (${STATE.tahapan})</th>
+          <th colspan="3" class="center">Pagu Rincian</th>
+          <th colspan="3" class="center">Realisasi</th>
+          <th rowspan="2" class="right">Sisa</th>
+        </tr>
+        <tr>
+          <th class="right">Murni</th><th class="right">Pergeseran</th><th class="right">Perubahan</th>
+          <th class="right">Bln Lalu</th><th class="right">Bln Ini</th><th class="right">Jumlah</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr class="lra-total">
+          <td colspan="2"><b>TOTAL BELANJA</b></td>
+          <td class="right mono"><b>${fmt(totalPagu)}</b></td>
+          <td class="right mono">-</td><td class="right mono">-</td><td class="right mono">-</td>
+          <td class="right mono"><b>${fmt(totalBulanLalu)}</b></td>
+          <td class="right mono"><b>${fmt(totalBulanIni)}</b></td>
+          <td class="right mono"><b>${fmt(totalJumlah)}</b></td>
+          <td class="right mono" style="color:${totalSisa<0?'var(--c-danger)':''}"><b>${fmt(totalSisa)}</b></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:20px;font-size:13px">
+  <div style="text-align:center">
+    <p style="color:var(--c-text-muted)">KPA,</p>
+    <p style="margin-top:50px;font-weight:700">${MASTER.kpa}</p>
+    <p style="color:var(--c-text-muted)">NIP. 196901181990032001</p>
+  </div>
+</div>`;
+}
+
+// ========================================
+// PENGGUNA
+// ========================================
+function renderPengguna() {
+  const roleLabel = {admin:'Administrator',input:'Operator Input',view:'Viewer'};
+  const roleBadge = {admin:'badge-blue',input:'badge-green',view:'badge-orange'};
+  return `
+<div class="page-header">
+  <h2>👥 Manajemen Pengguna</h2>
+  <button class="btn btn-blue" onclick="openModalPengguna()">➕ Tambah Pengguna</button>
+</div>
+<div style="display:grid;gap:10px">
+  ${STATE.pengguna.map((u,i)=>`
+    <div class="user-card">
+      <div class="avatar" style="width:40px;height:40px;font-size:16px">${u.nama.charAt(0)}</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px">${u.nama}</div>
+        <div style="font-size:12px;color:var(--c-text-muted)">@${u.username} · ${u.jabatan||'—'}</div>
+      </div>
+      <span class="user-role-badge badge ${roleBadge[u.role]||'badge-gray'}">${roleLabel[u.role]||u.role}</span>
+      <div class="action-btns">
+        <button class="btn btn-sm btn-outline" onclick="editPengguna(${i})">✏️ Edit</button>
+        ${STATE.pengguna.length>1?`<button class="btn btn-sm btn-red" onclick="hapusPengguna(${i})">🗑️</button>`:''}
+      </div>
+    </div>`).join('')}
+</div>`;
+}
+
+function openModalPengguna(idx) {
+  ['pNama','pUsername','pPassword','pJabatan'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pRole').value='input';
+  document.getElementById('pId').value='';
+  document.getElementById('modalPenggunaTitle').textContent='Tambah Pengguna';
+  if(idx!==undefined){
+    const u=STATE.pengguna[idx];
+    document.getElementById('modalPenggunaTitle').textContent='Edit Pengguna';
+    document.getElementById('pId').value=idx;
+    document.getElementById('pNama').value=u.nama;
+    document.getElementById('pUsername').value=u.username;
+    document.getElementById('pRole').value=u.role;
+    document.getElementById('pJabatan').value=u.jabatan||'';
+  }
+  document.getElementById('modalPengguna').classList.add('open');
+}
+
+function editPengguna(i){openModalPengguna(i);}
+async function hapusPengguna(i){
+  if(!confirm('Hapus pengguna ini?'))return;
+  const id = STATE.pengguna[i].id;
+  STATE.pengguna.splice(i,1);saveState();
+  if(sbClient){
+    try{ await deletePenggunaFromSupabase(id); }catch(e){showToast('Gagal hapus: '+e.message,'error');return;}
+  }
+  showToast('Pengguna dihapus');showPage('pengguna');
+}
+
+async function savePengguna(){
+  const idx=document.getElementById('pId').value;
+  const nama=document.getElementById('pNama').value.trim();
+  const uname=document.getElementById('pUsername').value.trim();
+  const pass=document.getElementById('pPassword').value;
+  if(!nama||!uname){showToast('Nama dan username wajib diisi','error');return;}
+  let obj;
+  if(idx===''){
+    if(STATE.pengguna.find(u=>u.username===uname)){showToast('Username sudah digunakan','error');return;}
+    obj={id:genId(),nama,username:uname,password:pass||'pptk123',role:document.getElementById('pRole').value,jabatan:document.getElementById('pJabatan').value};
+    STATE.pengguna.push(obj);
+  }else{
+    const u=STATE.pengguna[parseInt(idx)];
+    u.nama=nama;u.username=uname;u.role=document.getElementById('pRole').value;u.jabatan=document.getElementById('pJabatan').value;
+    if(pass)u.password=pass;
+    obj=u;
+  }
+  saveState();closeModal('modalPengguna');
+  if(sbClient){
+    try{ await savePenggunaToSupabase(obj);showToast('Data pengguna disimpan'); }
+    catch(e){showToast('Gagal simpan: '+e.message,'error');return;}
+  }else{
+    showToast('Data pengguna disimpan');
+  }
+  showPage('pengguna');
+}
+
+function resetSupabaseConfig() {
+  // Credentials are hardcoded — just reload the page
+  if (!confirm('Reload aplikasi dan sambungkan ulang ke database?')) return;
+  location.reload();
+}
+
+// ========================================
+// MODAL HELPERS
+// ========================================
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+window.addEventListener('click',e=>{
+  document.querySelectorAll('.modal-overlay.open').forEach(m=>{if(e.target===m)m.classList.remove('open');});
+});
+
+// ========================================
+// INIT
+// ========================================
+loadState();
+if(STATE.darkMode) document.documentElement.classList.add('dark');
+
+// ========================================
+// SUPABASE CREDENTIALS (hardcoded — no manual config needed)
+// ========================================
+const SUPABASE_URL = 'https://ryevqkcfrugyenfisvoh.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5ZXZxa2NmcnVneWVuZmlzdm9oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NDc0MjAsImV4cCI6MjA5NDMyMzQyMH0.EeVXvMDF29qbueqQ5BQcrI1ZzfVLVaZ_nQuJlyRnu9s';
+
+(async function initApp() {
+  // Always use hardcoded credentials — no config screen needed
+  initSupabase(SUPABASE_URL, SUPABASE_KEY);
+  localStorage.setItem('sianggaranSupabaseConfig', JSON.stringify({url: SUPABASE_URL, key: SUPABASE_KEY}));
+  // Show login directly — koneksi Supabase akan diverifikasi saat doLogin()
+  document.getElementById('loginScreen').style.display = '';
+})();
+
+
+// Note: Data seed dilakukan via SQL migration script di Supabase.
+// Lihat tombol "SQL Migration" di halaman konfigurasi.
+</script>
+</body>
+</html>
