@@ -2691,35 +2691,58 @@ function buildLRATable(upToDate) {
 // ========================================
 // PENCARIAN DATA
 // ========================================
-// State filter pencarian (in-memory, tidak ubah STATE.anggaran/realisasi)
 const CARI_STATE = {
-  mode: 'realisasi',       // 'realisasi' | 'sisa'
-  program: '',
-  kegiatan: '',
-  subKegiatan: '',
-  belanja: '',
-  sumberDana: '',
-  pptk: '',
-  tglDari: '',
-  tglSampai: '',
-  q: '',
+  mode: 'realisasi',
+  program: '', kegiatan: '', subKegiatan: '',
+  belanja: '', sumberDana: '', pptk: '',
+  tglDari: '', tglSampai: '', q: '',
 };
 
-function renderCari() {
-  // Kumpulkan nilai unik dari STATE.anggaran untuk dropdown
-  const programs  = [...new Map(STATE.anggaran.filter(a=>a.kode_program).map(a=>[a.kode_program, a])).values()];
-  const kegiatans = [...new Map(STATE.anggaran.filter(a=>a.kode_kegiatan).map(a=>[a.kode_kegiatan, a])).values()];
-  const subKegiatans = [...new Map(STATE.anggaran.filter(a=>a.kode_sub_kegiatan).map(a=>[a.kode_sub_kegiatan, a])).values()];
-  const belanjas  = [...new Map(STATE.anggaran.filter(a=>a.kode_belanja).map(a=>[a.kode_belanja, a])).values()];
-  const sumberDanas = [...new Set(STATE.anggaran.filter(a=>a.sumber_dana).map(a=>a.sumber_dana))];
-  const pptks     = [...new Set(STATE.anggaran.filter(a=>a.pptk).map(a=>a.pptk))];
+// Helper: ambil program/kegiatan/subkegiatan yang ada di STATE.anggaran
+// Di-filter bertingkat sesuai pilihan saat ini
+function getCariOptions() {
+  const ang = STATE.anggaran;
 
+  // Program: semua yang ada di anggaran
+  const programs = [...new Map(ang.filter(a=>a.kode_program)
+    .map(a=>[a.kode_program,{kode:a.kode_program,nama:a.program||a.kode_program}])).values()];
+
+  // Kegiatan: filter berdasarkan program terpilih
+  const angByProg = CARI_STATE.program
+    ? ang.filter(a=>a.kode_program===CARI_STATE.program) : ang;
+  const kegiatans = [...new Map(angByProg.filter(a=>a.kode_kegiatan)
+    .map(a=>[a.kode_kegiatan,{kode:a.kode_kegiatan,nama:a.kegiatan||a.kode_kegiatan}])).values()];
+
+  // Sub Kegiatan: filter berdasarkan kegiatan terpilih (dan program)
+  const angByKeg = CARI_STATE.kegiatan
+    ? angByProg.filter(a=>a.kode_kegiatan===CARI_STATE.kegiatan) : angByProg;
+  const subKegiatans = [...new Map(angByKeg.filter(a=>a.kode_sub_kegiatan)
+    .map(a=>[a.kode_sub_kegiatan,{kode:a.kode_sub_kegiatan,nama:a.sub_kegiatan||a.kode_sub_kegiatan}])).values()];
+
+  // Belanja: filter berdasarkan sub kegiatan terpilih
+  const angBySub = CARI_STATE.subKegiatan
+    ? angByKeg.filter(a=>a.kode_sub_kegiatan===CARI_STATE.subKegiatan) : angByKeg;
+  const belanjas = [...new Map(angBySub.filter(a=>a.kode_belanja)
+    .map(a=>[a.kode_belanja,{kode:a.kode_belanja,nama:a.nama_belanja||a.kode_belanja}])).values()];
+
+  // Sumber Dana & PPTK: dari seluruh anggaran
+  const sumberDanas = [...new Set(ang.filter(a=>a.sumber_dana).map(a=>a.sumber_dana))];
+  const pptks       = [...new Set(ang.filter(a=>a.pptk).map(a=>a.pptk))];
+
+  return {programs, kegiatans, subKegiatans, belanjas, sumberDanas, pptks};
+}
+
+function renderCari() {
+  const {programs, kegiatans, subKegiatans, belanjas, sumberDanas, pptks} = getCariOptions();
   const modeRealisasi = CARI_STATE.mode === 'realisasi';
+
+  const selOpt = (val, arr, kodeKey='kode', namaKey='nama') =>
+    arr.map(o=>`<option value="${o[kodeKey]}" ${val===o[kodeKey]?'selected':''}>${o[kodeKey]} — ${o[namaKey]}</option>`).join('');
 
   return `
 <div class="page-header">
   <h2>🔍 Pencarian Data</h2>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
     <button class="btn ${modeRealisasi?'btn-blue':'btn-outline'}" onclick="cariSetMode('realisasi')">📑 Cari Realisasi</button>
     <button class="btn ${!modeRealisasi?'btn-blue':'btn-outline'}" onclick="cariSetMode('sisa')">💰 Cari Sisa Anggaran</button>
     <button class="btn btn-outline" onclick="cariReset()">↺ Reset Filter</button>
@@ -2728,37 +2751,41 @@ function renderCari() {
 </div>
 
 <div class="section-card" style="padding:14px 16px;margin-bottom:12px">
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;align-items:end">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;align-items:end">
 
     <div>
       <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Program</label>
-      <select class="form-input" style="width:100%" onchange="cariApply('program',this.value)" id="cariProgram">
+      <select class="form-input" style="width:100%" id="cariProgram"
+        onchange="cariApply('program',this.value)">
         <option value="">— Semua Program —</option>
-        ${programs.map(a=>`<option value="${a.kode_program}" ${CARI_STATE.program===a.kode_program?'selected':''}>${a.kode_program} — ${a.program||''}</option>`).join('')}
+        ${selOpt(CARI_STATE.program, programs)}
       </select>
     </div>
 
     <div>
       <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Kegiatan</label>
-      <select class="form-input" style="width:100%" onchange="cariApply('kegiatan',this.value)" id="cariKegiatan">
+      <select class="form-input" style="width:100%" id="cariKegiatan"
+        onchange="cariApply('kegiatan',this.value)">
         <option value="">— Semua Kegiatan —</option>
-        ${kegiatans.map(a=>`<option value="${a.kode_kegiatan}" ${CARI_STATE.kegiatan===a.kode_kegiatan?'selected':''}>${a.kode_kegiatan} — ${a.kegiatan||''}</option>`).join('')}
+        ${selOpt(CARI_STATE.kegiatan, kegiatans)}
       </select>
     </div>
 
     <div>
       <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Sub Kegiatan</label>
-      <select class="form-input" style="width:100%" onchange="cariApply('subKegiatan',this.value)" id="cariSubKegiatan">
+      <select class="form-input" style="width:100%" id="cariSubKegiatan"
+        onchange="cariApply('subKegiatan',this.value)">
         <option value="">— Semua Sub Kegiatan —</option>
-        ${subKegiatans.map(a=>`<option value="${a.kode_sub_kegiatan}" ${CARI_STATE.subKegiatan===a.kode_sub_kegiatan?'selected':''}>${a.kode_sub_kegiatan} — ${a.sub_kegiatan||''}</option>`).join('')}
+        ${selOpt(CARI_STATE.subKegiatan, subKegiatans)}
       </select>
     </div>
 
     <div>
       <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Belanja</label>
-      <select class="form-input" style="width:100%" onchange="cariApply('belanja',this.value)" id="cariBelanja">
+      <select class="form-input" style="width:100%" id="cariBelanja"
+        onchange="cariApply('belanja',this.value)">
         <option value="">— Semua Belanja —</option>
-        ${belanjas.map(a=>`<option value="${a.kode_belanja}" ${CARI_STATE.belanja===a.kode_belanja?'selected':''}>${a.kode_belanja} — ${a.nama_belanja||''}</option>`).join('')}
+        ${selOpt(CARI_STATE.belanja, belanjas)}
       </select>
     </div>
 
@@ -2781,16 +2808,19 @@ function renderCari() {
     ${modeRealisasi ? `
     <div>
       <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Tgl SP2D Dari</label>
-      <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglDari}" onchange="cariApply('tglDari',this.value)">
+      <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglDari}"
+        onchange="cariApply('tglDari',this.value)">
     </div>
     <div>
       <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Tgl SP2D Sampai</label>
-      <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglSampai}" onchange="cariApply('tglSampai',this.value)">
+      <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglSampai}"
+        onchange="cariApply('tglSampai',this.value)">
     </div>` : ''}
 
     <div>
       <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Kata Kunci</label>
-      <input class="search-input" style="width:100%" placeholder="Cari uraian / nama belanja..." value="${CARI_STATE.q}" oninput="cariApply('q',this.value)">
+      <input class="search-input" style="width:100%" placeholder="Cari uraian / nama belanja..."
+        value="${CARI_STATE.q}" oninput="cariApply('q',this.value)">
     </div>
 
   </div>
@@ -2805,11 +2835,36 @@ function cariSetMode(mode) {
   showPage('cari');
 }
 
+// cariApply: update CARI_STATE, rebuild dropdown bertingkat via DOM lalu refresh result
 function cariApply(key, val) {
   CARI_STATE[key] = val;
-  // Jika ubah program, reset kegiatan & sub kegiatan
-  if (key === 'program') { CARI_STATE.kegiatan = ''; CARI_STATE.subKegiatan = ''; }
-  if (key === 'kegiatan') { CARI_STATE.subKegiatan = ''; }
+
+  // Reset filter downstream jika filter upstream berubah
+  if (key === 'program')    { CARI_STATE.kegiatan = ''; CARI_STATE.subKegiatan = ''; CARI_STATE.belanja = ''; }
+  if (key === 'kegiatan')   { CARI_STATE.subKegiatan = ''; CARI_STATE.belanja = ''; }
+  if (key === 'subKegiatan'){ CARI_STATE.belanja = ''; }
+
+  // Rebuild dropdown Kegiatan, Sub Kegiatan, Belanja secara DOM (tanpa full re-render)
+  const {kegiatans, subKegiatans, belanjas} = getCariOptions();
+
+  const elKeg = document.getElementById('cariKegiatan');
+  const elSub = document.getElementById('cariSubKegiatan');
+  const elBel = document.getElementById('cariBelanja');
+
+  if (elKeg) {
+    elKeg.innerHTML = '<option value="">— Semua Kegiatan —</option>' +
+      kegiatans.map(o=>`<option value="${o.kode}" ${CARI_STATE.kegiatan===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('');
+  }
+  if (elSub) {
+    elSub.innerHTML = '<option value="">— Semua Sub Kegiatan —</option>' +
+      subKegiatans.map(o=>`<option value="${o.kode}" ${CARI_STATE.subKegiatan===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('');
+  }
+  if (elBel) {
+    elBel.innerHTML = '<option value="">— Semua Belanja —</option>' +
+      belanjas.map(o=>`<option value="${o.kode}" ${CARI_STATE.belanja===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('');
+  }
+
+  // Refresh hasil
   const el = document.getElementById('cariResult');
   if (el) el.innerHTML = CARI_STATE.mode === 'realisasi' ? buildCariRealisasi() : buildCariSisa();
 }
@@ -2819,40 +2874,66 @@ function cariReset() {
   showPage('cari');
 }
 
-// Filter anggaran berdasarkan CARI_STATE
+// ============================================================
+// Filter ANGGARAN: matching via kode_program/kegiatan/sub_kegiatan/belanja
+// ============================================================
 function getAnggaranFiltered() {
   return STATE.anggaran.filter(a => {
-    if (CARI_STATE.program    && a.kode_program      !== CARI_STATE.program)      return false;
-    if (CARI_STATE.kegiatan   && a.kode_kegiatan     !== CARI_STATE.kegiatan)     return false;
-    if (CARI_STATE.subKegiatan && a.kode_sub_kegiatan !== CARI_STATE.subKegiatan) return false;
-    if (CARI_STATE.belanja    && a.kode_belanja       !== CARI_STATE.belanja)      return false;
-    if (CARI_STATE.sumberDana && a.sumber_dana        !== CARI_STATE.sumberDana)  return false;
-    if (CARI_STATE.pptk       && a.pptk               !== CARI_STATE.pptk)        return false;
+    if (CARI_STATE.program     && a.kode_program      !== CARI_STATE.program)      return false;
+    if (CARI_STATE.kegiatan    && a.kode_kegiatan     !== CARI_STATE.kegiatan)     return false;
+    if (CARI_STATE.subKegiatan && a.kode_sub_kegiatan !== CARI_STATE.subKegiatan)  return false;
+    if (CARI_STATE.belanja     && a.kode_belanja      !== CARI_STATE.belanja)      return false;
+    if (CARI_STATE.sumberDana  && a.sumber_dana       !== CARI_STATE.sumberDana)   return false;
+    if (CARI_STATE.pptk        && a.pptk              !== CARI_STATE.pptk)         return false;
     if (CARI_STATE.q) {
       const q = CARI_STATE.q.toLowerCase();
-      const hay = [a.nama_belanja,a.sub_kegiatan,a.kegiatan,a.program,a.kode_rekening,a.kode_belanja].join(' ').toLowerCase();
+      const hay = [a.nama_belanja,a.sub_kegiatan,a.kegiatan,a.program,a.kode_rekening,a.kode_belanja,a.kode_sub_kegiatan].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   });
 }
 
-// Filter realisasi berdasarkan CARI_STATE — cocokkan via kode_sub_kegiatan & kode_belanja
+// ============================================================
+// Filter REALISASI: matching langsung via kode_sub_kegiatan + kode_belanja
+// (TIDAK lewat kode_rekening karena bisa tidak konsisten)
+// Untuk filter program/kegiatan: resolve lewat MASTER.programKegSubkeg
+// ============================================================
 function getRealisasiFiltered() {
-  // Daftar kode_rekening yang lolos filter anggaran
-  const angFiltered = getAnggaranFiltered();
-  const kodeRekeningSet = new Set(angFiltered.map(a => a.kode_rekening));
+  // Bangun lookup: kode_sub_kegiatan → {kode_program, kode_kegiatan}
+  const subKegLookup = {};
+  MASTER.programKegSubkeg.forEach(m => {
+    subKegLookup[m.kode_sub_kegiatan] = {kode_program: m.kode_program, kode_kegiatan: m.kode_kegiatan};
+  });
+
+  // Juga bangun dari STATE.anggaran (lebih akurat — data yang benar-benar di-input)
+  STATE.anggaran.forEach(a => {
+    if (a.kode_sub_kegiatan && !subKegLookup[a.kode_sub_kegiatan]) {
+      subKegLookup[a.kode_sub_kegiatan] = {kode_program: a.kode_program, kode_kegiatan: a.kode_kegiatan};
+    }
+  });
 
   return STATE.realisasi.filter(r => {
-    // Filter via kode_rekening (link ke anggaran)
-    if ((CARI_STATE.program || CARI_STATE.kegiatan || CARI_STATE.subKegiatan || CARI_STATE.belanja || CARI_STATE.pptk) && !kodeRekeningSet.has(r.kode_rekening)) return false;
-    if (CARI_STATE.sumberDana && r.sumber_dana !== CARI_STATE.sumberDana) return false;
+    // Resolve program & kegiatan dari sub kegiatan transaksi
+    const meta = subKegLookup[r.kode_sub_kegiatan] || {};
+
+    if (CARI_STATE.program     && meta.kode_program   !== CARI_STATE.program)      return false;
+    if (CARI_STATE.kegiatan    && meta.kode_kegiatan  !== CARI_STATE.kegiatan)     return false;
+    if (CARI_STATE.subKegiatan && r.kode_sub_kegiatan !== CARI_STATE.subKegiatan)  return false;
+    if (CARI_STATE.belanja     && r.kode_belanja      !== CARI_STATE.belanja)      return false;
+    if (CARI_STATE.sumberDana  && r.sumber_dana       !== CARI_STATE.sumberDana)   return false;
+    if (CARI_STATE.pptk) {
+      // pptk di realisasi bisa "NAMA, NIP" — match partial
+      const rPptk = (r.pptk||'').toLowerCase();
+      const fPptk = CARI_STATE.pptk.toLowerCase();
+      if (!rPptk.includes(fPptk) && !fPptk.includes(rPptk.split(',')[0].trim())) return false;
+    }
     // Filter tanggal SP2D
-    if (CARI_STATE.tglDari && r.tanggal_sp2d && r.tanggal_sp2d < CARI_STATE.tglDari) return false;
+    if (CARI_STATE.tglDari   && r.tanggal_sp2d && r.tanggal_sp2d < CARI_STATE.tglDari)   return false;
     if (CARI_STATE.tglSampai && r.tanggal_sp2d && r.tanggal_sp2d > CARI_STATE.tglSampai) return false;
     if (CARI_STATE.q) {
       const q = CARI_STATE.q.toLowerCase();
-      const hay = [r.uraian,r.nama_belanja,r.kode_rekening,r.pptk,r.sumber_dana].join(' ').toLowerCase();
+      const hay = [r.uraian,r.nama_belanja,r.kode_rekening,r.pptk,r.sumber_dana,r.kode_sub_kegiatan,r.kode_belanja].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -2865,34 +2946,36 @@ function buildCariRealisasi() {
   const totalPagu = getTotalPagu();
   const pct = totalPagu>0?(total/totalPagu*100).toFixed(1):0;
 
-  // Ringkasan
   const summary = `
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+    <div class="section-card" style="padding:10px 18px;min-width:140px;flex:1">
       <div style="font-size:11px;color:var(--c-text-muted)">Transaksi Ditemukan</div>
-      <div style="font-size:20px;font-weight:700">${data.length}</div>
+      <div style="font-size:22px;font-weight:700">${data.length}</div>
     </div>
-    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+    <div class="section-card" style="padding:10px 18px;min-width:180px;flex:2">
       <div style="font-size:11px;color:var(--c-text-muted)">Total Realisasi</div>
-      <div style="font-size:16px;font-weight:700;font-family:monospace">Rp ${fmt(total)}</div>
+      <div style="font-size:18px;font-weight:700;font-family:monospace">Rp ${fmt(total)}</div>
     </div>
-    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+    <div class="section-card" style="padding:10px 18px;min-width:140px;flex:1">
       <div style="font-size:11px;color:var(--c-text-muted)">% Capaian thd Total Pagu</div>
-      <div style="font-size:16px;font-weight:700"><span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span></div>
+      <div style="font-size:18px;font-weight:700"><span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span></div>
     </div>
   </div>`;
 
-  if (data.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada transaksi yang cocok dengan filter.</p></div></div>`;
+  if (data.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada transaksi yang cocok dengan filter yang dipilih.</p></div></div>`;
 
   const sorted = [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1);
   const rows = sorted.map((r,i) => {
-    const ang = STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening)||{};
+    // Cari info anggaran lewat kode_sub_kegiatan + kode_belanja (lebih reliabel)
+    const ang = STATE.anggaran.find(a=>a.kode_sub_kegiatan===r.kode_sub_kegiatan && a.kode_belanja===r.kode_belanja && a.sumber_dana===r.sumber_dana)
+             || STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening)
+             || {};
     return `<tr>
       <td class="center">${i+1}</td>
       <td style="white-space:nowrap">${r.tanggal ? new Date(r.tanggal+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.uraian||''}">${r.uraian||'-'}</td>
-      <td style="font-size:11px;color:var(--c-text-muted)">${ang.sub_kegiatan||'-'}</td>
-      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nama_belanja||''}">${r.nama_belanja||ang.nama_belanja||'-'}</td>
+      <td style="font-size:11px;color:var(--c-text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ang.sub_kegiatan||''}">${ang.sub_kegiatan||r.kode_sub_kegiatan||'-'}</td>
+      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nama_belanja||ang.nama_belanja||''}">${r.nama_belanja||ang.nama_belanja||'-'}</td>
       <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
       <td class="right mono" style="font-weight:600">${fmt(r.nominal)}</td>
       <td style="white-space:nowrap">${r.tanggal_sp2d ? new Date(r.tanggal_sp2d+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '<span style="color:var(--c-text-muted)">Belum SP2D</span>'}</td>
@@ -2945,7 +3028,7 @@ function buildCariSisa() {
       <td class="center">${i+1}</td>
       <td class="mono" style="font-size:11px">${a.kode_rekening||'-'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.nama_belanja||''}">${a.nama_belanja||'-'}</td>
-      <td style="font-size:11px;color:var(--c-text-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.sub_kegiatan||''}">${a.sub_kegiatan||'-'}</td>
+      <td style="font-size:11px;color:var(--c-text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.sub_kegiatan||''}">${a.sub_kegiatan||'-'}</td>
       <td class="center"><span class="badge ${a.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${a.sumber_dana||'-'}</span></td>
       <td style="font-size:11px">${a.pptk||'-'}</td>
       <td class="right mono">${fmt(pagu)}</td>
@@ -2958,25 +3041,25 @@ function buildCariSisa() {
   const totalSisa = totalPaguFilter - totalRealFilter;
   const summary = `
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-    <div class="section-card" style="padding:10px 18px;min-width:140px;flex:1">
+    <div class="section-card" style="padding:10px 18px;min-width:120px;flex:1">
       <div style="font-size:11px;color:var(--c-text-muted)">Rekening Ditemukan</div>
-      <div style="font-size:20px;font-weight:700">${angData.length}</div>
+      <div style="font-size:22px;font-weight:700">${angData.length}</div>
     </div>
-    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:2">
       <div style="font-size:11px;color:var(--c-text-muted)">Total Pagu (Filter)</div>
-      <div style="font-size:16px;font-weight:700;font-family:monospace">Rp ${fmt(totalPaguFilter)}</div>
+      <div style="font-size:18px;font-weight:700;font-family:monospace">Rp ${fmt(totalPaguFilter)}</div>
     </div>
-    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:2">
       <div style="font-size:11px;color:var(--c-text-muted)">Total Realisasi (Filter)</div>
-      <div style="font-size:16px;font-weight:700;font-family:monospace">Rp ${fmt(totalRealFilter)}</div>
+      <div style="font-size:18px;font-weight:700;font-family:monospace">Rp ${fmt(totalRealFilter)}</div>
     </div>
-    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:2">
       <div style="font-size:11px;color:var(--c-text-muted)">Total Sisa Anggaran</div>
-      <div style="font-size:16px;font-weight:700;font-family:monospace;color:${totalSisa<0?'var(--c-danger)':'var(--c-success)'}">Rp ${fmt(totalSisa)}</div>
+      <div style="font-size:18px;font-weight:700;font-family:monospace;color:${totalSisa<0?'var(--c-danger)':'var(--c-success)'}">Rp ${fmt(totalSisa)}</div>
     </div>
   </div>`;
 
-  if (angData.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada data anggaran yang cocok dengan filter.</p></div></div>`;
+  if (angData.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada data anggaran yang cocok dengan filter yang dipilih.</p></div></div>`;
 
   return summary + `
   <div class="table-wrap">
@@ -3011,28 +3094,29 @@ function buildCariSisa() {
   </div>`;
 }
 
-// --- Cetak hasil pencarian realisasi ---
+// --- Cetak hasil cari realisasi ---
 function cetakHasilCariRealisasi() {
   const data = getRealisasiFiltered();
   if (data.length === 0) { showToast('Tidak ada data untuk dicetak.','error'); return; }
   const total = data.reduce((s,r)=>s+r.nominal,0);
   const filterDesc = [
-    CARI_STATE.program    && 'Program: '+CARI_STATE.program,
-    CARI_STATE.kegiatan   && 'Kegiatan: '+CARI_STATE.kegiatan,
+    CARI_STATE.program     && 'Program: '+CARI_STATE.program,
+    CARI_STATE.kegiatan    && 'Kegiatan: '+CARI_STATE.kegiatan,
     CARI_STATE.subKegiatan && 'Sub Kegiatan: '+CARI_STATE.subKegiatan,
-    CARI_STATE.belanja    && 'Belanja: '+CARI_STATE.belanja,
-    CARI_STATE.sumberDana && 'Sumber Dana: '+CARI_STATE.sumberDana,
-    CARI_STATE.pptk       && 'PPTK: '+CARI_STATE.pptk,
+    CARI_STATE.belanja     && 'Belanja: '+CARI_STATE.belanja,
+    CARI_STATE.sumberDana  && 'Sumber Dana: '+CARI_STATE.sumberDana,
+    CARI_STATE.pptk        && 'PPTK: '+CARI_STATE.pptk,
     (CARI_STATE.tglDari||CARI_STATE.tglSampai) && `SP2D: ${CARI_STATE.tglDari||'awal'} s/d ${CARI_STATE.tglSampai||'akhir'}`,
   ].filter(Boolean).join(' | ') || 'Semua Data';
   const sorted = [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1);
   const rows = sorted.map((r,i)=>{
-    const ang = STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening)||{};
+    const ang = STATE.anggaran.find(a=>a.kode_sub_kegiatan===r.kode_sub_kegiatan && a.kode_belanja===r.kode_belanja && a.sumber_dana===r.sumber_dana)
+             || STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening) || {};
     return `<tr>
       <td class="center">${i+1}</td>
       <td>${r.tanggal||'-'}</td>
-      <td style="max-width:200px">${r.uraian||'-'}</td>
-      <td style="font-size:10px">${ang.sub_kegiatan||'-'}</td>
+      <td style="max-width:180px">${r.uraian||'-'}</td>
+      <td style="font-size:10px">${ang.sub_kegiatan||r.kode_sub_kegiatan||'-'}</td>
       <td style="font-size:10px;max-width:160px">${r.nama_belanja||ang.nama_belanja||'-'}</td>
       <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
       <td class="right mono">${fmt(r.nominal)}</td>
@@ -3054,7 +3138,7 @@ function cetakHasilCariRealisasi() {
   openPrintWindow(html, `Cari Realisasi TA ${STATE.tahun}`);
 }
 
-// --- Cetak hasil pencarian sisa anggaran ---
+// --- Cetak hasil cari sisa anggaran ---
 function cetakHasilCariSisa() {
   const angData = getAnggaranFiltered();
   if (angData.length === 0) { showToast('Tidak ada data untuk dicetak.','error'); return; }
