@@ -299,20 +299,8 @@ td.center{text-align:center}
 
 /* ===== PRINT ===== */
 @media print {
-  body * { visibility: hidden; }
-  #pageContent, #pageContent * { visibility: visible; }
-  #pageContent {
-    position: fixed;
-    inset: 0;
-    padding: 20px;
-    overflow: visible;
-    background: #fff;
-    color: #000;
-  }
-  .btn, .page-header button, .table-toolbar button,
-  .action-btns, .search-input { display: none !important; }
-  .table-scroll { max-height: none !important; overflow: visible !important; }
-  .table-wrap { box-shadow: none; border: 1px solid #ccc; }
+  /* Sembunyikan semua saat print dari main window — cetak via popup */
+  body * { display: none !important; }
 }
 </style>
 </head>
@@ -441,6 +429,9 @@ td.center{text-align:center}
       </div>
       <div class="nav-item" onclick="showPage('realisasi')" id="nav-realisasi">
         <span class="icon">📑</span> Input Realisasi
+      </div>
+      <div class="nav-item" onclick="showPage('cari')" id="nav-cari">
+        <span class="icon">🔍</span> Pencarian
       </div>
       <div class="nav-section">Laporan</div>
       <div class="nav-item" onclick="showPage('rekap')" id="nav-rekap">
@@ -1279,6 +1270,7 @@ const PAGE_META = {
   rekap: {title:'Rekap Realisasi',sub:'Rekapitulasi seluruh realisasi anggaran'},
   lra: {title:'Laporan LRA',sub:'Laporan Realisasi Anggaran resmi SKPD'},
   pengguna: {title:'Manajemen Pengguna',sub:'Kelola akun dan hak akses pengguna'},
+  cari: {title:'Pencarian Data',sub:'Cari realisasi dan sisa anggaran berdasarkan kegiatan, sub kegiatan, atau belanja'},
 };
 
 function showPage(page) {
@@ -1298,6 +1290,7 @@ function showPage(page) {
     rekap: renderRekap,
     lra: renderLRA,
     pengguna: renderPengguna,
+    cari: renderCari,
   };
   if (renders[page]) content.innerHTML = renders[page]();
   else content.innerHTML = '<p>Halaman tidak ditemukan.</p>';
@@ -1750,7 +1743,426 @@ async function saveAnggaran() {
   showPage('anggaran');
 }
 
-function cetakAnggaran() { window.print(); }
+// ========================================
+// FUNGSI CETAK PDF (buka window baru, cetak semua halaman)
+// ========================================
+function getPrintCSS() {
+  return `
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+    h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    h2 { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+    h3 { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    th, td { border: 1px solid #ccc; padding: 5px 7px; font-size: 11px; }
+    th { background: #f0f4f8; font-weight: 700; text-align: left; }
+    td.right, th.right { text-align: right; }
+    td.center, th.center { text-align: center; }
+    td.mono { font-family: 'DM Mono', monospace; font-size: 10px; }
+    .section { margin-bottom: 20px; }
+    .print-header { text-align: center; margin-bottom: 16px; border-bottom: 2px solid #1a56db; padding-bottom: 10px; }
+    .print-header .app-name { font-size: 18px; font-weight: 700; color: #1a56db; }
+    .print-header .app-sub { font-size: 11px; color: #666; margin-top: 2px; }
+    .print-header .doc-title { font-size: 15px; font-weight: 700; margin-top: 8px; }
+    .print-header .doc-info { font-size: 11px; color: #444; margin-top: 3px; }
+    .stat-row { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+    .stat-box { border: 1px solid #ccc; border-radius: 4px; padding: 8px 14px; min-width: 140px; }
+    .stat-box .lbl { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .5px; }
+    .stat-box .val { font-size: 15px; font-weight: 700; font-family: 'DM Mono', monospace; margin-top: 2px; }
+    .badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .badge-blue { background: #ebf2ff; color: #1a56db; border: 1px solid #bcd0f5; }
+    .badge-orange { background: #fffbeb; color: #d97706; border: 1px solid #fcd34d; }
+    .badge-green { background: #e6faf8; color: #0d9488; border: 1px solid #99e6df; }
+    .badge-red { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+    .total-row td { font-weight: 700; background: #ebf2ff !important; }
+    .page-break { page-break-before: always; }
+    .sign-area { margin-top: 32px; display: flex; justify-content: flex-end; }
+    .sign-box { text-align: center; min-width: 200px; }
+    .sign-box .sign-title { font-size: 11px; color: #666; }
+    .sign-box .sign-name { margin-top: 50px; font-weight: 700; border-top: 1px solid #000; padding-top: 4px; }
+    .sign-box .sign-nip { font-size: 10px; color: #666; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; font-size: 11px; }
+    .info-grid .lbl { color: #666; }
+    .info-grid .val { font-weight: 600; }
+    .section-title { font-size: 12px; font-weight: 700; background: #f0f4f8; padding: 5px 8px; border: 1px solid #ccc; border-bottom: none; }
+    @media print {
+      @page { margin: 15mm 12mm; size: A4 landscape; }
+      body { font-size: 11px; }
+      th, td { padding: 4px 5px; font-size: 10px; }
+      .no-print { display: none !important; }
+    }
+  `;
+}
+
+function buildPrintHeader(docTitle, docInfo) {
+  return `
+    <div class="print-header">
+      <div class="app-name">💼 SIANGGARAN</div>
+      <div class="app-sub">Sistem Informasi Anggaran SKPD — Bagian Perekonomian dan Sumber Daya Alam</div>
+      <div class="doc-title">${docTitle}</div>
+      <div class="doc-info">${docInfo}</div>
+    </div>`;
+}
+
+function openPrintWindow(htmlContent, title) {
+  const w = window.open('', '_blank', 'width=1100,height=800,scrollbars=yes');
+  if (!w) { showToast('Popup diblokir browser. Izinkan popup untuk situs ini.', 'error'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="id"><head>
+    <meta charset="UTF-8">
+    <title>${title}</title>
+    <style>${getPrintCSS()}</style>
+  </head><body>
+    <div style="padding:10px 16px" id="printWrap">
+      ${htmlContent}
+    </div>
+    <div class="no-print" style="position:fixed;bottom:16px;right:16px;display:flex;gap:8px;z-index:999">
+      <button onclick="window.print()" style="padding:10px 22px;background:#1a56db;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer">🖨️ Cetak / Simpan PDF</button>
+      <button onclick="window.close()" style="padding:10px 16px;background:#e2e8f0;color:#1a202c;border:none;border-radius:7px;font-size:13px;cursor:pointer">✕ Tutup</button>
+    </div>
+  </body></html>`);
+  w.document.close();
+}
+
+// --- Cetak Anggaran ---
+function cetakAnggaran() {
+  const tahapan = STATE.tahapan;
+  const totalPagu = getTotalPagu();
+  const totalReal = getTotalRealisasi();
+  const sisa = totalPagu - totalReal;
+  const pct = totalPagu > 0 ? (totalReal / totalPagu * 100).toFixed(1) : 0;
+
+  // Kelompokkan per sub kegiatan
+  const grouped = {};
+  STATE.anggaran.forEach(a => {
+    const k = a.kode_sub_kegiatan || '-';
+    if (!grouped[k]) grouped[k] = { nama: a.sub_kegiatan || k, rows: [] };
+    grouped[k].rows.push(a);
+  });
+
+  let rows = '';
+  let no = 1;
+  Object.values(grouped).forEach(g => {
+    rows += `<tr><td colspan="8" style="background:#e8f0fe;font-weight:700;font-size:11px">${g.nama}</td></tr>`;
+    g.rows.forEach(a => {
+      const pagu = getPagu(a);
+      const real = getRealisasiByRekening(a.kode_rekening);
+      const sisaRek = pagu - real;
+      const pct = pagu > 0 ? (real / pagu * 100).toFixed(1) : 0;
+      rows += `<tr>
+        <td class="center">${no++}</td>
+        <td class="mono" style="white-space:nowrap">${a.kode_rekening || '-'}</td>
+        <td style="max-width:250px">${a.nama_belanja || '-'}</td>
+        <td class="center"><span class="badge ${a.sumber_dana === 'DBH CHT' ? 'badge-orange' : 'badge-blue'}">${a.sumber_dana || '-'}</span></td>
+        <td class="center" style="font-size:10px">${a.pptk || '-'}</td>
+        <td class="right mono">${fmt(pagu)}</td>
+        <td class="right mono">${fmt(real)}</td>
+        <td class="right mono" style="${sisaRek < 0 ? 'color:#dc2626;font-weight:700' : ''}">${fmt(sisaRek)}</td>
+      </tr>`;
+    });
+  });
+
+  const html = buildPrintHeader(
+    `DAFTAR PAGU ANGGARAN — TA ${STATE.tahun} (${tahapan})`,
+    `Dicetak: ${new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}`
+  ) + `
+  <div class="stat-row">
+    <div class="stat-box"><div class="lbl">Total Pagu (${tahapan})</div><div class="val">Rp ${fmt(totalPagu)}</div></div>
+    <div class="stat-box"><div class="lbl">Total Realisasi</div><div class="val">Rp ${fmt(totalReal)}</div></div>
+    <div class="stat-box"><div class="lbl">Sisa Anggaran</div><div class="val">Rp ${fmt(sisa)}</div></div>
+    <div class="stat-box"><div class="lbl">Capaian Serapan</div><div class="val">${pct}%</div></div>
+    <div class="stat-box"><div class="lbl">Jumlah Rekening</div><div class="val">${STATE.anggaran.length}</div></div>
+  </div>
+  <div class="section-title">RINCIAN ANGGARAN</div>
+  <table>
+    <thead><tr>
+      <th class="center" style="width:30px">No</th>
+      <th>Kode Rekening</th>
+      <th>Uraian Belanja</th>
+      <th class="center">Sumber Dana</th>
+      <th class="center">PPTK</th>
+      <th class="right">Pagu (${tahapan})</th>
+      <th class="right">Realisasi</th>
+      <th class="right">Sisa</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row">
+      <td colspan="5"><b>TOTAL</b></td>
+      <td class="right mono"><b>${fmt(totalPagu)}</b></td>
+      <td class="right mono"><b>${fmt(totalReal)}</b></td>
+      <td class="right mono"><b>${fmt(sisa)}</b></td>
+    </tr></tfoot>
+  </table>`;
+
+  openPrintWindow(html, `Anggaran TA ${STATE.tahun}`);
+}
+
+// --- Cetak Realisasi ---
+function cetakRealisasi() {
+  const sorted = [...STATE.realisasi].sort((a, b) => (a.tanggal || '') < (b.tanggal || '') ? -1 : 1);
+  let rows = '';
+  let total = 0;
+  sorted.forEach((r, i) => {
+    total += r.nominal;
+    rows += `<tr>
+      <td class="center">${i + 1}</td>
+      <td class="center">${r.tanggal ? new Date(r.tanggal+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-'}</td>
+      <td style="max-width:200px">${r.uraian || '-'}</td>
+      <td style="font-size:10px">${r.nama_belanja || '-'}</td>
+      <td><span class="badge ${r.sumber_dana === 'DBH CHT' ? 'badge-orange' : 'badge-blue'}">${r.sumber_dana || '-'}</span></td>
+      <td class="right mono">${fmt(r.nominal)}</td>
+      <td class="center">${r.tanggal_sp2d ? new Date(r.tanggal_sp2d+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '<span style="color:#999">Belum SP2D</span>'}</td>
+      <td style="font-size:10px">${r.pptk || '-'}</td>
+    </tr>`;
+  });
+
+  const html = buildPrintHeader(
+    `DAFTAR TRANSAKSI REALISASI — TA ${STATE.tahun} (${STATE.tahapan})`,
+    `Total ${sorted.length} transaksi | Dicetak: ${new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'})}`
+  ) + `
+  <div class="stat-row">
+    <div class="stat-box"><div class="lbl">Total Transaksi</div><div class="val">${sorted.length}</div></div>
+    <div class="stat-box"><div class="lbl">Total Nominal</div><div class="val">Rp ${fmt(total)}</div></div>
+    <div class="stat-box"><div class="lbl">Pagu Anggaran</div><div class="val">Rp ${fmt(getTotalPagu())}</div></div>
+    <div class="stat-box"><div class="lbl">Capaian</div><div class="val">${getTotalPagu() > 0 ? (total / getTotalPagu() * 100).toFixed(1) : 0}%</div></div>
+  </div>
+  <div class="section-title">RINCIAN TRANSAKSI</div>
+  <table>
+    <thead><tr>
+      <th class="center">No</th>
+      <th class="center">Tgl Transaksi</th>
+      <th>Uraian</th>
+      <th>Belanja</th>
+      <th class="center">Sumber Dana</th>
+      <th class="right">Nominal</th>
+      <th class="center">Tgl SP2D</th>
+      <th>PPTK</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row">
+      <td colspan="5"><b>TOTAL</b></td>
+      <td class="right mono"><b>Rp ${fmt(total)}</b></td>
+      <td colspan="2"></td>
+    </tr></tfoot>
+  </table>`;
+
+  openPrintWindow(html, `Realisasi TA ${STATE.tahun}`);
+}
+
+// --- Cetak Rekap ---
+function cetakRekap() {
+  const totalPagu = getTotalPagu();
+  const totalReal = getTotalRealisasi();
+  const pct = totalPagu > 0 ? (totalReal / totalPagu * 100).toFixed(1) : 0;
+
+  // Per sub kegiatan
+  const bySubkeg = {};
+  STATE.anggaran.forEach(a => {
+    const k = a.kode_sub_kegiatan || '-';
+    if (!bySubkeg[k]) bySubkeg[k] = { nama: a.sub_kegiatan || k, pagu: 0, real: 0 };
+    bySubkeg[k].pagu += getPagu(a);
+    bySubkeg[k].real += getRealisasiByRekening(a.kode_rekening);
+  });
+
+  // Per PPTK
+  const byPptk = {};
+  STATE.anggaran.forEach(a => {
+    const k = a.pptk || 'Tidak diketahui';
+    if (!byPptk[k]) byPptk[k] = { pagu: 0, real: 0 };
+    byPptk[k].pagu += getPagu(a);
+    byPptk[k].real += getRealisasiByRekening(a.kode_rekening);
+  });
+
+  // Per sumber dana
+  const bySD = {};
+  STATE.anggaran.forEach(a => {
+    const k = a.sumber_dana || '-';
+    if (!bySD[k]) bySD[k] = { pagu: 0, real: 0 };
+    bySD[k].pagu += getPagu(a);
+    bySD[k].real += getRealisasiByRekening(a.kode_rekening);
+  });
+
+  const rowsSubkeg = Object.entries(bySubkeg).map(([k, v]) => {
+    const p = totalPagu > 0 ? (v.real / totalPagu * 100).toFixed(1) : 0;
+    return `<tr><td style="max-width:280px;font-size:11px">${v.nama}</td>
+      <td class="right mono">${fmt(v.pagu)}</td>
+      <td class="right mono">${fmt(v.real)}</td>
+      <td class="right mono">${fmt(v.pagu - v.real)}</td>
+      <td class="center"><span class="badge ${p>=85?'badge-green':p>=60?'badge-blue':p>=30?'badge-orange':'badge-red'}">${p}%</span></td>
+    </tr>`;
+  }).join('');
+
+  const rowsPptk = Object.entries(byPptk).map(([k, v]) => {
+    const p = totalPagu > 0 ? (v.real / totalPagu * 100).toFixed(1) : 0;
+    return `<tr><td>${k}</td>
+      <td class="right mono">${fmt(v.pagu)}</td>
+      <td class="right mono">${fmt(v.real)}</td>
+      <td class="right mono">${fmt(v.pagu - v.real)}</td>
+      <td class="center"><span class="badge ${p>=85?'badge-green':p>=60?'badge-blue':p>=30?'badge-orange':'badge-red'}">${p}%</span></td>
+    </tr>`;
+  }).join('');
+
+  const rowsSD = Object.entries(bySD).map(([k, v]) => {
+    const p = totalPagu > 0 ? (v.real / totalPagu * 100).toFixed(1) : 0;
+    return `<tr><td><span class="badge ${k==='DBH CHT'?'badge-orange':'badge-blue'}">${k}</span></td>
+      <td class="right mono">${fmt(v.pagu)}</td>
+      <td class="right mono">${fmt(v.real)}</td>
+      <td class="right mono">${fmt(v.pagu - v.real)}</td>
+      <td class="center"><span class="badge ${p>=85?'badge-green':p>=60?'badge-blue':p>=30?'badge-orange':'badge-red'}">${p}%</span></td>
+    </tr>`;
+  }).join('');
+
+  const html = buildPrintHeader(
+    `REKAP REALISASI ANGGARAN — TA ${STATE.tahun} (${STATE.tahapan})`,
+    `Dicetak: ${new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'})}`
+  ) + `
+  <div class="stat-row">
+    <div class="stat-box"><div class="lbl">Pagu Anggaran</div><div class="val">Rp ${fmt(totalPagu)}</div></div>
+    <div class="stat-box"><div class="lbl">Total Realisasi</div><div class="val">Rp ${fmt(totalReal)}</div></div>
+    <div class="stat-box"><div class="lbl">Sisa Anggaran</div><div class="val">Rp ${fmt(totalPagu - totalReal)}</div></div>
+    <div class="stat-box"><div class="lbl">Capaian</div><div class="val">${pct}%</div></div>
+  </div>
+
+  <div class="section-title">REKAP PER SUB KEGIATAN</div>
+  <table>
+    <thead><tr><th>Sub Kegiatan</th><th class="right">Pagu</th><th class="right">Realisasi</th><th class="right">Sisa</th><th class="center">% Capaian</th></tr></thead>
+    <tbody>${rowsSubkeg}</tbody>
+    <tfoot><tr class="total-row"><td><b>TOTAL</b></td><td class="right mono"><b>${fmt(totalPagu)}</b></td><td class="right mono"><b>${fmt(totalReal)}</b></td><td class="right mono"><b>${fmt(totalPagu-totalReal)}</b></td><td class="center"><b>${pct}%</b></td></tr></tfoot>
+  </table>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px">
+    <div>
+      <div class="section-title">REKAP PER PPTK</div>
+      <table>
+        <thead><tr><th>PPTK</th><th class="right">Pagu</th><th class="right">Realisasi</th><th class="right">Sisa</th><th class="center">%</th></tr></thead>
+        <tbody>${rowsPptk}</tbody>
+      </table>
+    </div>
+    <div>
+      <div class="section-title">REKAP PER SUMBER DANA</div>
+      <table>
+        <thead><tr><th>Sumber Dana</th><th class="right">Pagu</th><th class="right">Realisasi</th><th class="right">Sisa</th><th class="center">%</th></tr></thead>
+        <tbody>${rowsSD}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sign-area">
+    <div class="sign-box">
+      <div class="sign-title">KPA,</div>
+      <div class="sign-name">${MASTER.kpa}</div>
+      <div class="sign-nip">NIP. 196901181990032001</div>
+    </div>
+  </div>`;
+
+  openPrintWindow(html, `Rekap Realisasi TA ${STATE.tahun}`);
+}
+
+// --- Cetak LRA ---
+function cetakLRA() {
+  const tanggalEl = document.getElementById('lraTanggal');
+  const upToDate = tanggalEl ? tanggalEl.value : new Date().toISOString().split('T')[0];
+  const dt = new Date(upToDate);
+  const prevMonthEnd = new Date(dt.getFullYear(), dt.getMonth(), 0).toISOString().split('T')[0];
+
+  const belanjaCount = {};
+  STATE.anggaran.forEach(a => {
+    const key = a.kode_sub_kegiatan + '|' + a.kode_belanja;
+    belanjaCount[key] = (belanjaCount[key] || 0) + 1;
+  });
+
+  let totalPagu=0, totalMurni=0, totalPergeseran=0, totalPerubahan=0;
+  let totalBulanLalu=0, totalBulanIni=0, totalJumlah=0, totalSisa=0;
+
+  // Kelompokkan per sub kegiatan
+  const grouped = {};
+  STATE.anggaran.forEach(a => {
+    const k = a.kode_sub_kegiatan || '-';
+    if (!grouped[k]) grouped[k] = { nama: a.sub_kegiatan || k, rows: [] };
+    grouped[k].rows.push(a);
+  });
+
+  let rows = '';
+  Object.values(grouped).forEach(g => {
+    rows += `<tr><td colspan="10" style="background:#e8f0fe;font-weight:700;font-size:10px;padding:4px 6px">${g.nama}</td></tr>`;
+    g.rows.forEach(row => {
+      const pagu = getPagu(row);
+      const bulanLalu = getRealisasiByRekening(row.kode_rekening, prevMonthEnd);
+      const bulanIni = getRealisasiByRekening(row.kode_rekening, upToDate) - bulanLalu;
+      const jumlah = bulanLalu + bulanIni;
+      const sisa = pagu - jumlah;
+      totalPagu+=pagu; totalMurni+=(row.pagu_murni||0);
+      totalPergeseran+=(row.pagu_pergeseran||0); totalPerubahan+=(row.pagu_perubahan||0);
+      totalBulanLalu+=bulanLalu; totalBulanIni+=bulanIni; totalJumlah+=jumlah; totalSisa+=sisa;
+      const key = row.kode_sub_kegiatan + '|' + row.kode_belanja;
+      const showSD = belanjaCount[key] > 1;
+      rows += `<tr>
+        <td class="mono" style="white-space:nowrap;font-size:10px">${row.kode_rekening || '-'}</td>
+        <td style="font-size:10px">${row.nama_belanja || '-'}${showSD ? ` <span class="badge ${row.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${row.sumber_dana}</span>` : ''}</td>
+        <td class="right mono">${fmt(pagu)}</td>
+        <td class="right mono">${fmt(row.pagu_murni||0)}</td>
+        <td class="right mono">${fmt(row.pagu_pergeseran||0)}</td>
+        <td class="right mono">${fmt(row.pagu_perubahan||0)}</td>
+        <td class="right mono">${fmt(bulanLalu)}</td>
+        <td class="right mono">${fmt(bulanIni)}</td>
+        <td class="right mono" style="font-weight:600">${fmt(jumlah)}</td>
+        <td class="right mono" style="${sisa<0?'color:#dc2626;font-weight:700':''}">${fmt(sisa)}</td>
+      </tr>`;
+    });
+  });
+
+  const tanggalStr = new Date(upToDate+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+  const html = buildPrintHeader(
+    'LAPORAN REALISASI ANGGARAN (LRA)',
+    `SKPD: Bagian Perekonomian dan Sumber Daya Alam — TA ${STATE.tahun} | Tahapan: ${STATE.tahapan} | Sampai Dengan: ${tanggalStr}`
+  ) + `
+  <div class="stat-row">
+    <div class="stat-box"><div class="lbl">Pagu (${STATE.tahapan})</div><div class="val">Rp ${fmt(totalPagu)}</div></div>
+    <div class="stat-box"><div class="lbl">Total Realisasi</div><div class="val">Rp ${fmt(totalJumlah)}</div></div>
+    <div class="stat-box"><div class="lbl">Sisa Anggaran</div><div class="val">Rp ${fmt(totalSisa)}</div></div>
+    <div class="stat-box"><div class="lbl">Capaian</div><div class="val">${totalPagu>0?(totalJumlah/totalPagu*100).toFixed(1):0}%</div></div>
+  </div>
+  <div class="section-title">RINCIAN LAPORAN REALISASI ANGGARAN</div>
+  <table>
+    <thead>
+      <tr>
+        <th rowspan="2">Kode Rekening</th>
+        <th rowspan="2">Uraian Belanja</th>
+        <th rowspan="2" class="right">Pagu (${STATE.tahapan})</th>
+        <th colspan="3" class="center">Pagu Rincian</th>
+        <th colspan="3" class="center">Realisasi</th>
+        <th rowspan="2" class="right">Sisa</th>
+      </tr>
+      <tr>
+        <th class="right">Murni</th><th class="right">Pergeseran</th><th class="right">Perubahan</th>
+        <th class="right">Bln Lalu</th><th class="right">Bln Ini</th><th class="right">Jumlah</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="2"><b>TOTAL BELANJA</b></td>
+        <td class="right mono"><b>${fmt(totalPagu)}</b></td>
+        <td class="right mono">${fmt(totalMurni)}</td>
+        <td class="right mono">${fmt(totalPergeseran)}</td>
+        <td class="right mono">${fmt(totalPerubahan)}</td>
+        <td class="right mono"><b>${fmt(totalBulanLalu)}</b></td>
+        <td class="right mono"><b>${fmt(totalBulanIni)}</b></td>
+        <td class="right mono"><b>${fmt(totalJumlah)}</b></td>
+        <td class="right mono" style="${totalSisa<0?'color:#dc2626':''}"><b>${fmt(totalSisa)}</b></td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="sign-area">
+    <div class="sign-box">
+      <div class="sign-title">KPA,</div>
+      <div class="sign-name">${MASTER.kpa}</div>
+      <div class="sign-nip">NIP. 196901181990032001</div>
+    </div>
+  </div>`;
+
+  openPrintWindow(html, `LRA TA ${STATE.tahun}`);
+}
 
 
 // ========================================
@@ -1856,7 +2268,10 @@ function renderRealisasi() {
   return `
 <div class="page-header">
   <h2>📑 Input Realisasi</h2>
-  <button class="btn btn-blue" onclick="openModalRealisasi()">➕ Tambah Transaksi</button>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-blue" onclick="openModalRealisasi()">➕ Tambah Transaksi</button>
+    <button class="btn btn-outline" onclick="cetakRealisasi()">🖨️ Cetak PDF</button>
+  </div>
 </div>
 <div class="table-wrap">
   <div class="table-toolbar">
@@ -2071,7 +2486,7 @@ function renderRekap() {
   }).reduce((s,r)=>s+r.nominal,0));
 
   return `
-<div class="page-header"><h2>📈 Rekap Realisasi</h2><button class="btn btn-outline" onclick="window.print()">🖨️ Cetak</button></div>
+<div class="page-header"><h2>📈 Rekap Realisasi</h2><button class="btn btn-outline" onclick="cetakRekap()">🖨️ Cetak PDF</button></div>
 
 <div class="section-card">
   <h4>Ringkasan Keseluruhan</h4>
@@ -2171,7 +2586,7 @@ function renderLRA() {
     <label style="font-size:13px;font-weight:600">Sampai Tanggal:</label>
     <input type="date" id="lraTanggal" class="form-input" style="width:160px" value="${now}" onchange="refreshLRA()">
     <button class="btn btn-blue" onclick="refreshLRA()">🔄 Tampilkan</button>
-    <button class="btn btn-outline" onclick="window.print()">🖨️ Cetak PDF</button>
+    <button class="btn btn-outline" onclick="cetakLRA()">🖨️ Cetak PDF</button>
   </div>
 </div>
 <div id="lraContent">${buildLRATable(now)}</div>`;
@@ -2273,6 +2688,419 @@ function buildLRATable(upToDate) {
 // ========================================
 // PENGGUNA
 // ========================================
+// ========================================
+// PENCARIAN DATA
+// ========================================
+// State filter pencarian (in-memory, tidak ubah STATE.anggaran/realisasi)
+const CARI_STATE = {
+  mode: 'realisasi',       // 'realisasi' | 'sisa'
+  program: '',
+  kegiatan: '',
+  subKegiatan: '',
+  belanja: '',
+  sumberDana: '',
+  pptk: '',
+  tglDari: '',
+  tglSampai: '',
+  q: '',
+};
+
+function renderCari() {
+  // Kumpulkan nilai unik dari STATE.anggaran untuk dropdown
+  const programs  = [...new Map(STATE.anggaran.filter(a=>a.kode_program).map(a=>[a.kode_program, a])).values()];
+  const kegiatans = [...new Map(STATE.anggaran.filter(a=>a.kode_kegiatan).map(a=>[a.kode_kegiatan, a])).values()];
+  const subKegiatans = [...new Map(STATE.anggaran.filter(a=>a.kode_sub_kegiatan).map(a=>[a.kode_sub_kegiatan, a])).values()];
+  const belanjas  = [...new Map(STATE.anggaran.filter(a=>a.kode_belanja).map(a=>[a.kode_belanja, a])).values()];
+  const sumberDanas = [...new Set(STATE.anggaran.filter(a=>a.sumber_dana).map(a=>a.sumber_dana))];
+  const pptks     = [...new Set(STATE.anggaran.filter(a=>a.pptk).map(a=>a.pptk))];
+
+  const modeRealisasi = CARI_STATE.mode === 'realisasi';
+
+  return `
+<div class="page-header">
+  <h2>🔍 Pencarian Data</h2>
+  <div style="display:flex;gap:8px">
+    <button class="btn ${modeRealisasi?'btn-blue':'btn-outline'}" onclick="cariSetMode('realisasi')">📑 Cari Realisasi</button>
+    <button class="btn ${!modeRealisasi?'btn-blue':'btn-outline'}" onclick="cariSetMode('sisa')">💰 Cari Sisa Anggaran</button>
+    <button class="btn btn-outline" onclick="cariReset()">↺ Reset Filter</button>
+    <button class="btn btn-outline" onclick="${modeRealisasi?'cetakHasilCariRealisasi()':'cetakHasilCariSisa()'}">🖨️ Cetak PDF</button>
+  </div>
+</div>
+
+<div class="section-card" style="padding:14px 16px;margin-bottom:12px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;align-items:end">
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Program</label>
+      <select class="form-input" style="width:100%" onchange="cariApply('program',this.value)" id="cariProgram">
+        <option value="">— Semua Program —</option>
+        ${programs.map(a=>`<option value="${a.kode_program}" ${CARI_STATE.program===a.kode_program?'selected':''}>${a.kode_program} — ${a.program||''}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Kegiatan</label>
+      <select class="form-input" style="width:100%" onchange="cariApply('kegiatan',this.value)" id="cariKegiatan">
+        <option value="">— Semua Kegiatan —</option>
+        ${kegiatans.map(a=>`<option value="${a.kode_kegiatan}" ${CARI_STATE.kegiatan===a.kode_kegiatan?'selected':''}>${a.kode_kegiatan} — ${a.kegiatan||''}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Sub Kegiatan</label>
+      <select class="form-input" style="width:100%" onchange="cariApply('subKegiatan',this.value)" id="cariSubKegiatan">
+        <option value="">— Semua Sub Kegiatan —</option>
+        ${subKegiatans.map(a=>`<option value="${a.kode_sub_kegiatan}" ${CARI_STATE.subKegiatan===a.kode_sub_kegiatan?'selected':''}>${a.kode_sub_kegiatan} — ${a.sub_kegiatan||''}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Belanja</label>
+      <select class="form-input" style="width:100%" onchange="cariApply('belanja',this.value)" id="cariBelanja">
+        <option value="">— Semua Belanja —</option>
+        ${belanjas.map(a=>`<option value="${a.kode_belanja}" ${CARI_STATE.belanja===a.kode_belanja?'selected':''}>${a.kode_belanja} — ${a.nama_belanja||''}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Sumber Dana</label>
+      <select class="form-input" style="width:100%" onchange="cariApply('sumberDana',this.value)">
+        <option value="">— Semua Sumber Dana —</option>
+        ${sumberDanas.map(s=>`<option value="${s}" ${CARI_STATE.sumberDana===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">PPTK</label>
+      <select class="form-input" style="width:100%" onchange="cariApply('pptk',this.value)">
+        <option value="">— Semua PPTK —</option>
+        ${pptks.map(p=>`<option value="${p}" ${CARI_STATE.pptk===p?'selected':''}>${p}</option>`).join('')}
+      </select>
+    </div>
+
+    ${modeRealisasi ? `
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Tgl SP2D Dari</label>
+      <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglDari}" onchange="cariApply('tglDari',this.value)">
+    </div>
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Tgl SP2D Sampai</label>
+      <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglSampai}" onchange="cariApply('tglSampai',this.value)">
+    </div>` : ''}
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Kata Kunci</label>
+      <input class="search-input" style="width:100%" placeholder="Cari uraian / nama belanja..." value="${CARI_STATE.q}" oninput="cariApply('q',this.value)">
+    </div>
+
+  </div>
+</div>
+
+<div id="cariResult">${modeRealisasi ? buildCariRealisasi() : buildCariSisa()}</div>
+`;
+}
+
+function cariSetMode(mode) {
+  CARI_STATE.mode = mode;
+  showPage('cari');
+}
+
+function cariApply(key, val) {
+  CARI_STATE[key] = val;
+  // Jika ubah program, reset kegiatan & sub kegiatan
+  if (key === 'program') { CARI_STATE.kegiatan = ''; CARI_STATE.subKegiatan = ''; }
+  if (key === 'kegiatan') { CARI_STATE.subKegiatan = ''; }
+  const el = document.getElementById('cariResult');
+  if (el) el.innerHTML = CARI_STATE.mode === 'realisasi' ? buildCariRealisasi() : buildCariSisa();
+}
+
+function cariReset() {
+  Object.assign(CARI_STATE, {program:'',kegiatan:'',subKegiatan:'',belanja:'',sumberDana:'',pptk:'',tglDari:'',tglSampai:'',q:''});
+  showPage('cari');
+}
+
+// Filter anggaran berdasarkan CARI_STATE
+function getAnggaranFiltered() {
+  return STATE.anggaran.filter(a => {
+    if (CARI_STATE.program    && a.kode_program      !== CARI_STATE.program)      return false;
+    if (CARI_STATE.kegiatan   && a.kode_kegiatan     !== CARI_STATE.kegiatan)     return false;
+    if (CARI_STATE.subKegiatan && a.kode_sub_kegiatan !== CARI_STATE.subKegiatan) return false;
+    if (CARI_STATE.belanja    && a.kode_belanja       !== CARI_STATE.belanja)      return false;
+    if (CARI_STATE.sumberDana && a.sumber_dana        !== CARI_STATE.sumberDana)  return false;
+    if (CARI_STATE.pptk       && a.pptk               !== CARI_STATE.pptk)        return false;
+    if (CARI_STATE.q) {
+      const q = CARI_STATE.q.toLowerCase();
+      const hay = [a.nama_belanja,a.sub_kegiatan,a.kegiatan,a.program,a.kode_rekening,a.kode_belanja].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+// Filter realisasi berdasarkan CARI_STATE — cocokkan via kode_sub_kegiatan & kode_belanja
+function getRealisasiFiltered() {
+  // Daftar kode_rekening yang lolos filter anggaran
+  const angFiltered = getAnggaranFiltered();
+  const kodeRekeningSet = new Set(angFiltered.map(a => a.kode_rekening));
+
+  return STATE.realisasi.filter(r => {
+    // Filter via kode_rekening (link ke anggaran)
+    if ((CARI_STATE.program || CARI_STATE.kegiatan || CARI_STATE.subKegiatan || CARI_STATE.belanja || CARI_STATE.pptk) && !kodeRekeningSet.has(r.kode_rekening)) return false;
+    if (CARI_STATE.sumberDana && r.sumber_dana !== CARI_STATE.sumberDana) return false;
+    // Filter tanggal SP2D
+    if (CARI_STATE.tglDari && r.tanggal_sp2d && r.tanggal_sp2d < CARI_STATE.tglDari) return false;
+    if (CARI_STATE.tglSampai && r.tanggal_sp2d && r.tanggal_sp2d > CARI_STATE.tglSampai) return false;
+    if (CARI_STATE.q) {
+      const q = CARI_STATE.q.toLowerCase();
+      const hay = [r.uraian,r.nama_belanja,r.kode_rekening,r.pptk,r.sumber_dana].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function buildCariRealisasi() {
+  const data = getRealisasiFiltered();
+  const total = data.reduce((s,r)=>s+r.nominal,0);
+  const totalPagu = getTotalPagu();
+  const pct = totalPagu>0?(total/totalPagu*100).toFixed(1):0;
+
+  // Ringkasan
+  const summary = `
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">Transaksi Ditemukan</div>
+      <div style="font-size:20px;font-weight:700">${data.length}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">Total Realisasi</div>
+      <div style="font-size:16px;font-weight:700;font-family:monospace">Rp ${fmt(total)}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">% Capaian thd Total Pagu</div>
+      <div style="font-size:16px;font-weight:700"><span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span></div>
+    </div>
+  </div>`;
+
+  if (data.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada transaksi yang cocok dengan filter.</p></div></div>`;
+
+  const sorted = [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1);
+  const rows = sorted.map((r,i) => {
+    const ang = STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening)||{};
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td style="white-space:nowrap">${r.tanggal ? new Date(r.tanggal+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.uraian||''}">${r.uraian||'-'}</td>
+      <td style="font-size:11px;color:var(--c-text-muted)">${ang.sub_kegiatan||'-'}</td>
+      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nama_belanja||''}">${r.nama_belanja||ang.nama_belanja||'-'}</td>
+      <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
+      <td class="right mono" style="font-weight:600">${fmt(r.nominal)}</td>
+      <td style="white-space:nowrap">${r.tanggal_sp2d ? new Date(r.tanggal_sp2d+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '<span style="color:var(--c-text-muted)">Belum SP2D</span>'}</td>
+      <td style="font-size:11px">${r.pptk?.split(',')[0]||'-'}</td>
+    </tr>`;
+  }).join('');
+
+  return summary + `
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <h4>Hasil Pencarian Realisasi</h4>
+      <span style="font-size:12px;color:var(--c-text-muted)">${data.length} transaksi · Rp ${fmt(total)}</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th style="width:36px">#</th>
+          <th>Tgl Transaksi</th>
+          <th>Uraian</th>
+          <th>Sub Kegiatan</th>
+          <th>Nama Belanja</th>
+          <th class="center">Sumber Dana</th>
+          <th class="right">Nominal</th>
+          <th>Tgl SP2D</th>
+          <th>PPTK</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="font-weight:700;background:var(--c-surface2)">
+          <td colspan="6">TOTAL</td>
+          <td class="right mono">Rp ${fmt(total)}</td>
+          <td colspan="2"></td>
+        </tr></tfoot>
+      </table>
+    </div>
+  </div>`;
+}
+
+function buildCariSisa() {
+  const angData = getAnggaranFiltered();
+  let totalPaguFilter=0, totalRealFilter=0;
+
+  const rows = angData.map((a,i)=>{
+    const pagu = getPagu(a);
+    const real = getRealisasiByRekening(a.kode_rekening);
+    const sisa = pagu - real;
+    const pct  = pagu>0?(real/pagu*100).toFixed(1):0;
+    totalPaguFilter += pagu;
+    totalRealFilter += real;
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td class="mono" style="font-size:11px">${a.kode_rekening||'-'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.nama_belanja||''}">${a.nama_belanja||'-'}</td>
+      <td style="font-size:11px;color:var(--c-text-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.sub_kegiatan||''}">${a.sub_kegiatan||'-'}</td>
+      <td class="center"><span class="badge ${a.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${a.sumber_dana||'-'}</span></td>
+      <td style="font-size:11px">${a.pptk||'-'}</td>
+      <td class="right mono">${fmt(pagu)}</td>
+      <td class="right mono">${fmt(real)}</td>
+      <td class="right mono" style="font-weight:700;color:${sisa<0?'var(--c-danger)':sisa===0?'var(--c-text-muted)':'var(--c-success)'}">${fmt(sisa)}</td>
+      <td class="center"><span class="badge ${pct>=100?'badge-red':pct>=85?'badge-orange':pct>=60?'badge-blue':'badge-green'}">${pct}%</span></td>
+    </tr>`;
+  }).join('');
+
+  const totalSisa = totalPaguFilter - totalRealFilter;
+  const summary = `
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="section-card" style="padding:10px 18px;min-width:140px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">Rekening Ditemukan</div>
+      <div style="font-size:20px;font-weight:700">${angData.length}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">Total Pagu (Filter)</div>
+      <div style="font-size:16px;font-weight:700;font-family:monospace">Rp ${fmt(totalPaguFilter)}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">Total Realisasi (Filter)</div>
+      <div style="font-size:16px;font-weight:700;font-family:monospace">Rp ${fmt(totalRealFilter)}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">Total Sisa Anggaran</div>
+      <div style="font-size:16px;font-weight:700;font-family:monospace;color:${totalSisa<0?'var(--c-danger)':'var(--c-success)'}">Rp ${fmt(totalSisa)}</div>
+    </div>
+  </div>`;
+
+  if (angData.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada data anggaran yang cocok dengan filter.</p></div></div>`;
+
+  return summary + `
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <h4>Hasil Pencarian Sisa Anggaran</h4>
+      <span style="font-size:12px;color:var(--c-text-muted)">${angData.length} rekening · Sisa Rp ${fmt(totalSisa)}</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th style="width:36px">#</th>
+          <th>Kode Rekening</th>
+          <th>Nama Belanja</th>
+          <th>Sub Kegiatan</th>
+          <th class="center">Sumber Dana</th>
+          <th>PPTK</th>
+          <th class="right">Pagu (${STATE.tahapan})</th>
+          <th class="right">Realisasi</th>
+          <th class="right">Sisa Anggaran</th>
+          <th class="center">Serapan</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="font-weight:700;background:var(--c-surface2)">
+          <td colspan="6">TOTAL</td>
+          <td class="right mono">Rp ${fmt(totalPaguFilter)}</td>
+          <td class="right mono">Rp ${fmt(totalRealFilter)}</td>
+          <td class="right mono" style="color:${totalSisa<0?'var(--c-danger)':'var(--c-success)'}">Rp ${fmt(totalSisa)}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+  </div>`;
+}
+
+// --- Cetak hasil pencarian realisasi ---
+function cetakHasilCariRealisasi() {
+  const data = getRealisasiFiltered();
+  if (data.length === 0) { showToast('Tidak ada data untuk dicetak.','error'); return; }
+  const total = data.reduce((s,r)=>s+r.nominal,0);
+  const filterDesc = [
+    CARI_STATE.program    && 'Program: '+CARI_STATE.program,
+    CARI_STATE.kegiatan   && 'Kegiatan: '+CARI_STATE.kegiatan,
+    CARI_STATE.subKegiatan && 'Sub Kegiatan: '+CARI_STATE.subKegiatan,
+    CARI_STATE.belanja    && 'Belanja: '+CARI_STATE.belanja,
+    CARI_STATE.sumberDana && 'Sumber Dana: '+CARI_STATE.sumberDana,
+    CARI_STATE.pptk       && 'PPTK: '+CARI_STATE.pptk,
+    (CARI_STATE.tglDari||CARI_STATE.tglSampai) && `SP2D: ${CARI_STATE.tglDari||'awal'} s/d ${CARI_STATE.tglSampai||'akhir'}`,
+  ].filter(Boolean).join(' | ') || 'Semua Data';
+  const sorted = [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1);
+  const rows = sorted.map((r,i)=>{
+    const ang = STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening)||{};
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td>${r.tanggal||'-'}</td>
+      <td style="max-width:200px">${r.uraian||'-'}</td>
+      <td style="font-size:10px">${ang.sub_kegiatan||'-'}</td>
+      <td style="font-size:10px;max-width:160px">${r.nama_belanja||ang.nama_belanja||'-'}</td>
+      <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
+      <td class="right mono">${fmt(r.nominal)}</td>
+      <td>${r.tanggal_sp2d||'-'}</td>
+      <td style="font-size:10px">${r.pptk?.split(',')[0]||'-'}</td>
+    </tr>`;
+  }).join('');
+  const html = buildPrintHeader(`PENCARIAN REALISASI — TA ${STATE.tahun} (${STATE.tahapan})`,
+    `Filter: ${filterDesc} | Total ${data.length} transaksi | Dicetak: ${new Date().toLocaleDateString('id-ID')}`) + `
+  <div style="margin-bottom:12px;display:flex;gap:20px">
+    <div class="stat-box"><div class="lbl">Transaksi</div><div class="val">${data.length}</div></div>
+    <div class="stat-box"><div class="lbl">Total Realisasi</div><div class="val">Rp ${fmt(total)}</div></div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Tgl</th><th>Uraian</th><th>Sub Kegiatan</th><th>Nama Belanja</th><th>Sumber Dana</th><th class="right">Nominal</th><th>Tgl SP2D</th><th>PPTK</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row"><td colspan="6"><b>TOTAL</b></td><td class="right mono"><b>Rp ${fmt(total)}</b></td><td colspan="2"></td></tr></tfoot>
+  </table>`;
+  openPrintWindow(html, `Cari Realisasi TA ${STATE.tahun}`);
+}
+
+// --- Cetak hasil pencarian sisa anggaran ---
+function cetakHasilCariSisa() {
+  const angData = getAnggaranFiltered();
+  if (angData.length === 0) { showToast('Tidak ada data untuk dicetak.','error'); return; }
+  let tPagu=0, tReal=0;
+  const filterDesc = [
+    CARI_STATE.program     && 'Program: '+CARI_STATE.program,
+    CARI_STATE.kegiatan    && 'Kegiatan: '+CARI_STATE.kegiatan,
+    CARI_STATE.subKegiatan && 'Sub Kegiatan: '+CARI_STATE.subKegiatan,
+    CARI_STATE.belanja     && 'Belanja: '+CARI_STATE.belanja,
+    CARI_STATE.sumberDana  && 'Sumber Dana: '+CARI_STATE.sumberDana,
+    CARI_STATE.pptk        && 'PPTK: '+CARI_STATE.pptk,
+  ].filter(Boolean).join(' | ') || 'Semua Data';
+  const rows = angData.map((a,i)=>{
+    const pagu=getPagu(a); const real=getRealisasiByRekening(a.kode_rekening);
+    const sisa=pagu-real; const pct=pagu>0?(real/pagu*100).toFixed(1):0;
+    tPagu+=pagu; tReal+=real;
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td class="mono" style="font-size:10px">${a.kode_rekening||'-'}</td>
+      <td style="max-width:200px">${a.nama_belanja||'-'}</td>
+      <td style="font-size:10px">${a.sub_kegiatan||'-'}</td>
+      <td class="center"><span class="badge ${a.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${a.sumber_dana||'-'}</span></td>
+      <td style="font-size:10px">${a.pptk||'-'}</td>
+      <td class="right mono">${fmt(pagu)}</td>
+      <td class="right mono">${fmt(real)}</td>
+      <td class="right mono" style="${sisa<0?'color:#dc2626;font-weight:700':''}">${fmt(sisa)}</td>
+      <td class="center">${pct}%</td>
+    </tr>`;
+  }).join('');
+  const tSisa=tPagu-tReal;
+  const html = buildPrintHeader(`PENCARIAN SISA ANGGARAN — TA ${STATE.tahun} (${STATE.tahapan})`,
+    `Filter: ${filterDesc} | Dicetak: ${new Date().toLocaleDateString('id-ID')}`) + `
+  <div style="margin-bottom:12px;display:flex;gap:20px">
+    <div class="stat-box"><div class="lbl">Rekening</div><div class="val">${angData.length}</div></div>
+    <div class="stat-box"><div class="lbl">Total Pagu</div><div class="val">Rp ${fmt(tPagu)}</div></div>
+    <div class="stat-box"><div class="lbl">Total Realisasi</div><div class="val">Rp ${fmt(tReal)}</div></div>
+    <div class="stat-box"><div class="lbl">Total Sisa</div><div class="val">Rp ${fmt(tSisa)}</div></div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Kode Rekening</th><th>Nama Belanja</th><th>Sub Kegiatan</th><th>Sumber Dana</th><th>PPTK</th><th class="right">Pagu</th><th class="right">Realisasi</th><th class="right">Sisa</th><th class="center">Serapan</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row"><td colspan="6"><b>TOTAL</b></td><td class="right mono"><b>Rp ${fmt(tPagu)}</b></td><td class="right mono"><b>Rp ${fmt(tReal)}</b></td><td class="right mono"><b>Rp ${fmt(tSisa)}</b></td><td></td></tr></tfoot>
+  </table>`;
+  openPrintWindow(html, `Cari Sisa Anggaran TA ${STATE.tahun}`);
+}
+
 function renderPengguna() {
   const roleLabel = {admin:'Administrator',input:'Operator Input',view:'Viewer'};
   const roleBadge = {admin:'badge-blue',input:'badge-green',view:'badge-orange'};
