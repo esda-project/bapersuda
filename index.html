@@ -526,6 +526,9 @@ td.center{text-align:center}
       <div class="nav-item" onclick="showPage('realisasi')" id="nav-realisasi">
         <span class="icon">📑</span> Input Realisasi
       </div>
+      <div class="nav-item" onclick="showPage('cari')" id="nav-cari">
+        <span class="icon">🔍</span> Pencarian
+      </div>
       <div class="nav-section">Laporan</div>
       <div class="nav-item" onclick="showPage('rekap')" id="nav-rekap">
         <span class="icon">📈</span> Rekap Realisasi
@@ -1368,6 +1371,7 @@ const PAGE_META = {
   rekap: {title:'Rekap Realisasi',sub:'Rekapitulasi seluruh realisasi anggaran'},
   lra: {title:'Laporan LRA',sub:'Laporan Realisasi Anggaran resmi SKPD'},
   pengguna: {title:'Manajemen Pengguna',sub:'Kelola akun dan hak akses pengguna'},
+  cari: {title:'Pencarian Data',sub:'Cari realisasi dan sisa anggaran berdasarkan kegiatan, sub kegiatan, atau belanja'},
 };
 
 function showPage(page) {
@@ -1387,6 +1391,7 @@ function showPage(page) {
     rekap: renderRekap,
     lra: renderLRA,
     pengguna: renderPengguna,
+    cari: renderCari,
   };
   if (renders[page]) content.innerHTML = renders[page]();
   else content.innerHTML = '<p>Halaman tidak ditemukan.</p>';
@@ -2784,6 +2789,503 @@ function buildLRATable(upToDate) {
 // ========================================
 // PENGGUNA
 // ========================================
+// ========================================
+// PENCARIAN DATA
+// ========================================
+const CARI_STATE = {
+  mode: 'realisasi',
+  program: '', kegiatan: '', subKegiatan: '',
+  belanja: '', sumberDana: '', pptk: '',
+  tglDari: '', tglSampai: '', q: '',
+};
+
+// Helper: ambil program/kegiatan/subkegiatan yang ada di STATE.anggaran
+// Di-filter bertingkat sesuai pilihan saat ini
+function getCariOptions() {
+  const ang = STATE.anggaran;
+
+  // Program: semua yang ada di anggaran
+  const programs = [...new Map(ang.filter(a=>a.kode_program)
+    .map(a=>[a.kode_program,{kode:a.kode_program,nama:a.program||a.kode_program}])).values()];
+
+  // Kegiatan: filter berdasarkan program terpilih
+  const angByProg = CARI_STATE.program
+    ? ang.filter(a=>a.kode_program===CARI_STATE.program) : ang;
+  const kegiatans = [...new Map(angByProg.filter(a=>a.kode_kegiatan)
+    .map(a=>[a.kode_kegiatan,{kode:a.kode_kegiatan,nama:a.kegiatan||a.kode_kegiatan}])).values()];
+
+  // Sub Kegiatan: filter berdasarkan kegiatan terpilih (dan program)
+  const angByKeg = CARI_STATE.kegiatan
+    ? angByProg.filter(a=>a.kode_kegiatan===CARI_STATE.kegiatan) : angByProg;
+  const subKegiatans = [...new Map(angByKeg.filter(a=>a.kode_sub_kegiatan)
+    .map(a=>[a.kode_sub_kegiatan,{kode:a.kode_sub_kegiatan,nama:a.sub_kegiatan||a.kode_sub_kegiatan}])).values()];
+
+  // Belanja: filter berdasarkan sub kegiatan terpilih
+  const angBySub = CARI_STATE.subKegiatan
+    ? angByKeg.filter(a=>a.kode_sub_kegiatan===CARI_STATE.subKegiatan) : angByKeg;
+  const belanjas = [...new Map(angBySub.filter(a=>a.kode_belanja)
+    .map(a=>[a.kode_belanja,{kode:a.kode_belanja,nama:a.nama_belanja||a.kode_belanja}])).values()];
+
+  // Sumber Dana & PPTK: dari seluruh anggaran
+  const sumberDanas = [...new Set(ang.filter(a=>a.sumber_dana).map(a=>a.sumber_dana))];
+  const pptks       = [...new Set(ang.filter(a=>a.pptk).map(a=>a.pptk))];
+
+  return {programs, kegiatans, subKegiatans, belanjas, sumberDanas, pptks};
+}
+
+function renderCari() {
+  const {programs, kegiatans, subKegiatans, belanjas, sumberDanas, pptks} = getCariOptions();
+  const modeRealisasi = CARI_STATE.mode === 'realisasi';
+
+  const selOpt = (val, arr, kodeKey='kode', namaKey='nama') =>
+    arr.map(o=>`<option value="${o[kodeKey]}" ${val===o[kodeKey]?'selected':''}>${o[kodeKey]} — ${o[namaKey]}</option>`).join('');
+
+  return `
+<div class="page-header">
+  <h2>🔍 Pencarian Data</h2>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn ${modeRealisasi?'btn-blue':'btn-outline'}" onclick="cariSetMode('realisasi')">📑 Cari Realisasi</button>
+    <button class="btn ${!modeRealisasi?'btn-blue':'btn-outline'}" onclick="cariSetMode('sisa')">💰 Cari Sisa Anggaran</button>
+    <button class="btn btn-outline" onclick="cariReset()">↺ Reset Filter</button>
+    <button class="btn btn-outline" onclick="${modeRealisasi?'cetakHasilCariRealisasi()':'cetakHasilCariSisa()'}">🖨️ Cetak PDF</button>
+  </div>
+</div>
+
+<div class="section-card" style="padding:14px 16px;margin-bottom:12px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;align-items:end">
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Program</label>
+      <select class="form-input" style="width:100%" id="cariProgram"
+        onchange="cariApply('program',this.value)">
+        <option value="">— Semua Program —</option>
+        ${selOpt(CARI_STATE.program, programs)}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Kegiatan</label>
+      <select class="form-input" style="width:100%" id="cariKegiatan"
+        onchange="cariApply('kegiatan',this.value)">
+        <option value="">— Semua Kegiatan —</option>
+        ${selOpt(CARI_STATE.kegiatan, kegiatans)}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Sub Kegiatan</label>
+      <select class="form-input" style="width:100%" id="cariSubKegiatan"
+        onchange="cariApply('subKegiatan',this.value)">
+        <option value="">— Semua Sub Kegiatan —</option>
+        ${selOpt(CARI_STATE.subKegiatan, subKegiatans)}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Belanja</label>
+      <select class="form-input" style="width:100%" id="cariBelanja"
+        onchange="cariApply('belanja',this.value)">
+        <option value="">— Semua Belanja —</option>
+        ${selOpt(CARI_STATE.belanja, belanjas)}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Sumber Dana</label>
+      <select class="form-input" style="width:100%" onchange="cariApply('sumberDana',this.value)">
+        <option value="">— Semua Sumber Dana —</option>
+        ${sumberDanas.map(s=>`<option value="${s}" ${CARI_STATE.sumberDana===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">PPTK</label>
+      <select class="form-input" style="width:100%" onchange="cariApply('pptk',this.value)">
+        <option value="">— Semua PPTK —</option>
+        ${pptks.map(p=>`<option value="${p}" ${CARI_STATE.pptk===p?'selected':''}>${p}</option>`).join('')}
+      </select>
+    </div>
+
+    ${modeRealisasi ? `
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Tgl SP2D Dari</label>
+      <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglDari}"
+        onchange="cariApply('tglDari',this.value)">
+    </div>
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Tgl SP2D Sampai</label>
+      <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglSampai}"
+        onchange="cariApply('tglSampai',this.value)">
+    </div>` : ''}
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Kata Kunci</label>
+      <input class="search-input" style="width:100%" placeholder="Cari uraian / nama belanja..."
+        value="${CARI_STATE.q}" oninput="cariApply('q',this.value)">
+    </div>
+
+  </div>
+</div>
+
+<div id="cariResult">${modeRealisasi ? buildCariRealisasi() : buildCariSisa()}</div>
+`;
+}
+
+function cariSetMode(mode) {
+  CARI_STATE.mode = mode;
+  showPage('cari');
+}
+
+// cariApply: update CARI_STATE, rebuild dropdown bertingkat via DOM lalu refresh result
+function cariApply(key, val) {
+  CARI_STATE[key] = val;
+
+  // Reset filter downstream jika filter upstream berubah
+  if (key === 'program')    { CARI_STATE.kegiatan = ''; CARI_STATE.subKegiatan = ''; CARI_STATE.belanja = ''; }
+  if (key === 'kegiatan')   { CARI_STATE.subKegiatan = ''; CARI_STATE.belanja = ''; }
+  if (key === 'subKegiatan'){ CARI_STATE.belanja = ''; }
+
+  // Rebuild dropdown Kegiatan, Sub Kegiatan, Belanja secara DOM (tanpa full re-render)
+  const {kegiatans, subKegiatans, belanjas} = getCariOptions();
+
+  const elKeg = document.getElementById('cariKegiatan');
+  const elSub = document.getElementById('cariSubKegiatan');
+  const elBel = document.getElementById('cariBelanja');
+
+  if (elKeg) {
+    elKeg.innerHTML = '<option value="">— Semua Kegiatan —</option>' +
+      kegiatans.map(o=>`<option value="${o.kode}" ${CARI_STATE.kegiatan===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('');
+  }
+  if (elSub) {
+    elSub.innerHTML = '<option value="">— Semua Sub Kegiatan —</option>' +
+      subKegiatans.map(o=>`<option value="${o.kode}" ${CARI_STATE.subKegiatan===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('');
+  }
+  if (elBel) {
+    elBel.innerHTML = '<option value="">— Semua Belanja —</option>' +
+      belanjas.map(o=>`<option value="${o.kode}" ${CARI_STATE.belanja===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('');
+  }
+
+  // Refresh hasil
+  const el = document.getElementById('cariResult');
+  if (el) el.innerHTML = CARI_STATE.mode === 'realisasi' ? buildCariRealisasi() : buildCariSisa();
+}
+
+function cariReset() {
+  Object.assign(CARI_STATE, {program:'',kegiatan:'',subKegiatan:'',belanja:'',sumberDana:'',pptk:'',tglDari:'',tglSampai:'',q:''});
+  showPage('cari');
+}
+
+// ============================================================
+// Filter ANGGARAN: matching via kode_program/kegiatan/sub_kegiatan/belanja
+// ============================================================
+function getAnggaranFiltered() {
+  return STATE.anggaran.filter(a => {
+    if (CARI_STATE.program     && a.kode_program      !== CARI_STATE.program)      return false;
+    if (CARI_STATE.kegiatan    && a.kode_kegiatan     !== CARI_STATE.kegiatan)     return false;
+    if (CARI_STATE.subKegiatan && a.kode_sub_kegiatan !== CARI_STATE.subKegiatan)  return false;
+    if (CARI_STATE.belanja     && a.kode_belanja      !== CARI_STATE.belanja)      return false;
+    if (CARI_STATE.sumberDana  && a.sumber_dana       !== CARI_STATE.sumberDana)   return false;
+    if (CARI_STATE.pptk        && a.pptk              !== CARI_STATE.pptk)         return false;
+    if (CARI_STATE.q) {
+      const q = CARI_STATE.q.toLowerCase();
+      const hay = [a.nama_belanja,a.sub_kegiatan,a.kegiatan,a.program,a.kode_rekening,a.kode_belanja,a.kode_sub_kegiatan].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+// ============================================================
+// Filter REALISASI: matching langsung via kode_sub_kegiatan + kode_belanja
+// (TIDAK lewat kode_rekening karena bisa tidak konsisten)
+// Untuk filter program/kegiatan: resolve lewat MASTER.programKegSubkeg
+// ============================================================
+function getRealisasiFiltered() {
+  // Bangun lookup: kode_sub_kegiatan → {kode_program, kode_kegiatan}
+  const subKegLookup = {};
+  MASTER.programKegSubkeg.forEach(m => {
+    subKegLookup[m.kode_sub_kegiatan] = {kode_program: m.kode_program, kode_kegiatan: m.kode_kegiatan};
+  });
+
+  // Juga bangun dari STATE.anggaran (lebih akurat — data yang benar-benar di-input)
+  STATE.anggaran.forEach(a => {
+    if (a.kode_sub_kegiatan && !subKegLookup[a.kode_sub_kegiatan]) {
+      subKegLookup[a.kode_sub_kegiatan] = {kode_program: a.kode_program, kode_kegiatan: a.kode_kegiatan};
+    }
+  });
+
+  return STATE.realisasi.filter(r => {
+    // Resolve program & kegiatan dari sub kegiatan transaksi
+    const meta = subKegLookup[r.kode_sub_kegiatan] || {};
+
+    if (CARI_STATE.program     && meta.kode_program   !== CARI_STATE.program)      return false;
+    if (CARI_STATE.kegiatan    && meta.kode_kegiatan  !== CARI_STATE.kegiatan)     return false;
+    if (CARI_STATE.subKegiatan && r.kode_sub_kegiatan !== CARI_STATE.subKegiatan)  return false;
+    if (CARI_STATE.belanja     && r.kode_belanja      !== CARI_STATE.belanja)      return false;
+    if (CARI_STATE.sumberDana  && r.sumber_dana       !== CARI_STATE.sumberDana)   return false;
+    if (CARI_STATE.pptk) {
+      // pptk di realisasi bisa "NAMA, NIP" — match partial
+      const rPptk = (r.pptk||'').toLowerCase();
+      const fPptk = CARI_STATE.pptk.toLowerCase();
+      if (!rPptk.includes(fPptk) && !fPptk.includes(rPptk.split(',')[0].trim())) return false;
+    }
+    // Filter tanggal SP2D
+    if (CARI_STATE.tglDari   && r.tanggal_sp2d && r.tanggal_sp2d < CARI_STATE.tglDari)   return false;
+    if (CARI_STATE.tglSampai && r.tanggal_sp2d && r.tanggal_sp2d > CARI_STATE.tglSampai) return false;
+    if (CARI_STATE.q) {
+      const q = CARI_STATE.q.toLowerCase();
+      const hay = [r.uraian,r.nama_belanja,r.kode_rekening,r.pptk,r.sumber_dana,r.kode_sub_kegiatan,r.kode_belanja].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function buildCariRealisasi() {
+  const data = getRealisasiFiltered();
+  const total = data.reduce((s,r)=>s+r.nominal,0);
+  const totalPagu = getTotalPagu();
+  const pct = totalPagu>0?(total/totalPagu*100).toFixed(1):0;
+
+  const summary = `
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="section-card" style="padding:10px 18px;min-width:140px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">Transaksi Ditemukan</div>
+      <div style="font-size:22px;font-weight:700">${data.length}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:180px;flex:2">
+      <div style="font-size:11px;color:var(--c-text-muted)">Total Realisasi</div>
+      <div style="font-size:18px;font-weight:700;font-family:monospace">Rp ${fmt(total)}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:140px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">% Capaian thd Total Pagu</div>
+      <div style="font-size:18px;font-weight:700"><span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span></div>
+    </div>
+  </div>`;
+
+  if (data.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada transaksi yang cocok dengan filter yang dipilih.</p></div></div>`;
+
+  const sorted = [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1);
+  const rows = sorted.map((r,i) => {
+    // Cari info anggaran lewat kode_sub_kegiatan + kode_belanja (lebih reliabel)
+    const ang = STATE.anggaran.find(a=>a.kode_sub_kegiatan===r.kode_sub_kegiatan && a.kode_belanja===r.kode_belanja && a.sumber_dana===r.sumber_dana)
+             || STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening)
+             || {};
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td style="white-space:nowrap">${r.tanggal ? new Date(r.tanggal+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.uraian||''}">${r.uraian||'-'}</td>
+      <td style="font-size:11px;color:var(--c-text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ang.sub_kegiatan||''}">${ang.sub_kegiatan||r.kode_sub_kegiatan||'-'}</td>
+      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nama_belanja||ang.nama_belanja||''}">${r.nama_belanja||ang.nama_belanja||'-'}</td>
+      <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
+      <td class="right mono" style="font-weight:600">${fmt(r.nominal)}</td>
+      <td style="white-space:nowrap">${r.tanggal_sp2d ? new Date(r.tanggal_sp2d+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '<span style="color:var(--c-text-muted)">Belum SP2D</span>'}</td>
+      <td style="font-size:11px">${r.pptk?.split(',')[0]||'-'}</td>
+    </tr>`;
+  }).join('');
+
+  return summary + `
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <h4>Hasil Pencarian Realisasi</h4>
+      <span style="font-size:12px;color:var(--c-text-muted)">${data.length} transaksi · Rp ${fmt(total)}</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th style="width:36px">#</th>
+          <th>Tgl Transaksi</th>
+          <th>Uraian</th>
+          <th>Sub Kegiatan</th>
+          <th>Nama Belanja</th>
+          <th class="center">Sumber Dana</th>
+          <th class="right">Nominal</th>
+          <th>Tgl SP2D</th>
+          <th>PPTK</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="font-weight:700;background:var(--c-surface2)">
+          <td colspan="6">TOTAL</td>
+          <td class="right mono">Rp ${fmt(total)}</td>
+          <td colspan="2"></td>
+        </tr></tfoot>
+      </table>
+    </div>
+  </div>`;
+}
+
+function buildCariSisa() {
+  const angData = getAnggaranFiltered();
+  let totalPaguFilter=0, totalRealFilter=0;
+
+  const rows = angData.map((a,i)=>{
+    const pagu = getPagu(a);
+    const real = getRealisasiByRekening(a.kode_rekening);
+    const sisa = pagu - real;
+    const pct  = pagu>0?(real/pagu*100).toFixed(1):0;
+    totalPaguFilter += pagu;
+    totalRealFilter += real;
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td class="mono" style="font-size:11px">${a.kode_rekening||'-'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.nama_belanja||''}">${a.nama_belanja||'-'}</td>
+      <td style="font-size:11px;color:var(--c-text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.sub_kegiatan||''}">${a.sub_kegiatan||'-'}</td>
+      <td class="center"><span class="badge ${a.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${a.sumber_dana||'-'}</span></td>
+      <td style="font-size:11px">${a.pptk||'-'}</td>
+      <td class="right mono">${fmt(pagu)}</td>
+      <td class="right mono">${fmt(real)}</td>
+      <td class="right mono" style="font-weight:700;color:${sisa<0?'var(--c-danger)':sisa===0?'var(--c-text-muted)':'var(--c-success)'}">${fmt(sisa)}</td>
+      <td class="center"><span class="badge ${pct>=100?'badge-red':pct>=85?'badge-orange':pct>=60?'badge-blue':'badge-green'}">${pct}%</span></td>
+    </tr>`;
+  }).join('');
+
+  const totalSisa = totalPaguFilter - totalRealFilter;
+  const summary = `
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="section-card" style="padding:10px 18px;min-width:120px;flex:1">
+      <div style="font-size:11px;color:var(--c-text-muted)">Rekening Ditemukan</div>
+      <div style="font-size:22px;font-weight:700">${angData.length}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:2">
+      <div style="font-size:11px;color:var(--c-text-muted)">Total Pagu (Filter)</div>
+      <div style="font-size:18px;font-weight:700;font-family:monospace">Rp ${fmt(totalPaguFilter)}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:2">
+      <div style="font-size:11px;color:var(--c-text-muted)">Total Realisasi (Filter)</div>
+      <div style="font-size:18px;font-weight:700;font-family:monospace">Rp ${fmt(totalRealFilter)}</div>
+    </div>
+    <div class="section-card" style="padding:10px 18px;min-width:160px;flex:2">
+      <div style="font-size:11px;color:var(--c-text-muted)">Total Sisa Anggaran</div>
+      <div style="font-size:18px;font-weight:700;font-family:monospace;color:${totalSisa<0?'var(--c-danger)':'var(--c-success)'}">Rp ${fmt(totalSisa)}</div>
+    </div>
+  </div>`;
+
+  if (angData.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada data anggaran yang cocok dengan filter yang dipilih.</p></div></div>`;
+
+  return summary + `
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <h4>Hasil Pencarian Sisa Anggaran</h4>
+      <span style="font-size:12px;color:var(--c-text-muted)">${angData.length} rekening · Sisa Rp ${fmt(totalSisa)}</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th style="width:36px">#</th>
+          <th>Kode Rekening</th>
+          <th>Nama Belanja</th>
+          <th>Sub Kegiatan</th>
+          <th class="center">Sumber Dana</th>
+          <th>PPTK</th>
+          <th class="right">Pagu (${STATE.tahapan})</th>
+          <th class="right">Realisasi</th>
+          <th class="right">Sisa Anggaran</th>
+          <th class="center">Serapan</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="font-weight:700;background:var(--c-surface2)">
+          <td colspan="6">TOTAL</td>
+          <td class="right mono">Rp ${fmt(totalPaguFilter)}</td>
+          <td class="right mono">Rp ${fmt(totalRealFilter)}</td>
+          <td class="right mono" style="color:${totalSisa<0?'var(--c-danger)':'var(--c-success)'}">Rp ${fmt(totalSisa)}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+    </div>
+  </div>`;
+}
+
+// --- Cetak hasil cari realisasi ---
+function cetakHasilCariRealisasi() {
+  const data = getRealisasiFiltered();
+  if (data.length === 0) { showToast('Tidak ada data untuk dicetak.','error'); return; }
+  const total = data.reduce((s,r)=>s+r.nominal,0);
+  const filterDesc = [
+    CARI_STATE.program     && 'Program: '+CARI_STATE.program,
+    CARI_STATE.kegiatan    && 'Kegiatan: '+CARI_STATE.kegiatan,
+    CARI_STATE.subKegiatan && 'Sub Kegiatan: '+CARI_STATE.subKegiatan,
+    CARI_STATE.belanja     && 'Belanja: '+CARI_STATE.belanja,
+    CARI_STATE.sumberDana  && 'Sumber Dana: '+CARI_STATE.sumberDana,
+    CARI_STATE.pptk        && 'PPTK: '+CARI_STATE.pptk,
+    (CARI_STATE.tglDari||CARI_STATE.tglSampai) && `SP2D: ${CARI_STATE.tglDari||'awal'} s/d ${CARI_STATE.tglSampai||'akhir'}`,
+  ].filter(Boolean).join(' | ') || 'Semua Data';
+  const sorted = [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1);
+  const rows = sorted.map((r,i)=>{
+    const ang = STATE.anggaran.find(a=>a.kode_sub_kegiatan===r.kode_sub_kegiatan && a.kode_belanja===r.kode_belanja && a.sumber_dana===r.sumber_dana)
+             || STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening) || {};
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td>${r.tanggal||'-'}</td>
+      <td style="max-width:180px">${r.uraian||'-'}</td>
+      <td style="font-size:10px">${ang.sub_kegiatan||r.kode_sub_kegiatan||'-'}</td>
+      <td style="font-size:10px;max-width:160px">${r.nama_belanja||ang.nama_belanja||'-'}</td>
+      <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
+      <td class="right mono">${fmt(r.nominal)}</td>
+      <td>${r.tanggal_sp2d||'-'}</td>
+      <td style="font-size:10px">${r.pptk?.split(',')[0]||'-'}</td>
+    </tr>`;
+  }).join('');
+  const html = buildPrintHeader(`PENCARIAN REALISASI — TA ${STATE.tahun} (${STATE.tahapan})`,
+    `Filter: ${filterDesc} | Total ${data.length} transaksi | Dicetak: ${new Date().toLocaleDateString('id-ID')}`) + `
+  <div style="margin-bottom:12px;display:flex;gap:20px">
+    <div class="stat-box"><div class="lbl">Transaksi</div><div class="val">${data.length}</div></div>
+    <div class="stat-box"><div class="lbl">Total Realisasi</div><div class="val">Rp ${fmt(total)}</div></div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Tgl</th><th>Uraian</th><th>Sub Kegiatan</th><th>Nama Belanja</th><th>Sumber Dana</th><th class="right">Nominal</th><th>Tgl SP2D</th><th>PPTK</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row"><td colspan="6"><b>TOTAL</b></td><td class="right mono"><b>Rp ${fmt(total)}</b></td><td colspan="2"></td></tr></tfoot>
+  </table>`;
+  openPrintWindow(html, `Cari Realisasi TA ${STATE.tahun}`);
+}
+
+// --- Cetak hasil cari sisa anggaran ---
+function cetakHasilCariSisa() {
+  const angData = getAnggaranFiltered();
+  if (angData.length === 0) { showToast('Tidak ada data untuk dicetak.','error'); return; }
+  let tPagu=0, tReal=0;
+  const filterDesc = [
+    CARI_STATE.program     && 'Program: '+CARI_STATE.program,
+    CARI_STATE.kegiatan    && 'Kegiatan: '+CARI_STATE.kegiatan,
+    CARI_STATE.subKegiatan && 'Sub Kegiatan: '+CARI_STATE.subKegiatan,
+    CARI_STATE.belanja     && 'Belanja: '+CARI_STATE.belanja,
+    CARI_STATE.sumberDana  && 'Sumber Dana: '+CARI_STATE.sumberDana,
+    CARI_STATE.pptk        && 'PPTK: '+CARI_STATE.pptk,
+  ].filter(Boolean).join(' | ') || 'Semua Data';
+  const rows = angData.map((a,i)=>{
+    const pagu=getPagu(a); const real=getRealisasiByRekening(a.kode_rekening);
+    const sisa=pagu-real; const pct=pagu>0?(real/pagu*100).toFixed(1):0;
+    tPagu+=pagu; tReal+=real;
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td class="mono" style="font-size:10px">${a.kode_rekening||'-'}</td>
+      <td style="max-width:200px">${a.nama_belanja||'-'}</td>
+      <td style="font-size:10px">${a.sub_kegiatan||'-'}</td>
+      <td class="center"><span class="badge ${a.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${a.sumber_dana||'-'}</span></td>
+      <td style="font-size:10px">${a.pptk||'-'}</td>
+      <td class="right mono">${fmt(pagu)}</td>
+      <td class="right mono">${fmt(real)}</td>
+      <td class="right mono" style="${sisa<0?'color:#dc2626;font-weight:700':''}">${fmt(sisa)}</td>
+      <td class="center">${pct}%</td>
+    </tr>`;
+  }).join('');
+  const tSisa=tPagu-tReal;
+  const html = buildPrintHeader(`PENCARIAN SISA ANGGARAN — TA ${STATE.tahun} (${STATE.tahapan})`,
+    `Filter: ${filterDesc} | Dicetak: ${new Date().toLocaleDateString('id-ID')}`) + `
+  <div style="margin-bottom:12px;display:flex;gap:20px">
+    <div class="stat-box"><div class="lbl">Rekening</div><div class="val">${angData.length}</div></div>
+    <div class="stat-box"><div class="lbl">Total Pagu</div><div class="val">Rp ${fmt(tPagu)}</div></div>
+    <div class="stat-box"><div class="lbl">Total Realisasi</div><div class="val">Rp ${fmt(tReal)}</div></div>
+    <div class="stat-box"><div class="lbl">Total Sisa</div><div class="val">Rp ${fmt(tSisa)}</div></div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Kode Rekening</th><th>Nama Belanja</th><th>Sub Kegiatan</th><th>Sumber Dana</th><th>PPTK</th><th class="right">Pagu</th><th class="right">Realisasi</th><th class="right">Sisa</th><th class="center">Serapan</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row"><td colspan="6"><b>TOTAL</b></td><td class="right mono"><b>Rp ${fmt(tPagu)}</b></td><td class="right mono"><b>Rp ${fmt(tReal)}</b></td><td class="right mono"><b>Rp ${fmt(tSisa)}</b></td><td></td></tr></tfoot>
+  </table>`;
+  openPrintWindow(html, `Cari Sisa Anggaran TA ${STATE.tahun}`);
+}
+
 function renderPengguna() {
   const roleLabel = {admin:'Administrator',input:'Operator Input',view:'Viewer'};
   const roleBadge = {admin:'badge-blue',input:'badge-green',view:'badge-orange'};
