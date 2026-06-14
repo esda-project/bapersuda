@@ -3838,14 +3838,18 @@ window.addEventListener('resize', function() {
 <!-- ===== FLOATING MUSIC PLAYER ===== -->
 <button id="musicFab" onclick="openMusicPlayer()" title="Putar Musik Kerja 🎵">🎵</button>
 
+<!-- ===== MUSIC PLAYER WIDGET ===== -->
 <div id="musicPlayer">
   <div class="mp-header">
     <span class="mp-title">🎵 Musik Kerja</span>
-    <button class="mp-close" onclick="closeMusicPlayer()" title="Minimize">▼</button>
+    <div style="display:flex;gap:4px">
+      <button class="mp-close" onclick="openMusicManager()" title="Kelola Playlist" style="font-size:13px">🎼</button>
+      <button class="mp-close" onclick="closeMusicPlayer()" title="Minimize">▼</button>
+    </div>
   </div>
   <div class="mp-track-info">
-    <div class="mp-track-name" id="mpTrackName">Lo-Fi Beats — Fokus Kerja</div>
-    <div class="mp-track-sub" id="mpTrackSub">Track 1 / 5</div>
+    <div class="mp-track-name" id="mpTrackName">—</div>
+    <div class="mp-track-sub" id="mpTrackSub">Belum ada lagu</div>
   </div>
   <div class="mp-visualizer" id="mpVisualizer">
     <div class="mp-bar"></div><div class="mp-bar"></div><div class="mp-bar"></div>
@@ -3856,11 +3860,125 @@ window.addEventListener('resize', function() {
     <button class="mp-btn" onclick="mpPrev()" title="Sebelumnya">⏮</button>
     <button class="mp-btn play-btn" id="mpPlayBtn" onclick="mpTogglePlay()">▶ Play</button>
     <button class="mp-btn" onclick="mpNext()" title="Berikutnya">⏭</button>
+    <button class="mp-btn" id="mpShuffleBtn" onclick="mpToggleShuffle()" title="Acak">🔀</button>
   </div>
   <div class="mp-volume">
     <span>🔈</span>
     <input type="range" id="mpVolumeSlider" min="0" max="100" value="40" oninput="mpSetVolume(this.value)">
     <span>🔊</span>
+  </div>
+  <!-- Mini playlist -->
+  <div id="mpPlaylist" style="margin-top:10px;max-height:130px;overflow-y:auto;display:none"></div>
+  <button onclick="toggleMpPlaylist()" style="width:100%;margin-top:6px;background:rgba(255,255,255,.05);border:none;border-radius:6px;color:#64748b;font-size:11px;padding:4px;cursor:pointer" id="mpPlaylistToggle">▾ Lihat Playlist</button>
+</div>
+
+<!-- ===== MUSIC MANAGER MODAL ===== -->
+<div id="musicManagerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--c-surface);border-radius:16px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+    <!-- Header -->
+    <div style="padding:18px 20px;border-bottom:1px solid var(--c-border);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <h3 style="font-size:16px;font-weight:700">🎼 Kelola Playlist Musik</h3>
+        <p style="font-size:12px;color:var(--c-text-muted);margin-top:2px">Tambah, edit, atau hapus lagu dari daftar putar</p>
+      </div>
+      <button onclick="closeMusicManager()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--c-text-muted)">✕</button>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--c-border);padding:0 20px">
+      <button class="mm-tab active" id="mmTab1" onclick="mmSwitchTab(1)" style="padding:10px 16px;background:none;border:none;border-bottom:2px solid var(--c-primary);color:var(--c-primary);font-weight:600;font-size:13px;cursor:pointer">📋 Daftar Lagu</button>
+      <button class="mm-tab" id="mmTab2" onclick="mmSwitchTab(2)" style="padding:10px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--c-text-muted);font-size:13px;cursor:pointer">➕ Tambah Lagu</button>
+      <button class="mm-tab" id="mmTab3" onclick="mmSwitchTab(3)" style="padding:10px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--c-text-muted);font-size:13px;cursor:pointer">💡 Bantuan URL</button>
+    </div>
+
+    <!-- Tab 1: Daftar Lagu -->
+    <div id="mmPane1" style="flex:1;overflow-y:auto;padding:16px 20px">
+      <div id="mmTrackList"></div>
+    </div>
+
+    <!-- Tab 2: Tambah / Edit Lagu -->
+    <div id="mmPane2" style="flex:1;overflow-y:auto;padding:16px 20px;display:none">
+      <input type="hidden" id="mmEditIdx" value="-1">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Nama Lagu / Judul</label>
+          <input class="form-input" id="mmName" placeholder="cth: Bengawan Solo — Gesang">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kategori / Keterangan</label>
+          <input class="form-input" id="mmSub" placeholder="cth: Keroncong Jawa, Indonesia, Lo-Fi...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">URL File Audio (mp3/ogg/wav)</label>
+          <input class="form-input" id="mmUrl" placeholder="https://..." style="font-family:monospace;font-size:12px">
+          <span class="form-hint">Tempel URL langsung dari browser atau layanan hosting audio. Klik tab "Bantuan URL" untuk panduan.</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-blue" onclick="mmSaveTrack()" style="flex:1">💾 Simpan Lagu</button>
+          <button class="btn btn-gray" onclick="mmCancelEdit()">Batal</button>
+        </div>
+        <div id="mmTestArea" style="display:none;background:var(--c-surface2);border-radius:8px;padding:12px;border:1px solid var(--c-border)">
+          <p style="font-size:12px;font-weight:600;margin-bottom:6px">🔊 Tes Audio:</p>
+          <audio id="mmTestAudio" controls style="width:100%;height:32px"></audio>
+        </div>
+        <button onclick="mmTestUrl()" class="btn btn-outline btn-sm" style="align-self:flex-start">🔊 Tes URL Audio</button>
+      </div>
+    </div>
+
+    <!-- Tab 3: Bantuan URL -->
+    <div id="mmPane3" style="flex:1;overflow-y:auto;padding:16px 20px;display:none">
+      <div style="display:flex;flex-direction:column;gap:14px;font-size:13px">
+        <div style="background:var(--c-primary-light);border-radius:8px;padding:14px;border-left:3px solid var(--c-primary)">
+          <p style="font-weight:700;color:var(--c-primary);margin-bottom:6px">🎵 Cara Mendapat URL Lagu</p>
+          <p style="color:var(--c-text);line-height:1.7">URL audio harus berakhiran <code style="background:rgba(26,86,219,.1);padding:1px 5px;border-radius:3px;font-family:monospace">.mp3</code>, <code style="background:rgba(26,86,219,.1);padding:1px 5px;border-radius:3px;font-family:monospace">.ogg</code>, atau <code style="background:rgba(26,86,219,.1);padding:1px 5px;border-radius:3px;font-family:monospace">.wav</code> dan bisa diakses publik.</p>
+        </div>
+
+        <div style="border:1px solid var(--c-border);border-radius:8px;overflow:hidden">
+          <div style="background:var(--c-surface2);padding:10px 14px;font-weight:700;font-size:12px;border-bottom:1px solid var(--c-border)">📦 Sumber Lagu Gratis Bebas Hak Cipta</div>
+          <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+            <div>
+              <p style="font-weight:600;color:var(--c-text)">1. Pixabay Music <span style="color:var(--c-success);font-size:11px">✅ Gratis & bebas royalti</span></p>
+              <p style="color:var(--c-text-muted);font-size:12px">Buka <b>pixabay.com/music</b> → cari genre → klik lagu → klik kanan tombol Download → "Copy link address" → paste ke kolom URL.</p>
+            </div>
+            <div>
+              <p style="font-weight:600;color:var(--c-text)">2. Free Music Archive <span style="color:var(--c-success);font-size:11px">✅ Gratis CC License</span></p>
+              <p style="color:var(--c-text-muted);font-size:12px">Buka <b>freemusicarchive.org</b> → pilih lagu → klik kanan tombol Download MP3 → "Copy link address".</p>
+            </div>
+            <div>
+              <p style="font-weight:600;color:var(--c-text)">3. GitHub / Google Drive / OneDrive</p>
+              <p style="color:var(--c-text-muted);font-size:12px">Upload file MP3 ke GitHub (raw URL) atau Google Drive (ubah link ke format direct download). Pastikan file bisa diakses tanpa login.</p>
+            </div>
+            <div>
+              <p style="font-weight:600;color:var(--c-text)">4. Supabase Storage <span style="color:var(--c-success);font-size:11px">✅ Rekomendasi untuk file pribadi</span></p>
+              <p style="color:var(--c-text-muted);font-size:12px">Upload MP3 ke Supabase Storage bucket (set public) → copy URL publik → paste di sini. Cocok untuk lagu Jawa / Indonesia koleksi sendiri.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--c-warning-light);border-radius:8px;padding:12px;border-left:3px solid var(--c-warning)">
+          <p style="font-weight:600;color:var(--c-warning);margin-bottom:4px">⚠️ YouTube & Spotify</p>
+          <p style="color:var(--c-text);font-size:12px;line-height:1.7">URL dari YouTube / Spotify <b>tidak bisa</b> digunakan langsung karena bukan file audio langsung. Gunakan sumber yang memberikan link file .mp3 langsung.</p>
+        </div>
+
+        <div style="background:var(--c-success-light);border-radius:8px;padding:12px;border-left:3px solid var(--c-success)">
+          <p style="font-weight:600;color:var(--c-success);margin-bottom:6px">💡 Contoh URL yang Valid</p>
+          <code style="font-size:11px;color:var(--c-text-muted);word-break:break-all;display:block;line-height:1.8">
+            https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3<br>
+            https://files.freemusicarchive.org/storage.../track.mp3<br>
+            https://raw.githubusercontent.com/user/repo/main/lagu.mp3
+          </code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:12px 20px;border-top:1px solid var(--c-border);display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="font-size:12px;color:var(--c-text-muted)" id="mmTrackCount">0 lagu</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-outline" onclick="mmResetToDefault()">↺ Reset Default</button>
+        <button class="btn btn-sm btn-blue" onclick="closeMusicManager()">✓ Selesai</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -3986,17 +4104,41 @@ function toggleSidebarCollapse() {
 })();
 
 // ============ MUSIC PLAYER ============
+var MP_DEFAULT_TRACKS = [
+  { name: 'Lo-Fi Beats — Fokus Kerja',       sub: 'Ambient / Lo-Fi',     url: 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3' },
+  { name: 'Chill Office Vibes',              sub: 'Instrumental',         url: 'https://cdn.pixabay.com/audio/2022/03/15/audio_eb0e70e560.mp3' },
+  { name: 'Soft Piano — Deep Focus',         sub: 'Piano / Ambient',      url: 'https://cdn.pixabay.com/audio/2022/01/18/audio_d1718ab69a.mp3' },
+  { name: 'Morning Coffee Lounge',           sub: 'Acoustic / Jazz',      url: 'https://cdn.pixabay.com/audio/2022/08/03/audio_2dde668d05.mp3' },
+  { name: 'Productive Flow — Synth Ambient', sub: 'Electronic / Ambient', url: 'https://cdn.pixabay.com/audio/2023/03/13/audio_9e39b5782e.mp3' },
+];
+
 var MP = {
-  tracks: [
-    { name: 'Lo-Fi Beats — Fokus Kerja',        sub: 'Ambient / Lo-Fi', url: 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3' },
-    { name: 'Chill Office Vibes',                sub: 'Instrumental', url: 'https://cdn.pixabay.com/audio/2022/03/15/audio_eb0e70e560.mp3' },
-    { name: 'Soft Piano — Deep Focus',           sub: 'Piano / Ambient', url: 'https://cdn.pixabay.com/audio/2022/01/18/audio_d1718ab69a.mp3' },
-    { name: 'Morning Coffee Lounge',             sub: 'Acoustic / Jazz', url: 'https://cdn.pixabay.com/audio/2022/08/03/audio_2dde668d05.mp3' },
-    { name: 'Productive Flow — Synth Ambient',   sub: 'Electronic / Ambient', url: 'https://cdn.pixabay.com/audio/2023/03/13/audio_9e39b5782e.mp3' },
-  ],
+  tracks: [],
   current: 0,
   playing: false,
+  shuffle: false,
 };
+
+// Load saved playlist from localStorage
+function mpLoadSavedTracks() {
+  try {
+    var saved = localStorage.getItem('sianggaranMusicTracks');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        MP.tracks = parsed;
+        return;
+      }
+    }
+  } catch(e) {}
+  MP.tracks = MP_DEFAULT_TRACKS.slice();
+}
+
+function mpSaveTracks() {
+  try { localStorage.setItem('sianggaranMusicTracks', JSON.stringify(MP.tracks)); } catch(e) {}
+}
+
+mpLoadSavedTracks();
 
 var _audio = null;
 function getMpAudio() {
@@ -4011,12 +4153,15 @@ function mpLoadTrack(idx) {
   audio.src = t.url;
   audio.volume = document.getElementById('mpVolumeSlider').value / 100;
   document.getElementById('mpTrackName').textContent = t.name;
-  document.getElementById('mpTrackSub').textContent = t.sub + ' · Track ' + (idx+1) + ' / ' + MP.tracks.length;
+  document.getElementById('mpTrackSub').textContent = (t.sub || '') + ' · Track ' + (idx+1) + ' / ' + MP.tracks.length;
   MP.current = idx;
+  // Highlight in mini playlist
+  mpRenderPlaylist();
 }
 
 function mpTogglePlay() {
   var audio = getMpAudio();
+  if (MP.tracks.length === 0) { showToast('Playlist kosong — tambah lagu dulu via 🎼', 'error'); return; }
   if (!audio.src || audio.src === window.location.href) mpLoadTrack(MP.current);
   if (MP.playing) {
     audio.pause();
@@ -4028,19 +4173,26 @@ function mpTogglePlay() {
       MP.playing = true;
       document.getElementById('mpPlayBtn').textContent = '⏸ Pause';
       document.getElementById('mpVisualizer').classList.remove('paused');
-    }).catch(function(e) {
+    }).catch(function() {
       showToast('Browser memblokir autoplay — klik Play lagi', 'error');
     });
   }
 }
 
 function mpNext() {
-  var next = (MP.current + 1) % MP.tracks.length;
+  if (MP.tracks.length === 0) return;
+  var next;
+  if (MP.shuffle) {
+    do { next = Math.floor(Math.random() * MP.tracks.length); } while (MP.tracks.length > 1 && next === MP.current);
+  } else {
+    next = (MP.current + 1) % MP.tracks.length;
+  }
   mpLoadTrack(next);
   if (MP.playing) getMpAudio().play();
 }
 
 function mpPrev() {
+  if (MP.tracks.length === 0) return;
   var prev = (MP.current - 1 + MP.tracks.length) % MP.tracks.length;
   mpLoadTrack(prev);
   if (MP.playing) getMpAudio().play();
@@ -4050,10 +4202,57 @@ function mpSetVolume(val) {
   getMpAudio().volume = val / 100;
 }
 
+function mpToggleShuffle() {
+  MP.shuffle = !MP.shuffle;
+  var btn = document.getElementById('mpShuffleBtn');
+  if (btn) {
+    btn.style.background = MP.shuffle ? 'rgba(26,86,219,.35)' : '';
+    btn.style.color = MP.shuffle ? '#60a5fa' : '';
+  }
+}
+
+function mpRenderPlaylist() {
+  var el = document.getElementById('mpPlaylist');
+  if (!el) return;
+  if (MP.tracks.length === 0) {
+    el.innerHTML = '<p style="font-size:12px;color:#64748b;text-align:center;padding:8px">Belum ada lagu — tambah via 🎼</p>';
+    return;
+  }
+  el.innerHTML = MP.tracks.map(function(t, i) {
+    var active = i === MP.current;
+    return '<div onclick="mpJumpTo(' + i + ')" style="padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:2px;' +
+      (active ? 'background:rgba(26,86,219,.25);' : 'background:transparent;') + '">' +
+      '<span style="font-size:13px;width:16px;text-align:center;flex-shrink:0">' + (active ? '▶' : (i+1)) + '</span>' +
+      '<div style="min-width:0;flex:1">' +
+        '<div style="font-size:12px;font-weight:' + (active?'700':'500') + ';color:' + (active?'#e2e8f0':'#94a3b8') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(t.name) + '</div>' +
+        '<div style="font-size:10px;color:#475569">' + escHtml(t.sub||'') + '</div>' +
+      '</div></div>';
+  }).join('');
+}
+
+function mpJumpTo(idx) {
+  mpLoadTrack(idx);
+  if (!MP.playing) mpTogglePlay();
+}
+
+function toggleMpPlaylist() {
+  var pl = document.getElementById('mpPlaylist');
+  var btn = document.getElementById('mpPlaylistToggle');
+  var visible = pl.style.display !== 'none';
+  pl.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? '▾ Lihat Playlist' : '▴ Tutup Playlist';
+  if (!visible) mpRenderPlaylist();
+}
+
 function openMusicPlayer() {
   document.getElementById('musicPlayer').classList.add('show');
   document.getElementById('musicFab').classList.remove('show');
-  if (!getMpAudio().src || getMpAudio().src === window.location.href) mpLoadTrack(0);
+  if (MP.tracks.length > 0 && (!getMpAudio().src || getMpAudio().src === window.location.href)) {
+    mpLoadTrack(MP.current);
+  } else if (MP.tracks.length === 0) {
+    document.getElementById('mpTrackName').textContent = '— Belum ada lagu —';
+    document.getElementById('mpTrackSub').textContent = 'Tambah lagu via tombol 🎼';
+  }
 }
 
 function closeMusicPlayer() {
@@ -4061,11 +4260,161 @@ function closeMusicPlayer() {
   document.getElementById('musicFab').classList.add('show');
 }
 
-// Auto-advance track
 getMpAudio().addEventListener('ended', function() {
   mpNext();
-  if (MP.playing) getMpAudio().play();
 });
+
+// ============ MUSIC MANAGER ============
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function openMusicManager() {
+  document.getElementById('musicManagerOverlay').style.display = 'flex';
+  mmSwitchTab(1);
+  mmRenderTrackList();
+}
+
+function closeMusicManager() {
+  document.getElementById('musicManagerOverlay').style.display = 'none';
+  // Refresh player display
+  if (MP.tracks.length > 0) mpLoadTrack(Math.min(MP.current, MP.tracks.length-1));
+  else {
+    document.getElementById('mpTrackName').textContent = '— Belum ada lagu —';
+    document.getElementById('mpTrackSub').textContent = 'Tambah lagu via tombol 🎼';
+  }
+}
+
+function mmSwitchTab(n) {
+  [1,2,3].forEach(function(i) {
+    var pane = document.getElementById('mmPane'+i);
+    var tab = document.getElementById('mmTab'+i);
+    if (pane) pane.style.display = i===n ? 'block' : 'none';
+    if (tab) {
+      tab.style.borderBottomColor = i===n ? 'var(--c-primary)' : 'transparent';
+      tab.style.color = i===n ? 'var(--c-primary)' : 'var(--c-text-muted)';
+      tab.style.fontWeight = i===n ? '600' : '400';
+    }
+  });
+  if (n===1) mmRenderTrackList();
+  if (n===2) mmCancelEdit();
+}
+
+function mmRenderTrackList() {
+  var el = document.getElementById('mmTrackList');
+  var countEl = document.getElementById('mmTrackCount');
+  if (countEl) countEl.textContent = MP.tracks.length + ' lagu';
+  if (!el) return;
+  if (MP.tracks.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--c-text-muted)">' +
+      '<div style="font-size:36px;margin-bottom:10px">🎵</div>' +
+      '<p style="font-weight:600">Playlist kosong</p>' +
+      '<p style="font-size:12px;margin-top:4px">Klik tab "Tambah Lagu" untuk mulai</p></div>';
+    return;
+  }
+  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">' +
+    MP.tracks.map(function(t, i) {
+      var isPlaying = i === MP.current && MP.playing;
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--c-surface2);border-radius:8px;border:1px solid var(--c-border)">' +
+        '<div style="width:28px;height:28px;border-radius:50%;background:var(--c-primary);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex-shrink:0;font-weight:700">' + (i+1) + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(t.name) + (isPlaying ? ' <span style="color:var(--c-primary);font-size:10px">▶ Sedang diputar</span>' : '') + '</div>' +
+          '<div style="font-size:11px;color:var(--c-text-muted)">' + escHtml(t.sub||'') + '</div>' +
+          '<div style="font-size:10px;color:#64748b;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">' + escHtml(t.url) + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:4px;flex-shrink:0">' +
+          (i>0?'<button onclick="mmMoveUp('+i+')" class="btn btn-sm btn-outline" title="Naikan">↑</button>':'') +
+          (i<MP.tracks.length-1?'<button onclick="mmMoveDown('+i+')" class="btn btn-sm btn-outline" title="Turunkan">↓</button>':'') +
+          '<button onclick="mmEditTrack('+i+')" class="btn btn-sm btn-outline">✏️</button>' +
+          '<button onclick="mmDeleteTrack('+i+')" class="btn btn-sm btn-red">🗑</button>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+}
+
+function mmEditTrack(idx) {
+  var t = MP.tracks[idx];
+  if (!t) return;
+  document.getElementById('mmEditIdx').value = idx;
+  document.getElementById('mmName').value = t.name;
+  document.getElementById('mmSub').value = t.sub || '';
+  document.getElementById('mmUrl').value = t.url;
+  document.getElementById('mmTestArea').style.display = 'none';
+  mmSwitchTab(2);
+}
+
+function mmCancelEdit() {
+  document.getElementById('mmEditIdx').value = -1;
+  document.getElementById('mmName').value = '';
+  document.getElementById('mmSub').value = '';
+  document.getElementById('mmUrl').value = '';
+  document.getElementById('mmTestArea').style.display = 'none';
+}
+
+function mmSaveTrack() {
+  var name = document.getElementById('mmName').value.trim();
+  var sub  = document.getElementById('mmSub').value.trim();
+  var url  = document.getElementById('mmUrl').value.trim();
+  if (!name) { showToast('Nama lagu wajib diisi', 'error'); return; }
+  if (!url)  { showToast('URL audio wajib diisi', 'error'); return; }
+  if (!url.startsWith('http')) { showToast('URL harus diawali https://', 'error'); return; }
+  var track = { name: name, sub: sub, url: url };
+  var editIdx = parseInt(document.getElementById('mmEditIdx').value);
+  if (editIdx >= 0 && editIdx < MP.tracks.length) {
+    MP.tracks[editIdx] = track;
+    showToast('Lagu berhasil diperbarui ✅');
+  } else {
+    MP.tracks.push(track);
+    showToast('Lagu berhasil ditambahkan ✅');
+  }
+  mpSaveTracks();
+  mmCancelEdit();
+  mmSwitchTab(1);
+}
+
+function mmDeleteTrack(idx) {
+  var t = MP.tracks[idx];
+  if (!confirm('Hapus lagu "' + t.name + '" dari playlist?')) return;
+  MP.tracks.splice(idx, 1);
+  if (MP.current >= MP.tracks.length) MP.current = Math.max(0, MP.tracks.length-1);
+  mpSaveTracks();
+  mmRenderTrackList();
+  showToast('Lagu dihapus');
+}
+
+function mmMoveUp(idx) {
+  if (idx === 0) return;
+  var tmp = MP.tracks[idx-1]; MP.tracks[idx-1] = MP.tracks[idx]; MP.tracks[idx] = tmp;
+  if (MP.current === idx) MP.current = idx-1;
+  else if (MP.current === idx-1) MP.current = idx;
+  mpSaveTracks(); mmRenderTrackList();
+}
+
+function mmMoveDown(idx) {
+  if (idx >= MP.tracks.length-1) return;
+  var tmp = MP.tracks[idx+1]; MP.tracks[idx+1] = MP.tracks[idx]; MP.tracks[idx] = tmp;
+  if (MP.current === idx) MP.current = idx+1;
+  else if (MP.current === idx+1) MP.current = idx;
+  mpSaveTracks(); mmRenderTrackList();
+}
+
+function mmResetToDefault() {
+  if (!confirm('Reset playlist ke daftar lagu default?\nSemua lagu yang sudah Anda tambahkan akan dihapus.')) return;
+  MP.tracks = MP_DEFAULT_TRACKS.slice();
+  MP.current = 0;
+  mpSaveTracks();
+  mmRenderTrackList();
+  showToast('Playlist direset ke default ✅');
+}
+
+function mmTestUrl() {
+  var url = document.getElementById('mmUrl').value.trim();
+  if (!url) { showToast('Isi URL terlebih dahulu', 'error'); return; }
+  var testAudio = document.getElementById('mmTestAudio');
+  testAudio.src = url;
+  document.getElementById('mmTestArea').style.display = 'block';
+  showToast('Silakan klik play di bawah untuk tes audio 🔊');
+}
 
 </script>
 </body>
