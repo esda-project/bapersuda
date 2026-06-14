@@ -497,6 +497,188 @@ td.center{text-align:center}
   /* Sembunyikan semua saat print dari main window — cetak via popup */
   body * { display: none !important; }
 }
+
+/* ===== SIDEBAR COLLAPSE (DESKTOP) ===== */
+.sidebar-toggle-btn {
+  display:flex;align-items:center;justify-content:center;
+  width:32px;height:32px;border-radius:7px;
+  background:rgba(255,255,255,.08);border:none;color:var(--c-sidebar-text);
+  cursor:pointer;font-size:14px;transition:all .2s;flex-shrink:0;
+  margin-left:auto;
+}
+.sidebar-toggle-btn:hover{background:rgba(255,255,255,.16);color:#fff}
+.sidebar-brand-row{display:flex;align-items:center;gap:8px}
+.sidebar-brand-row h2{flex:1}
+
+/* Collapsed sidebar */
+.sidebar.collapsed {
+  width:60px!important;
+}
+.sidebar.collapsed .sidebar-brand-row h2,
+.sidebar.collapsed .sidebar-brand p,
+.sidebar.collapsed .sidebar-user-info,
+.sidebar.collapsed .nav-section,
+.sidebar.collapsed .nav-item span:not(.icon),
+.sidebar.collapsed .sidebar-meta,
+.sidebar.collapsed #themeToggle,
+.sidebar.collapsed .sidebar-footer > div,
+.sidebar.collapsed .sidebar-footer > button:not(.sidebar-toggle-btn) {
+  display:none!important;
+}
+.sidebar.collapsed .sidebar-user {
+  justify-content:center;padding:12px 0;
+}
+.sidebar.collapsed .nav-item {
+  justify-content:center;padding:12px 0;border-left:none;
+  position:relative;
+}
+.sidebar.collapsed .nav-item .icon { font-size:18px;width:auto }
+.sidebar.collapsed .sidebar-brand { padding:16px 0;display:flex;justify-content:center }
+.sidebar.collapsed .sidebar-footer { padding:10px 0;display:flex;flex-direction:column;align-items:center;gap:6px }
+.sidebar.collapsed .sidebar-toggle-btn { margin:0 }
+/* Tooltip on collapsed nav */
+.sidebar.collapsed .nav-item::after {
+  content:attr(data-label);
+  position:absolute;left:68px;
+  background:#1e293b;color:#fff;padding:4px 10px;
+  border-radius:6px;font-size:12px;white-space:nowrap;
+  opacity:0;pointer-events:none;transition:opacity .15s;
+  box-shadow:var(--shadow-md);z-index:300;border:1px solid rgba(255,255,255,.1);
+}
+.sidebar.collapsed .nav-item:hover::after { opacity:1 }
+
+/* Main content expansion when sidebar collapsed */
+#app.sidebar-collapsed .main-content { flex:1 }
+
+/* ===== DATETIME WIDGET IN TOPBAR ===== */
+#datetimeWidget {
+  display:flex;flex-direction:column;align-items:flex-end;
+  padding:4px 10px;background:var(--c-surface2);
+  border:1px solid var(--c-border);border-radius:8px;
+  line-height:1.3;min-width:140px;
+}
+#dtTime {
+  font-size:16px;font-weight:700;color:var(--c-primary);
+  font-family:var(--font-mono);letter-spacing:.5px;
+}
+#dtDate {
+  font-size:10px;color:var(--c-text-muted);font-weight:500;
+}
+
+/* ===== GREETING BANNER ===== */
+#greetingBanner {
+  display:none;
+  background:linear-gradient(135deg,var(--c-primary-light),var(--c-accent-light));
+  border-bottom:1px solid var(--c-border);
+  padding:7px 24px;font-size:13px;
+  color:var(--c-text);animation:greetIn .4s ease both;
+  position:relative;
+}
+@keyframes greetIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+#greetingBanner .greet-close {
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;color:var(--c-text-muted);font-size:16px;
+}
+#greetingBanner .greet-name { font-weight:700;color:var(--c-primary) }
+#greetingBanner .greet-text { color:var(--c-text-muted);font-size:12px;margin-top:1px }
+
+/* ===== FLOATING MUSIC PLAYER ===== */
+#musicPlayer {
+  position:fixed;bottom:24px;right:24px;z-index:8888;
+  background:var(--c-sidebar-bg);border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;padding:12px 14px;
+  box-shadow:0 8px 32px rgba(0,0,0,.35);
+  min-width:230px;max-width:260px;
+  backdrop-filter:blur(12px);
+  animation:playerIn .4s cubic-bezier(.16,1,.3,1) both;
+  display:none;
+}
+@keyframes playerIn{from{opacity:0;transform:translateY(20px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+#musicPlayer.show { display:block }
+.mp-header {
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;
+}
+.mp-title {
+  font-size:11px;font-weight:700;color:#94a3b8;
+  text-transform:uppercase;letter-spacing:1px;
+}
+.mp-close {
+  background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;line-height:1;
+}
+.mp-close:hover{color:#94a3b8}
+.mp-track-info {
+  margin-bottom:10px;min-height:30px;
+}
+.mp-track-name {
+  font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+.mp-track-sub {font-size:10px;color:#64748b;margin-top:2px}
+.mp-visualizer {
+  display:flex;align-items:flex-end;gap:2px;height:20px;margin-bottom:10px;
+}
+.mp-bar {
+  width:3px;border-radius:2px;background:#1a56db;
+  animation:mpBar .8s ease-in-out infinite alternate;
+}
+.mp-bar:nth-child(1){height:40%;animation-delay:0s}
+.mp-bar:nth-child(2){height:70%;animation-delay:.1s}
+.mp-bar:nth-child(3){height:100%;animation-delay:.2s}
+.mp-bar:nth-child(4){height:55%;animation-delay:.3s}
+.mp-bar:nth-child(5){height:80%;animation-delay:.05s}
+.mp-bar:nth-child(6){height:35%;animation-delay:.25s}
+.mp-bar:nth-child(7){height:65%;animation-delay:.15s}
+.mp-bar:nth-child(8){height:90%;animation-delay:.35s}
+@keyframes mpBar{from{opacity:.5;transform:scaleY(.6)}to{opacity:1;transform:scaleY(1)}}
+.mp-visualizer.paused .mp-bar { animation-play-state:paused;opacity:.3 }
+.mp-controls {
+  display:flex;align-items:center;gap:6px;margin-bottom:10px;
+}
+.mp-btn {
+  background:rgba(255,255,255,.07);border:none;border-radius:7px;
+  color:#94a3b8;cursor:pointer;padding:6px 8px;font-size:14px;
+  transition:all .15s;
+}
+.mp-btn:hover{background:rgba(255,255,255,.14);color:#fff}
+.mp-btn.play-btn {
+  background:var(--c-primary);color:#fff;border-radius:8px;
+  padding:7px 14px;font-size:15px;flex:1;
+}
+.mp-btn.play-btn:hover{background:var(--c-primary-dark)}
+.mp-volume {
+  display:flex;align-items:center;gap:6px;
+}
+.mp-volume span{font-size:12px;color:#64748b}
+#mpVolumeSlider {
+  flex:1;-webkit-appearance:none;appearance:none;
+  height:3px;background:rgba(255,255,255,.15);border-radius:2px;outline:none;cursor:pointer;
+}
+#mpVolumeSlider::-webkit-slider-thumb {
+  -webkit-appearance:none;width:12px;height:12px;
+  border-radius:50%;background:var(--c-primary);cursor:pointer;
+}
+
+/* Music trigger FAB */
+#musicFab {
+  position:fixed;bottom:24px;right:24px;z-index:8887;
+  width:46px;height:46px;border-radius:50%;
+  background:var(--c-primary);border:none;color:#fff;
+  font-size:20px;cursor:pointer;box-shadow:0 4px 20px rgba(26,86,219,.45);
+  display:none;transition:transform .2s,box-shadow .2s;
+  animation:fabIn .4s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes fabIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+#musicFab:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(26,86,219,.6)}
+#musicFab.show { display:flex;align-items:center;justify-content:center }
+
+@media(max-width:768px){
+  #datetimeWidget{min-width:100px}
+  #dtTime{font-size:13px}
+  #dtDate{display:none}
+  #musicPlayer{right:12px;bottom:70px;min-width:200px}
+  #musicFab{right:12px;bottom:70px}
+  .sidebar.collapsed{width:var(--sidebar-w)!important}/* don't collapse on mobile */
+}
 </style>
 </head>
 <body>
@@ -602,9 +784,12 @@ td.center{text-align:center}
 <!-- ===== MAIN APP ===== -->
 <div id="app">
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="mainSidebar">
     <div class="sidebar-brand">
-      <h2>💼 SIANGGARAN</h2>
+      <div class="sidebar-brand-row">
+        <h2>💼 SIANGGARAN</h2>
+        <button class="sidebar-toggle-btn" id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="Sembunyikan/tampilkan sidebar">◀</button>
+      </div>
       <p id="sbSkpd">Bagian Perekonomian & SDA</p>
     </div>
     <div class="sidebar-user">
@@ -616,31 +801,31 @@ td.center{text-align:center}
     </div>
     <nav class="sidebar-nav">
       <div class="nav-section">Utama</div>
-      <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+      <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard" data-label="Dashboard">
         <span class="icon">📊</span> Dashboard
       </div>
       <div class="nav-section">Input Data</div>
-      <div class="nav-item" onclick="showPage('anggaran')" id="nav-anggaran">
+      <div class="nav-item" onclick="showPage('anggaran')" id="nav-anggaran" data-label="Input Anggaran">
         <span class="icon">📋</span> Input Anggaran
       </div>
-      <div class="nav-item" onclick="showPage('kas')" id="nav-kas">
+      <div class="nav-item" onclick="showPage('kas')" id="nav-kas" data-label="Anggaran Kas">
         <span class="icon">💰</span> Anggaran Kas
       </div>
-      <div class="nav-item" onclick="showPage('realisasi')" id="nav-realisasi">
+      <div class="nav-item" onclick="showPage('realisasi')" id="nav-realisasi" data-label="Input Realisasi">
         <span class="icon">📑</span> Input Realisasi
       </div>
-      <div class="nav-item" onclick="showPage('cari')" id="nav-cari">
+      <div class="nav-item" onclick="showPage('cari')" id="nav-cari" data-label="Pencarian">
         <span class="icon">🔍</span> Pencarian
       </div>
       <div class="nav-section">Laporan</div>
-      <div class="nav-item" onclick="showPage('rekap')" id="nav-rekap">
+      <div class="nav-item" onclick="showPage('rekap')" id="nav-rekap" data-label="Rekap Realisasi">
         <span class="icon">📈</span> Rekap Realisasi
       </div>
-      <div class="nav-item" onclick="showPage('lra')" id="nav-lra">
+      <div class="nav-item" onclick="showPage('lra')" id="nav-lra" data-label="Laporan LRA">
         <span class="icon">📄</span> Laporan LRA
       </div>
       <div class="nav-section">Admin</div>
-      <div class="nav-item" onclick="showPage('pengguna')" id="nav-pengguna">
+      <div class="nav-item" onclick="showPage('pengguna')" id="nav-pengguna" data-label="Pengguna">
         <span class="icon">👥</span> Pengguna
       </div>
     </nav>
@@ -684,7 +869,17 @@ td.center{text-align:center}
       <div class="topbar-right">
         <span class="topbar-badge badge-tahun" id="tbTahun">TA 2026</span>
         <span class="topbar-badge badge-tahapan" id="tbTahapan">Murni</span>
+        <div id="datetimeWidget">
+          <div id="dtTime">--:--:--</div>
+          <div id="dtDate">---</div>
+        </div>
       </div>
+    </div>
+
+    <!-- GREETING BANNER -->
+    <div id="greetingBanner">
+      <span id="greetingText"></span>
+      <button class="greet-close" onclick="document.getElementById('greetingBanner').style.display='none'" title="Tutup">✕</button>
     </div>
 
     <div class="page-content" id="pageContent">
@@ -3638,6 +3833,240 @@ document.querySelectorAll('.nav-item').forEach(function(el) {
 window.addEventListener('resize', function() {
   if (window.innerWidth > 768) closeSidebar();
 });
+</script>
+
+<!-- ===== FLOATING MUSIC PLAYER ===== -->
+<button id="musicFab" onclick="openMusicPlayer()" title="Putar Musik Kerja 🎵">🎵</button>
+
+<div id="musicPlayer">
+  <div class="mp-header">
+    <span class="mp-title">🎵 Musik Kerja</span>
+    <button class="mp-close" onclick="closeMusicPlayer()" title="Minimize">▼</button>
+  </div>
+  <div class="mp-track-info">
+    <div class="mp-track-name" id="mpTrackName">Lo-Fi Beats — Fokus Kerja</div>
+    <div class="mp-track-sub" id="mpTrackSub">Track 1 / 5</div>
+  </div>
+  <div class="mp-visualizer" id="mpVisualizer">
+    <div class="mp-bar"></div><div class="mp-bar"></div><div class="mp-bar"></div>
+    <div class="mp-bar"></div><div class="mp-bar"></div><div class="mp-bar"></div>
+    <div class="mp-bar"></div><div class="mp-bar"></div>
+  </div>
+  <div class="mp-controls">
+    <button class="mp-btn" onclick="mpPrev()" title="Sebelumnya">⏮</button>
+    <button class="mp-btn play-btn" id="mpPlayBtn" onclick="mpTogglePlay()">▶ Play</button>
+    <button class="mp-btn" onclick="mpNext()" title="Berikutnya">⏭</button>
+  </div>
+  <div class="mp-volume">
+    <span>🔈</span>
+    <input type="range" id="mpVolumeSlider" min="0" max="100" value="40" oninput="mpSetVolume(this.value)">
+    <span>🔊</span>
+  </div>
+</div>
+
+<audio id="bgAudio" preload="none"></audio>
+
+<script>
+/* ===================================================
+   FITUR BARU: Datetime, Greeting, Music, Sidebar Collapse
+   =================================================== */
+
+// ============ DATETIME WIDGET ============
+function startDatetimeWidget() {
+  var HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  var BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  function tick() {
+    var now = new Date();
+    var h = String(now.getHours()).padStart(2,'0');
+    var m = String(now.getMinutes()).padStart(2,'0');
+    var s = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('dtTime').textContent = h+':'+m+':'+s;
+    document.getElementById('dtDate').textContent =
+      HARI[now.getDay()] + ', ' + now.getDate() + ' ' + BULAN[now.getMonth()] + ' ' + now.getFullYear();
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+startDatetimeWidget();
+
+// ============ GREETING (BAHASA JAWA MALANG) ============
+var GREETINGS_JAWA = {
+  // pagi (05-11)
+  pagi: [
+    'Sugeng énjing, {nama}! Wes tangi awakmu? Ayo kerjo seng apik dino iki! 💪',
+    'Monggo, {nama}! Isuk-isuk wes semangat — mantap tenan awakmu! ☕',
+    'Éh {nama}! Énjing apik iki, ayo diselesno anggaran e seng beres! 🌅',
+  ],
+  // siang (11-14)
+  siang: [
+    'Nopo kabare, {nama}? Siang-siang ojo ngantuk lo, data e isih akeh! 😄',
+    'Woi {nama}! Wes awan iki, ndang diselesno kerjane — makan siang ndisik gapopo! 🍱',
+    'Sugeng siyang, {nama}! Semangat terus yo — anggaran e ra bakal ngitung dewek! 📊',
+  ],
+  // sore (14-18)
+  sore: [
+    'Sore-sore, {nama}! Wes hampir beres iki, dikit maneh dijogo semangate! 🌆',
+    'Ayo {nama}! Bentar maneh pulang, tapi kerjane diselesno sik yo! 😊',
+    'Eh {nama}, awakmu kuat tenan lho, sore masih ndeprok nang SIANGGARAN! 👏',
+  ],
+  // malam (18-23)
+  malam: [
+    'Wuih {nama}! Malem-malem masih manglingi anggaran — dedicated tenan! 🌙',
+    'Monggo {nama}, ojo kesuwen lo, istirahat yo penting nggo awakmu! 😴',
+    'Sugeng dalu, {nama}! Semangat dino iki, sesuk diterusno maneh! ✨',
+  ],
+  // dini hari (00-05)
+  dinihari: [
+    'Hadeh {nama}! Tengah wengi kok isih nyambut gawe — awakmu kuat tenan! 🌟',
+    'Weh {nama}, dini hari iku waktune turu lho! Data e ra ilang kok! 😅',
+  ],
+};
+
+function showGreeting(nama) {
+  var hour = new Date().getHours();
+  var key = hour >= 5 && hour < 11 ? 'pagi'
+          : hour >= 11 && hour < 14 ? 'siang'
+          : hour >= 14 && hour < 18 ? 'sore'
+          : hour >= 18 && hour < 23 ? 'malam' : 'dinihari';
+  var arr = GREETINGS_JAWA[key];
+  var template = arr[Math.floor(Math.random() * arr.length)];
+  var text = template.replace('{nama}', '<span class="greet-name">' + nama + '</span>');
+  document.getElementById('greetingText').innerHTML = text;
+  var banner = document.getElementById('greetingBanner');
+  banner.style.display = 'block';
+  // Auto-dismiss setelah 10 detik
+  setTimeout(function() { banner.style.display = 'none'; }, 10000);
+}
+
+// Patch doLogin untuk tampilkan greeting
+var _origDoLogin = window.doLogin;
+// Override startClock agar juga tampilkan greeting setelah login
+var _origStartClock = window.startClock;
+window.startClock = function() {
+  if (_origStartClock) _origStartClock();
+  // Tampilkan greeting
+  setTimeout(function() {
+    var nama = (STATE.user && STATE.user.nama) ? STATE.user.nama.split(',')[0].trim() : 'Sampeyan';
+    showGreeting(nama);
+    // Tampilkan FAB musik setelah login
+    var fab = document.getElementById('musicFab');
+    if (fab) fab.classList.add('show');
+  }, 600);
+};
+
+// ============ SIDEBAR COLLAPSE (DESKTOP) ============
+var _sidebarCollapsed = false;
+function toggleSidebarCollapse() {
+  if (window.innerWidth <= 768) return; // mobile pakai toggle biasa
+  _sidebarCollapsed = !_sidebarCollapsed;
+  var sb = document.getElementById('mainSidebar');
+  var btn = document.getElementById('sidebarCollapseBtn');
+  if (sb) sb.classList.toggle('collapsed', _sidebarCollapsed);
+  if (btn) btn.textContent = _sidebarCollapsed ? '▶' : '◀';
+  // Simpan preference
+  try { localStorage.setItem('sianggaranSidebarCollapsed', _sidebarCollapsed ? '1' : '0'); } catch(e){}
+}
+
+// Restore sidebar collapse state
+(function() {
+  try {
+    var stored = localStorage.getItem('sianggaranSidebarCollapsed');
+    if (stored === '1') {
+      setTimeout(function() {
+        var sb = document.getElementById('mainSidebar');
+        var btn = document.getElementById('sidebarCollapseBtn');
+        if (sb && window.innerWidth > 768) {
+          sb.classList.add('collapsed');
+          if (btn) btn.textContent = '▶';
+          _sidebarCollapsed = true;
+        }
+      }, 100);
+    }
+  } catch(e){}
+})();
+
+// ============ MUSIC PLAYER ============
+var MP = {
+  tracks: [
+    { name: 'Lo-Fi Beats — Fokus Kerja',        sub: 'Ambient / Lo-Fi', url: 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3' },
+    { name: 'Chill Office Vibes',                sub: 'Instrumental', url: 'https://cdn.pixabay.com/audio/2022/03/15/audio_eb0e70e560.mp3' },
+    { name: 'Soft Piano — Deep Focus',           sub: 'Piano / Ambient', url: 'https://cdn.pixabay.com/audio/2022/01/18/audio_d1718ab69a.mp3' },
+    { name: 'Morning Coffee Lounge',             sub: 'Acoustic / Jazz', url: 'https://cdn.pixabay.com/audio/2022/08/03/audio_2dde668d05.mp3' },
+    { name: 'Productive Flow — Synth Ambient',   sub: 'Electronic / Ambient', url: 'https://cdn.pixabay.com/audio/2023/03/13/audio_9e39b5782e.mp3' },
+  ],
+  current: 0,
+  playing: false,
+};
+
+var _audio = null;
+function getMpAudio() {
+  if (!_audio) _audio = document.getElementById('bgAudio');
+  return _audio;
+}
+
+function mpLoadTrack(idx) {
+  var audio = getMpAudio();
+  var t = MP.tracks[idx];
+  if (!t) return;
+  audio.src = t.url;
+  audio.volume = document.getElementById('mpVolumeSlider').value / 100;
+  document.getElementById('mpTrackName').textContent = t.name;
+  document.getElementById('mpTrackSub').textContent = t.sub + ' · Track ' + (idx+1) + ' / ' + MP.tracks.length;
+  MP.current = idx;
+}
+
+function mpTogglePlay() {
+  var audio = getMpAudio();
+  if (!audio.src || audio.src === window.location.href) mpLoadTrack(MP.current);
+  if (MP.playing) {
+    audio.pause();
+    MP.playing = false;
+    document.getElementById('mpPlayBtn').textContent = '▶ Play';
+    document.getElementById('mpVisualizer').classList.add('paused');
+  } else {
+    audio.play().then(function() {
+      MP.playing = true;
+      document.getElementById('mpPlayBtn').textContent = '⏸ Pause';
+      document.getElementById('mpVisualizer').classList.remove('paused');
+    }).catch(function(e) {
+      showToast('Browser memblokir autoplay — klik Play lagi', 'error');
+    });
+  }
+}
+
+function mpNext() {
+  var next = (MP.current + 1) % MP.tracks.length;
+  mpLoadTrack(next);
+  if (MP.playing) getMpAudio().play();
+}
+
+function mpPrev() {
+  var prev = (MP.current - 1 + MP.tracks.length) % MP.tracks.length;
+  mpLoadTrack(prev);
+  if (MP.playing) getMpAudio().play();
+}
+
+function mpSetVolume(val) {
+  getMpAudio().volume = val / 100;
+}
+
+function openMusicPlayer() {
+  document.getElementById('musicPlayer').classList.add('show');
+  document.getElementById('musicFab').classList.remove('show');
+  if (!getMpAudio().src || getMpAudio().src === window.location.href) mpLoadTrack(0);
+}
+
+function closeMusicPlayer() {
+  document.getElementById('musicPlayer').classList.remove('show');
+  document.getElementById('musicFab').classList.add('show');
+}
+
+// Auto-advance track
+getMpAudio().addEventListener('ended', function() {
+  mpNext();
+  if (MP.playing) getMpAudio().play();
+});
+
 </script>
 </body>
 </html>
