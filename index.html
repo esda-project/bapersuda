@@ -824,6 +824,13 @@ td.center{text-align:center}
       <div class="nav-item" onclick="showPage('lra')" id="nav-lra" data-label="Laporan LRA">
         <span class="icon">📄</span> Laporan LRA
       </div>
+      <div class="nav-section" id="navSectionPengadaan">Pengadaan</div>
+      <div class="nav-item" onclick="showPage('notaPPTK')" id="nav-notaPPTK" data-label="Nota Dinas PPTK">
+        <span class="icon">📝</span> Nota Dinas PPTK
+      </div>
+      <div class="nav-item" onclick="showPage('notaPPK')" id="nav-notaPPK" data-label="Nota Dinas PPK">
+        <span class="icon">📋</span> Nota Dinas PPK
+      </div>
       <div class="nav-section">Admin</div>
       <div class="nav-item" onclick="showPage('pengguna')" id="nav-pengguna" data-label="Pengguna">
         <span class="icon">👥</span> Pengguna
@@ -1038,9 +1045,9 @@ td.center{text-align:center}
     </div>
     <div class="modal-body">
       <div class="form-grid">
-        <div class="form-group">
+        <div class="form-group span2">
           <label class="form-label">Nama Lengkap</label>
-          <input class="form-input" id="pNama" placeholder="Nama pengguna">
+          <input class="form-input" id="pNama" placeholder="Nama lengkap dengan gelar">
         </div>
         <div class="form-group">
           <label class="form-label">Username</label>
@@ -1051,15 +1058,25 @@ td.center{text-align:center}
           <input class="form-input" id="pPassword" type="password" placeholder="Password baru">
         </div>
         <div class="form-group">
+          <label class="form-label">NIP</label>
+          <input class="form-input" id="pNip" placeholder="19xxxxxxxxxxxxxxxx">
+        </div>
+        <div class="form-group">
           <label class="form-label">Role / Hak Akses</label>
           <select class="form-select" id="pRole">
             <option value="admin">Admin (Full Access)</option>
-            <option value="input">Operator Input</option>
+            <option value="kpa">KPA / PPK (Kepala Bagian)</option>
+            <option value="input">Operator Input (PPTK)</option>
             <option value="view">Viewer (Read Only)</option>
           </select>
         </div>
         <div class="form-group span2">
-          <label class="form-label">Jabatan / Keterangan</label>
+          <label class="form-label">Jabatan Resmi (untuk Nota Dinas)</label>
+          <input class="form-input" id="pJabatanResmi" placeholder="Misal: Kepala Bagian Perekonomian dan Sumber Daya Alam">
+          <span class="form-hint">Jabatan yang tercetak pada tanda tangan nota dinas</span>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Jabatan / Keterangan Internal</label>
           <input class="form-input" id="pJabatan" placeholder="Misal: Kasubag Anggaran">
         </div>
         <input type="hidden" id="pId">
@@ -1104,7 +1121,8 @@ const STATE = {
     {id:1,nama:'Administrator',username:'admin',password:'admin123',role:'admin',jabatan:'Admin Sistem'},
     {id:2,nama:'TENGKO WOLOK, S.T.',username:'tengko',password:'pptk123',role:'input',jabatan:'PPTK'},
   ],
-  aiAnalysisCache: null
+  aiAnalysisCache: null,
+  notaDinas: {pptk:[], ppk:[]}  // Nota Dinas PPTK dan PPK
 };
 
 // ========================================
@@ -1510,6 +1528,7 @@ function loadState() {
       const d = JSON.parse(s);
       // Only load non-data settings from localStorage (dark mode, etc)
       if (d.darkMode !== undefined) STATE.darkMode = d.darkMode;
+    if (d.notaDinas) STATE.notaDinas = d.notaDinas;
     }
   } catch(e){}
 }
@@ -1578,6 +1597,7 @@ async function doLogin() {
   // Load data from Supabase
   if (sbClient) {
     await loadDataFromSupabase();
+    await ndLoadSupabase();  // Load nota dinas
     showPage('dashboard');
   }
 }
@@ -1664,22 +1684,38 @@ function updateSidebar() {
   const u = STATE.user;
   document.getElementById('sbAvatar').textContent = u.nama.charAt(0).toUpperCase();
   document.getElementById('sbUserName').textContent = u.nama;
-  document.getElementById('sbUserRole').textContent = u.role === 'admin' ? 'Administrator' : u.role === 'input' ? 'Operator' : 'Viewer';
+  const roleLabels = {admin:'Administrator', input:'Operator', view:'Viewer', kpa:'KPA / PPK'};
+  document.getElementById('sbUserRole').textContent = roleLabels[u.role] || u.role;
   document.getElementById('sbTahun').textContent = 'TA: ' + STATE.tahun;
   document.getElementById('sbTahapan').textContent = 'Tahapan: ' + STATE.tahapan;
   document.getElementById('tbTahun').textContent = 'TA ' + STATE.tahun;
   document.getElementById('tbTahapan').textContent = STATE.tahapan;
 
-  // Sembunyikan menu Pengguna untuk non-admin
+  const isAdmin = u.role === 'admin';
+  const isKPA   = u.role === 'kpa';
+  const isInput = u.role === 'input';
+  // isView  = u.role === 'view' — semua menu tampil tapi readonly
+
+  // Menu Pengguna: hanya admin
   const navPengguna = document.getElementById('nav-pengguna');
-  if (navPengguna) {
-    navPengguna.style.display = (u.role === 'admin') ? '' : 'none';
-  }
-  // Sembunyikan section label "Admin" jika bukan admin
+  if (navPengguna) navPengguna.style.display = isAdmin ? '' : 'none';
+  // Label Admin section
   const adminSection = navPengguna ? navPengguna.previousElementSibling : null;
   if (adminSection && adminSection.classList.contains('nav-section')) {
-    adminSection.style.display = (u.role === 'admin') ? '' : 'none';
+    adminSection.style.display = isAdmin ? '' : 'none';
   }
+
+  // Menu Nota Dinas: admin, input, kpa
+  const canNota = isAdmin || isInput || isKPA;
+  const navPPTK = document.getElementById('nav-notaPPTK');
+  const navPPK  = document.getElementById('nav-notaPPK');
+  const navSecPengadaan = document.getElementById('navSectionPengadaan');
+  if (navPPTK) navPPTK.style.display = (isAdmin || isInput) ? '' : 'none';
+  if (navPPK)  navPPK.style.display  = canNota ? '' : 'none';
+  if (navSecPengadaan) navSecPengadaan.style.display = canNota ? '' : 'none';
+
+  // KPA: menu Input Data jadi readonly (hanya bisa lihat)
+  // Tidak disembunyikan, tapi aksi write akan di-guard di masing-masing render
 }
 
 function startClock() {
@@ -1733,12 +1769,24 @@ const PAGE_META = {
   lra: {title:'Laporan LRA',sub:'Laporan Realisasi Anggaran resmi SKPD'},
   pengguna: {title:'Manajemen Pengguna',sub:'Kelola akun dan hak akses pengguna'},
   cari: {title:'Pencarian Data',sub:'Cari realisasi dan sisa anggaran berdasarkan kegiatan, sub kegiatan, atau belanja'},
+  notaPPTK: {title:'Nota Dinas PPTK',sub:'Persiapan pengadaan barang/jasa — dari PPTK ke PPK'},
+  notaPPK:  {title:'Nota Dinas PPK',sub:'Pelaksanaan pengadaan barang/jasa — dari PPK ke Pejabat Pengadaan'},
 };
 
 function showPage(page) {
   // Guard: halaman Pengguna hanya untuk admin
   if (page === 'pengguna' && STATE.user && STATE.user.role !== 'admin') {
     showToast('Akses ditolak. Halaman Pengguna hanya untuk Administrator.', 'error');
+    return;
+  }
+  // Guard: Nota PPTK hanya admin & input
+  if (page === 'notaPPTK' && STATE.user && !['admin','input'].includes(STATE.user.role)) {
+    showToast('Akses ditolak. Nota PPTK hanya untuk Admin dan Operator.', 'error');
+    return;
+  }
+  // Guard: Nota PPK hanya admin, input, kpa
+  if (page === 'notaPPK' && STATE.user && !['admin','input','kpa'].includes(STATE.user.role)) {
+    showToast('Akses ditolak.', 'error');
     return;
   }
   STATE.currentPage = page;
@@ -1758,6 +1806,8 @@ function showPage(page) {
     lra: renderLRA,
     pengguna: renderPengguna,
     cari: renderCari,
+    notaPPTK: renderNotaPPTK,
+    notaPPK:  renderNotaPPK,
   };
   if (renders[page]) content.innerHTML = renders[page]();
   else content.innerHTML = '<p>Halaman tidak ditemukan.</p>';
@@ -3682,12 +3732,15 @@ function cetakHasilCariSisa() {
 }
 
 function renderPengguna() {
-  const roleLabel = {admin:'Administrator',input:'Operator Input',view:'Viewer'};
-  const roleBadge = {admin:'badge-blue',input:'badge-green',view:'badge-orange'};
+  const roleLabel = {admin:'Administrator',kpa:'KPA / PPK',input:'Operator (PPTK)',view:'Viewer'};
+  const roleBadge = {admin:'badge-blue',kpa:'badge-purple',input:'badge-green',view:'badge-orange'};
   return `
 <div class="page-header">
   <h2>👥 Manajemen Pengguna</h2>
   <button class="btn btn-blue" onclick="openModalPengguna()">➕ Tambah Pengguna</button>
+</div>
+<div style="margin-bottom:12px;padding:10px 14px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);font-size:12px;color:var(--c-text)">
+  <b>ℹ️ Catatan Role:</b> Admin = akses penuh &nbsp;|&nbsp; KPA/PPK = Nota Dinas PPK + LRA (viewer menu lain) &nbsp;|&nbsp; Operator = input data + Nota PPTK &nbsp;|&nbsp; Viewer = read only
 </div>
 <div style="display:grid;gap:10px">
   ${STATE.pengguna.map((u,i)=>`
@@ -3695,7 +3748,8 @@ function renderPengguna() {
       <div class="avatar" style="width:40px;height:40px;font-size:16px">${u.nama.charAt(0)}</div>
       <div style="flex:1">
         <div style="font-weight:700;font-size:14px">${u.nama}</div>
-        <div style="font-size:12px;color:var(--c-text-muted)">@${u.username} · ${u.jabatan||'—'}</div>
+        <div style="font-size:12px;color:var(--c-text-muted)">@${u.username} ${u.nip?'· NIP '+u.nip:''}</div>
+        <div style="font-size:11px;color:var(--c-text-muted)">${u.jabatan_resmi||u.jabatan||'—'}</div>
       </div>
       <span class="user-role-badge badge ${roleBadge[u.role]||'badge-gray'}">${roleLabel[u.role]||u.role}</span>
       <div class="action-btns">
@@ -3707,7 +3761,7 @@ function renderPengguna() {
 }
 
 function openModalPengguna(idx) {
-  ['pNama','pUsername','pPassword','pJabatan'].forEach(id=>document.getElementById(id).value='');
+  ['pNama','pUsername','pPassword','pJabatan','pNip','pJabatanResmi'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('pRole').value='input';
   document.getElementById('pId').value='';
   document.getElementById('modalPenggunaTitle').textContent='Tambah Pengguna';
@@ -3717,8 +3771,10 @@ function openModalPengguna(idx) {
     document.getElementById('pId').value=idx;
     document.getElementById('pNama').value=u.nama;
     document.getElementById('pUsername').value=u.username;
-    document.getElementById('pRole').value=u.role;
+    document.getElementById('pRole').value=u.role||'input';
     document.getElementById('pJabatan').value=u.jabatan||'';
+    document.getElementById('pNip').value=u.nip||'';
+    document.getElementById('pJabatanResmi').value=u.jabatan_resmi||'';
   }
   document.getElementById('modalPengguna').classList.add('open');
 }
@@ -3739,24 +3795,32 @@ async function savePengguna(){
   const nama=document.getElementById('pNama').value.trim();
   const uname=document.getElementById('pUsername').value.trim();
   const pass=document.getElementById('pPassword').value;
+  const nip=document.getElementById('pNip').value.trim();
+  const jabatanResmi=document.getElementById('pJabatanResmi').value.trim();
   if(!nama||!uname){showToast('Nama dan username wajib diisi','error');return;}
   let obj;
   if(idx===''){
     if(STATE.pengguna.find(u=>u.username===uname)){showToast('Username sudah digunakan','error');return;}
-    obj={id:genId(),nama,username:uname,password:pass||'pptk123',role:document.getElementById('pRole').value,jabatan:document.getElementById('pJabatan').value};
+    obj={id:genId(),nama,username:uname,password:pass||'pptk123',
+         role:document.getElementById('pRole').value,
+         jabatan:document.getElementById('pJabatan').value,
+         nip, jabatan_resmi:jabatanResmi};
     STATE.pengguna.push(obj);
   }else{
     const u=STATE.pengguna[parseInt(idx)];
-    u.nama=nama;u.username=uname;u.role=document.getElementById('pRole').value;u.jabatan=document.getElementById('pJabatan').value;
+    u.nama=nama;u.username=uname;
+    u.role=document.getElementById('pRole').value;
+    u.jabatan=document.getElementById('pJabatan').value;
+    u.nip=nip; u.jabatan_resmi=jabatanResmi;
     if(pass)u.password=pass;
     obj=u;
   }
   saveState();closeModal('modalPengguna');
   if(sbClient){
-    try{ await savePenggunaToSupabase(obj);showToast('Data pengguna disimpan'); }
+    try{ await savePenggunaToSupabase(obj);showToast('Data pengguna disimpan ✅'); }
     catch(e){showToast('Gagal simpan: '+e.message,'error');return;}
   }else{
-    showToast('Data pengguna disimpan');
+    showToast('Data pengguna disimpan ✅');
   }
   showPage('pengguna');
 }
@@ -3834,6 +3898,202 @@ window.addEventListener('resize', function() {
   if (window.innerWidth > 768) closeSidebar();
 });
 </script>
+
+
+<!-- =====================================================
+     MODAL NOTA DINAS PPTK
+     ===================================================== -->
+<div class="modal-overlay" id="modalNotaPPTK" style="align-items:flex-start;padding:16px;overflow-y:auto">
+  <div class="modal" style="max-width:820px;width:100%;margin:auto">
+    <div class="modal-header">
+      <h3 id="modalNotaPPTKTitle">Buat Nota Dinas PPTK</h3>
+      <button class="modal-close" onclick="closeModal('modalNotaPPTK')">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+      <input type="hidden" id="ndpId">
+
+      <!-- ROW 1: Rekening & Tanggal -->
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Rekening Belanja <span style="color:red">*</span></label>
+          <select class="form-select" id="ndpRekening" onchange="ndpOnRekeningChange()">
+            <option value="">— Pilih Rekening —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tanggal Nota <span style="color:red">*</span></label>
+          <input class="form-input" type="date" id="ndpTanggal">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tanggal DPA</label>
+          <input class="form-input" type="date" id="ndpTanggalDpa">
+        </div>
+      </div>
+
+      <!-- Info rekening (readonly) -->
+      <div style="background:var(--c-surface2);border:1px solid var(--c-border);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12px">
+        <div><span style="color:var(--c-text-muted)">Program:</span> <span id="ndpProgram" style="font-weight:600">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Kegiatan:</span> <span id="ndpKegiatan" style="font-weight:600">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Sub Kegiatan:</span> <span id="ndpSubKegiatan" style="font-weight:600">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Belanja:</span> <span id="ndpBelanja" style="font-weight:600">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Pagu:</span> <span id="ndpPagu" style="font-weight:600;color:var(--c-primary)">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Sisa Pagu:</span> <span id="ndpSisa" style="font-weight:600;color:var(--c-success)">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Sumber Dana:</span> <span id="ndpSumberDana">—</span></div>
+        <div><span style="color:var(--c-text-muted)">PPTK:</span> <span id="ndpPPTK">—</span></div>
+      </div>
+
+      <!-- ROW 2: Perihal & Kode RUP -->
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Perihal / Hal <span style="color:red">*</span></label>
+          <input class="form-input" id="ndpHal" placeholder="Persiapan Pengadaan ...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kode RUP</label>
+          <input class="form-input" id="ndpKodeRup" placeholder="Kode RUP dari SIRUP">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sumber Dana Tambahan</label>
+          <input class="form-input" id="ndpSumberDana2" placeholder="(jika berbeda dari master)">
+        </div>
+      </div>
+
+      <!-- Teks-teks dengan AI assist -->
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+        ${[
+          ['ndpUraian','Uraian / Paragraf Pembuka'],
+          ['ndpLatarBelakang','Latar Belakang'],
+          ['ndpTujuan','Tujuan Pengadaan'],
+          ['ndpSasaran','Sasaran'],
+        ].map(([id,lbl])=>`
+        <div class="form-group">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <label class="form-label" style="margin:0">${lbl}</label>
+            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
+              data-ai-for="${id}" onclick="ndAiAssist('${id}','${lbl}',ndAiKonteksPPTK())">✨ AI</button>
+          </div>
+          <textarea class="form-input" id="${id}" rows="3" style="resize:vertical" placeholder="${lbl}..."></textarea>
+        </div>`).join('')}
+      </div>
+
+      <!-- Tabel Items -->
+      <div style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label class="form-label" style="margin:0;font-weight:700">📦 Identifikasi Kebutuhan Barang/Jasa</label>
+          <button class="btn btn-sm btn-outline" onclick="ndpAddItem()">+ Tambah Baris</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead style="background:var(--c-surface2)">
+              <tr>
+                <th style="border:1px solid var(--c-border);padding:6px;width:30px">#</th>
+                <th style="border:1px solid var(--c-border);padding:6px">Nama Barang/Jasa</th>
+                <th style="border:1px solid var(--c-border);padding:6px">Spesifikasi</th>
+                <th style="border:1px solid var(--c-border);padding:6px;width:60px">Satuan</th>
+                <th style="border:1px solid var(--c-border);padding:6px;width:60px">Qty</th>
+                <th style="border:1px solid var(--c-border);padding:6px;width:120px">Harga Satuan</th>
+                <th style="border:1px solid var(--c-border);padding:6px;width:110px">Link Inaproc</th>
+                <th style="border:1px solid var(--c-border);padding:6px;width:36px"></th>
+              </tr>
+            </thead>
+            <tbody id="ndpItemsBody">
+              <tr><td colspan="8" style="text-align:center;color:var(--c-text-muted);padding:16px;font-size:12px">Belum ada item — klik "+ Tambah Baris"</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="text-align:right;margin-top:6px;font-size:13px;font-weight:700">
+          Total: <span id="ndpTotalHarga" style="color:var(--c-primary)">Rp 0</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal('modalNotaPPTK')">Batal</button>
+      <button class="btn btn-blue" onclick="saveNotaPPTK()">💾 Simpan Nota PPTK</button>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
+     MODAL NOTA DINAS PPK
+     ===================================================== -->
+<div class="modal-overlay" id="modalNotaPPK" style="align-items:flex-start;padding:16px;overflow-y:auto">
+  <div class="modal" style="max-width:820px;width:100%;margin:auto">
+    <div class="modal-header">
+      <h3 id="modalNotaPPKTitle">Buat Nota Dinas PPK</h3>
+      <button class="modal-close" onclick="closeModal('modalNotaPPK')">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+      <input type="hidden" id="ndkId">
+
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Berdasarkan Nota PPTK <span style="color:red">*</span></label>
+          <select class="form-select" id="ndkNotaPPTK" onchange="ndkOnNotaPPTKChange()">
+            <option value="">— Pilih Nota Dinas PPTK —</option>
+          </select>
+          <span class="form-hint">Data rekening dan belanja akan diisi otomatis dari Nota PPTK yang dipilih</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tanggal Nota PPK <span style="color:red">*</span></label>
+          <input class="form-input" type="date" id="ndkTanggal">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nilai Pengadaan (Rp)</label>
+          <input class="form-input" type="number" id="ndkNilaiPengadaan" placeholder="0">
+        </div>
+      </div>
+
+      <!-- Info dari nota PPTK (readonly) -->
+      <div style="background:var(--c-surface2);border:1px solid var(--c-border);border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12px">
+        <div><span style="color:var(--c-text-muted)">Program:</span> <span id="ndkProgram" style="font-weight:600">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Kegiatan:</span> <span id="ndkKegiatan" style="font-weight:600">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Sub Kegiatan:</span> <span id="ndkSubKegiatan" style="font-weight:600">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Belanja:</span> <span id="ndkBelanja" style="font-weight:600">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Pagu:</span> <span id="ndkPagu" style="font-weight:600;color:var(--c-primary)">—</span></div>
+        <div><span style="color:var(--c-text-muted)">Sumber Dana:</span> <span id="ndkSumberDana">—</span></div>
+        <div><span style="color:var(--c-text-muted)">PPTK:</span> <span id="ndkPPTKNama">—</span></div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Perihal / Hal <span style="color:red">*</span></label>
+          <input class="form-input" id="ndkHal" placeholder="Pelaksanaan Pengadaan ...">
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">Kode RUP</label>
+          <input class="form-input" id="ndkKodeRup" placeholder="Diisi otomatis dari Nota PPTK">
+        </div>
+      </div>
+
+      <!-- Spesifikasi teknis dengan AI assist -->
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+        ${[
+          ['ndkUraianPekerjaan','Uraian Pekerjaan'],
+          ['ndkLatarBelakang','Latar Belakang'],
+          ['ndkRuangLingkup','Ruang Lingkup'],
+          ['ndkMaksudTujuan','Maksud dan Tujuan'],
+          ['ndkKeluaran','Keluaran (Output)'],
+          ['ndkManfaat','Manfaat'],
+          ['ndkFungsi','Fungsi'],
+          ['ndkSyaratPenyedia','Syarat Penyedia'],
+          ['ndkWaktuPelaksanaan','Waktu Pelaksanaan'],
+        ].map(([id,lbl])=>`
+        <div class="form-group">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <label class="form-label" style="margin:0">${lbl}</label>
+            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
+              data-ai-for="${id}" onclick="ndAiAssist('${id}','${lbl}',ndAiKonteksPPK())">✨ AI</button>
+          </div>
+          <textarea class="form-input" id="${id}" rows="2" style="resize:vertical" placeholder="${lbl}..."></textarea>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeModal('modalNotaPPK')">Batal</button>
+      <button class="btn btn-blue" onclick="saveNotaPPK()">💾 Simpan Nota PPK</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== FLOATING MUSIC PLAYER ===== -->
 <button id="musicFab" onclick="openMusicPlayer()" title="Putar Musik Kerja 🎵">🎵</button>
@@ -4102,6 +4362,891 @@ function toggleSidebarCollapse() {
     }
   } catch(e){}
 })();
+
+
+// ============================================================
+// NOTA DINAS — STATE & HELPERS
+// ============================================================
+if (!STATE.notaDinas) STATE.notaDinas = { pptk: [], ppk: [] };
+
+function ndSave() {
+  saveState();
+  if (sbClient) ndSyncSupabase();
+}
+
+async function ndSyncSupabase() {
+  // Upsert nota_dinas_pptk
+  const rows = STATE.notaDinas.pptk.map(n => ({
+    id: n.id, tahun: STATE.tahun, data: n
+  }));
+  if (rows.length > 0)
+    await sbClient.from('nota_dinas_pptk').upsert(rows, {onConflict:'id'}).catch(()=>{});
+  const rowsPPK = STATE.notaDinas.ppk.map(n => ({
+    id: n.id, tahun: STATE.tahun, data: n
+  }));
+  if (rowsPPK.length > 0)
+    await sbClient.from('nota_dinas_ppk').upsert(rowsPPK, {onConflict:'id'}).catch(()=>{});
+}
+
+async function ndLoadSupabase() {
+  if (!sbClient) return;
+  try {
+    const { data: dp } = await sbClient.from('nota_dinas_pptk')
+      .select('data').eq('tahun', STATE.tahun);
+    if (dp && dp.length > 0) STATE.notaDinas.pptk = dp.map(r => r.data);
+    const { data: dk } = await sbClient.from('nota_dinas_ppk')
+      .select('data').eq('tahun', STATE.tahun);
+    if (dk && dk.length > 0) STATE.notaDinas.ppk = dk.map(r => r.data);
+  } catch(e) { console.error('ndLoadSupabase', e); }
+}
+
+// Format nomor nota: DD.MM atau DD.MM.NN
+function ndGenerateNomor(tipeNota, tanggal, existingNomor) {
+  const d = new Date(tanggal);
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const base = dd + '.' + mm;
+
+  // Cari semua nota di tanggal yang sama (kecuali yang sedang diedit)
+  const arr = tipeNota === 'pptk' ? STATE.notaDinas.pptk : STATE.notaDinas.ppk;
+  const sameDay = arr.filter(n =>
+    n.nomor_urut && n.nomor_urut.startsWith(base) && n.nomor_urut !== existingNomor
+  );
+  if (sameDay.length === 0) return base;
+  // Sudah ada nota di hari ini — beri suffix
+  const maxSuffix = sameDay.reduce((mx, n) => {
+    const parts = n.nomor_urut.split('.');
+    const sfx = parts.length === 3 ? parseInt(parts[2]) : 0;
+    return Math.max(mx, sfx);
+  }, 0);
+  return base + '.' + String(maxSuffix + 1).padStart(2,'0');
+}
+
+// Ambil user KPA (role kpa) pertama
+function ndGetKPA() {
+  return STATE.pengguna.find(u => u.role === 'kpa') || null;
+}
+
+// Ambil PPTK yang login atau berdasarkan nama
+function ndGetPPTK(nama) {
+  return STATE.pengguna.find(u =>
+    u.role === 'input' && u.nama.trim().toUpperCase() === (nama||'').trim().toUpperCase()
+  ) || null;
+}
+
+// Format rupiah
+function ndFmt(n) {
+  return 'Rp ' + (n||0).toLocaleString('id-ID');
+}
+
+function ndToday() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function ndTanggalPanjang(str) {
+  if (!str) return '—';
+  const BULAN = ['Januari','Februari','Maret','April','Mei','Juni',
+    'Juli','Agustus','September','Oktober','November','Desember'];
+  const d = new Date(str);
+  return d.getDate() + ' ' + BULAN[d.getMonth()] + ' ' + d.getFullYear();
+}
+
+// ============================================================
+// RENDER NOTA DINAS PPTK — HALAMAN DAFTAR
+// ============================================================
+function renderNotaPPTK() {
+  const list = (STATE.notaDinas.pptk || [])
+    .filter(n => {
+      if (STATE.user.role === 'input') {
+        const nama = STATE.user.nama.trim().toUpperCase();
+        return (n.pptk_nama||'').trim().toUpperCase() === nama;
+      }
+      return true;
+    })
+    .sort((a,b) => (b.tanggal||'').localeCompare(a.tanggal||''));
+
+  return `
+<div class="page-header">
+  <h2>📝 Nota Dinas PPTK</h2>
+  <button class="btn btn-blue" onclick="openModalNotaPPTK()">➕ Buat Nota Baru</button>
+</div>
+<div style="margin-bottom:14px;padding:10px 14px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);font-size:12px">
+  Nota Dinas PPTK merupakan dasar persiapan pengadaan barang/jasa melalui Katalog Inaproc. Satu Nota PPTK dapat digunakan sebagai dasar beberapa Nota Dinas PPK apabila pengadaan dilakukan lebih dari sekali.
+</div>
+${list.length === 0 ? `
+  <div style="text-align:center;padding:60px;color:var(--c-text-muted)">
+    <div style="font-size:48px;margin-bottom:12px">📝</div>
+    <p style="font-weight:600">Belum ada Nota Dinas PPTK</p>
+    <p style="font-size:12px;margin-top:4px">Klik "Buat Nota Baru" untuk membuat nota dinas pertama</p>
+  </div>` : `
+<div style="display:flex;flex-direction:column;gap:10px">
+  ${list.map(n => {
+    const ppk = ndGetKPA();
+    const rekaCount = (STATE.notaDinas.ppk||[]).filter(p=>p.pptk_nota_id===n.id).length;
+    return `<div style="background:var(--c-surface2);border:1px solid var(--c-border);border-radius:10px;padding:14px 16px">
+      <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px">
+            📋 ${n.hal||'Persiapan Pengadaan'}
+          </div>
+          <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:6px">
+            Nomor: ${n.nomor_urut||'—'} &nbsp;·&nbsp; ${ndTanggalPanjang(n.tanggal)}
+          </div>
+          <div style="font-size:12px;color:var(--c-text-muted)">
+            ${n.sub_kegiatan||'—'} &nbsp;·&nbsp; ${n.belanja||'—'}
+          </div>
+          <div style="font-size:12px;margin-top:4px">
+            <span style="color:var(--c-primary);font-weight:600">Pagu: ${ndFmt(n.pagu)}</span>
+            &nbsp;·&nbsp; Sumber: ${n.sumber_dana||'—'}
+            &nbsp;·&nbsp; Kode RUP: ${n.kode_rup||'—'}
+          </div>
+          ${rekaCount>0?`<div style="font-size:11px;color:var(--c-success);margin-top:4px">✅ Sudah ada ${rekaCount} Nota PPK terkait</div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
+          <button class="btn btn-sm btn-outline" onclick="previewNotaPPTK('${n.id}')">👁 Preview</button>
+          <button class="btn btn-sm btn-outline" onclick="openModalNotaPPTK('${n.id}')">✏️ Edit</button>
+          <button class="btn btn-sm btn-blue" onclick="cetakNotaPPTK('${n.id}')">🖨️ Cetak</button>
+          <button class="btn btn-sm btn-outline" onclick="buatNotaPPKDari('${n.id}')">📋 Buat Nota PPK</button>
+          <button class="btn btn-sm btn-red" onclick="hapusNotaPPTK('${n.id}')">🗑️</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('')}
+</div>`}`;
+}
+
+// ============================================================
+// RENDER NOTA DINAS PPK — HALAMAN DAFTAR
+// ============================================================
+function renderNotaPPK() {
+  const isKPA = STATE.user.role === 'kpa';
+  const list = (STATE.notaDinas.ppk || [])
+    .sort((a,b) => (b.tanggal||'').localeCompare(a.tanggal||''));
+
+  return `
+<div class="page-header">
+  <h2>📋 Nota Dinas PPK</h2>
+  ${!isKPA ? '<button class="btn btn-btn-blue btn-blue" onclick="showPage(\'notaPPTK\')">← Buat dari Nota PPTK</button>' : ''}
+</div>
+<div style="margin-bottom:14px;padding:10px 14px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);font-size:12px">
+  Nota Dinas PPK merupakan instruksi dari KPA/PPK kepada Pejabat Pengadaan untuk melaksanakan pengadaan barang/jasa. Dibuat berdasarkan Nota Dinas PPTK yang telah disetujui.
+</div>
+${list.length === 0 ? `
+  <div style="text-align:center;padding:60px;color:var(--c-text-muted)">
+    <div style="font-size:48px;margin-bottom:12px">📋</div>
+    <p style="font-weight:600">Belum ada Nota Dinas PPK</p>
+    <p style="font-size:12px;margin-top:4px">Buat dari menu Nota Dinas PPTK → klik "Buat Nota PPK"</p>
+  </div>` : `
+<div style="display:flex;flex-direction:column;gap:10px">
+  ${list.map(n => {
+    const notaPPTK = (STATE.notaDinas.pptk||[]).find(p=>p.id===n.pptk_nota_id);
+    return `<div style="background:var(--c-surface2);border:1px solid var(--c-border);border-radius:10px;padding:14px 16px">
+      <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px">
+            📋 ${n.hal||'Pelaksanaan Pengadaan'}
+          </div>
+          <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:6px">
+            Nomor: ${n.nomor_urut||'—'} &nbsp;·&nbsp; ${ndTanggalPanjang(n.tanggal)}
+          </div>
+          <div style="font-size:12px;color:var(--c-text-muted)">
+            ${n.sub_kegiatan||'—'} &nbsp;·&nbsp; ${n.belanja||'—'}
+          </div>
+          <div style="font-size:12px;margin-top:4px">
+            <span style="color:var(--c-primary);font-weight:600">Nilai: ${ndFmt(n.nilai_pengadaan)}</span>
+            &nbsp;·&nbsp; Kode RUP: ${n.kode_rup||'—'}
+          </div>
+          ${notaPPTK?`<div style="font-size:11px;color:var(--c-text-muted);margin-top:4px">Berdasarkan Nota PPTK: ${notaPPTK.nomor_urut||'—'}</div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
+          <button class="btn btn-sm btn-outline" onclick="previewNotaPPK('${n.id}')">👁 Preview</button>
+          <button class="btn btn-sm btn-outline" onclick="openModalNotaPPK('${n.id}')">✏️ Edit</button>
+          <button class="btn btn-sm btn-blue" onclick="cetakNotaPPK('${n.id}')">🖨️ Cetak</button>
+          ${!isKPA?`<button class="btn btn-sm btn-red" onclick="hapusNotaPPK('${n.id}')">🗑️</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('')}
+</div>`}`;
+}
+
+// ============================================================
+// MODAL NOTA DINAS PPTK
+// ============================================================
+function openModalNotaPPTK(editId) {
+  const modal = document.getElementById('modalNotaPPTK');
+  if (!modal) { showToast('Modal belum siap','error'); return; }
+
+  // Reset form
+  document.getElementById('ndpId').value = '';
+  document.getElementById('ndpTanggal').value = ndToday();
+  document.getElementById('ndpHal').value = '';
+  document.getElementById('ndpRekening').value = '';
+  document.getElementById('ndpKodeRup').value = '';
+  document.getElementById('ndpTanggalDpa').value = '';
+  document.getElementById('ndpUraian').value = '';
+  document.getElementById('ndpLatarBelakang').value = '';
+  document.getElementById('ndpTujuan').value = '';
+  document.getElementById('ndpSasaran').value = '';
+  document.getElementById('ndpSumberDana2').value = '';
+  ndpClearItems();
+
+  // Isi dropdown rekening
+  ndpPopulateRekening();
+
+  if (editId) {
+    const nota = STATE.notaDinas.pptk.find(n=>n.id===editId);
+    if (!nota) return;
+    document.getElementById('modalNotaPPTKTitle').textContent = 'Edit Nota Dinas PPTK';
+    document.getElementById('ndpId').value = editId;
+    document.getElementById('ndpTanggal').value = nota.tanggal||'';
+    document.getElementById('ndpHal').value = nota.hal||'';
+    document.getElementById('ndpKodeRup').value = nota.kode_rup||'';
+    document.getElementById('ndpTanggalDpa').value = nota.tanggal_dpa||'';
+    document.getElementById('ndpUraian').value = nota.uraian||'';
+    document.getElementById('ndpLatarBelakang').value = nota.latar_belakang||'';
+    document.getElementById('ndpTujuan').value = nota.tujuan||'';
+    document.getElementById('ndpSasaran').value = nota.sasaran||'';
+    document.getElementById('ndpSumberDana2').value = nota.sumber_dana_tambahan||'';
+    // Pilih rekening
+    setTimeout(()=>{
+      document.getElementById('ndpRekening').value = nota.kode_rekening||'';
+      ndpOnRekeningChange();
+      // Restore items
+      if (nota.items && nota.items.length > 0) {
+        nota.items.forEach(item => ndpAddItem(item));
+      }
+    }, 50);
+  } else {
+    document.getElementById('modalNotaPPTKTitle').textContent = 'Buat Nota Dinas PPTK';
+    // Auto-pilih rekening jika PPTK
+    if (STATE.user.role === 'input') {
+      setTimeout(()=>ndpPopulateRekening(), 50);
+    }
+  }
+  modal.classList.add('open');
+}
+
+function ndpPopulateRekening() {
+  const sel = document.getElementById('ndpRekening');
+  if (!sel) return;
+  const filtered = getFilteredAnggaran();
+  sel.innerHTML = '<option value="">— Pilih Rekening —</option>' +
+    filtered.map(a =>
+      `<option value="${a.kode_rekening}">${a.kode_rekening} — ${a.belanja||''}</option>`
+    ).join('');
+}
+
+function ndpOnRekeningChange() {
+  const kode = document.getElementById('ndpRekening').value;
+  if (!kode) {
+    ['ndpProgram','ndpKegiatan','ndpSubKegiatan','ndpBelanja','ndpPagu','ndpSumberDana','ndpPPTK'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.textContent='—';
+    });
+    return;
+  }
+  const a = STATE.anggaran.find(x=>x.kode_rekening===kode);
+  if (!a) return;
+
+  // Hitung sisa pagu
+  const reals = STATE.realisasi.filter(r=>r.kode_rekening===kode);
+  const totalReal = reals.reduce((s,r)=>s+(parseFloat(r.nominal)||0),0);
+  const pagu = parseFloat(a.pagu)||0;
+  const sisa = pagu - totalReal;
+
+  const set = (id,val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+  set('ndpProgram', a.program||'—');
+  set('ndpKegiatan', a.kegiatan||'—');
+  set('ndpSubKegiatan', a.sub_kegiatan||'—');
+  set('ndpBelanja', a.belanja||'—');
+  set('ndpPagu', ndFmt(pagu));
+  set('ndpSisa', ndFmt(sisa));
+  set('ndpSumberDana', a.sumber_dana||'—');
+  set('ndpPPTK', a.pptk||'—');
+
+  // Auto-isi Hal
+  const halEl = document.getElementById('ndpHal');
+  if (halEl && !halEl.value) {
+    halEl.value = 'Persiapan Pengadaan ' + (a.belanja||'');
+  }
+}
+
+// Items tabel kebutuhan
+let ndpItems = [];
+function ndpClearItems() {
+  ndpItems = [];
+  ndpRenderItems();
+}
+function ndpAddItem(item) {
+  ndpItems.push(item || {uraian:'',spek:'',satuan:'',jumlah:0,harga:0,link:''});
+  ndpRenderItems();
+}
+function ndpRemoveItem(i) {
+  ndpItems.splice(i,1);
+  ndpRenderItems();
+}
+function ndpItemChange(i, field, val) {
+  ndpItems[i][field] = field==='jumlah'||field==='harga' ? parseFloat(val)||0 : val;
+  if (field==='jumlah'||field==='harga') ndpRenderTotal();
+}
+function ndpRenderTotal() {
+  const total = ndpItems.reduce((s,it)=>s+(it.jumlah||0)*(it.harga||0),0);
+  const el = document.getElementById('ndpTotalHarga');
+  if (el) el.textContent = ndFmt(total);
+}
+function ndpRenderItems() {
+  const el = document.getElementById('ndpItemsBody');
+  if (!el) return;
+  if (ndpItems.length === 0) {
+    el.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--c-text-muted);padding:16px;font-size:12px">Belum ada item — klik "+ Tambah Baris"</td></tr>';
+    ndpRenderTotal();
+    return;
+  }
+  el.innerHTML = ndpItems.map((it,i) => `
+    <tr>
+      <td style="text-align:center">${i+1}</td>
+      <td><input class="form-input" style="font-size:12px;min-width:120px" value="${it.uraian||''}" oninput="ndpItemChange(${i},'uraian',this.value)" placeholder="Nama barang/jasa"></td>
+      <td><input class="form-input" style="font-size:12px;min-width:120px" value="${it.spek||''}" oninput="ndpItemChange(${i},'spek',this.value)" placeholder="Spesifikasi"></td>
+      <td><input class="form-input" style="font-size:11px;width:60px" value="${it.satuan||''}" oninput="ndpItemChange(${i},'satuan',this.value)" placeholder="Unit"></td>
+      <td><input class="form-input" style="font-size:11px;width:60px;text-align:right" type="number" value="${it.jumlah||0}" oninput="ndpItemChange(${i},'jumlah',this.value)"></td>
+      <td><input class="form-input" style="font-size:11px;width:110px;text-align:right" type="number" value="${it.harga||0}" oninput="ndpItemChange(${i},'harga',this.value)"></td>
+      <td><input class="form-input" style="font-size:11px;min-width:100px" value="${it.link||''}" oninput="ndpItemChange(${i},'link',this.value)" placeholder="https://..."></td>
+      <td><button onclick="ndpRemoveItem(${i})" class="btn btn-sm btn-red">✕</button></td>
+    </tr>`).join('');
+  ndpRenderTotal();
+}
+
+async function saveNotaPPTK() {
+  const kode = document.getElementById('ndpRekening').value;
+  if (!kode) { showToast('Pilih rekening terlebih dahulu','error'); return; }
+  const a = STATE.anggaran.find(x=>x.kode_rekening===kode);
+  if (!a) return;
+
+  const editId = document.getElementById('ndpId').value;
+  const tanggal = document.getElementById('ndpTanggal').value;
+  const nomor = ndGenerateNomor('pptk', tanggal, editId ? (STATE.notaDinas.pptk.find(n=>n.id===editId)||{}).nomor_urut : null);
+
+  const nota = {
+    id: editId || genId(),
+    nomor_urut: nomor,
+    tanggal,
+    hal: document.getElementById('ndpHal').value.trim(),
+    kode_rekening: kode,
+    program: a.program, kegiatan: a.kegiatan,
+    sub_kegiatan: a.sub_kegiatan, belanja: a.belanja,
+    pagu: parseFloat(a.pagu)||0,
+    sumber_dana: a.sumber_dana,
+    kode_rup: document.getElementById('ndpKodeRup').value.trim(),
+    tanggal_dpa: document.getElementById('ndpTanggalDpa').value,
+    pptk_nama: a.pptk,
+    uraian: document.getElementById('ndpUraian').value.trim(),
+    latar_belakang: document.getElementById('ndpLatarBelakang').value.trim(),
+    tujuan: document.getElementById('ndpTujuan').value.trim(),
+    sasaran: document.getElementById('ndpSasaran').value.trim(),
+    sumber_dana_tambahan: document.getElementById('ndpSumberDana2').value.trim(),
+    items: ndpItems.map(it=>({...it})),
+    created_by: STATE.user.username,
+    created_at: new Date().toISOString(),
+  };
+
+  if (!nota.hal) { showToast('Perihal / Hal wajib diisi','error'); return; }
+
+  if (editId) {
+    const idx = STATE.notaDinas.pptk.findIndex(n=>n.id===editId);
+    if (idx>=0) STATE.notaDinas.pptk[idx] = nota;
+  } else {
+    STATE.notaDinas.pptk.push(nota);
+  }
+
+  ndSave();
+  closeModal('modalNotaPPTK');
+  showToast('Nota Dinas PPTK tersimpan ✅');
+  showPage('notaPPTK');
+}
+
+function hapusNotaPPTK(id) {
+  const ppkTerkait = (STATE.notaDinas.ppk||[]).filter(p=>p.pptk_nota_id===id).length;
+  if (ppkTerkait > 0) {
+    showToast(`Tidak bisa dihapus — ada ${ppkTerkait} Nota PPK yang mengacu nota ini`, 'error');
+    return;
+  }
+  if (!confirm('Hapus nota dinas PPTK ini?')) return;
+  STATE.notaDinas.pptk = STATE.notaDinas.pptk.filter(n=>n.id!==id);
+  ndSave();
+  showToast('Nota PPTK dihapus');
+  showPage('notaPPTK');
+}
+
+// Buat Nota PPK dari Nota PPTK
+function buatNotaPPKDari(pptk_id) {
+  const nota = STATE.notaDinas.pptk.find(n=>n.id===pptk_id);
+  if (!nota) return;
+  openModalNotaPPK(null, pptk_id);
+  showPage('notaPPK');
+}
+
+// ============================================================
+// MODAL NOTA DINAS PPK
+// ============================================================
+function openModalNotaPPK(editId, pptk_id_default) {
+  const modal = document.getElementById('modalNotaPPK');
+  if (!modal) { showToast('Modal belum siap','error'); return; }
+
+  // Reset
+  ['ndkId','ndkTanggal','ndkHal','ndkKodeRup','ndkNilaiPengadaan',
+   'ndkUraianPekerjaan','ndkLatarBelakang','ndkRuangLingkup',
+   'ndkMaksudTujuan','ndkKeluaran','ndkManfaat','ndkFungsi',
+   'ndkSyaratPenyedia','ndkWaktuPelaksanaan'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+
+  // Isi dropdown nota PPTK
+  ndkPopulateNotaPPTK();
+
+  if (editId) {
+    const nota = STATE.notaDinas.ppk.find(n=>n.id===editId);
+    if (!nota) return;
+    document.getElementById('modalNotaPPKTitle').textContent = 'Edit Nota Dinas PPK';
+    document.getElementById('ndkId').value = editId;
+    document.getElementById('ndkTanggal').value = nota.tanggal||'';
+    document.getElementById('ndkHal').value = nota.hal||'';
+    document.getElementById('ndkKodeRup').value = nota.kode_rup||'';
+    document.getElementById('ndkNilaiPengadaan').value = nota.nilai_pengadaan||'';
+    document.getElementById('ndkUraianPekerjaan').value = nota.uraian_pekerjaan||'';
+    document.getElementById('ndkLatarBelakang').value = nota.latar_belakang||'';
+    document.getElementById('ndkRuangLingkup').value = nota.ruang_lingkup||'';
+    document.getElementById('ndkMaksudTujuan').value = nota.maksud_tujuan||'';
+    document.getElementById('ndkKeluaran').value = nota.keluaran||'';
+    document.getElementById('ndkManfaat').value = nota.manfaat||'';
+    document.getElementById('ndkFungsi').value = nota.fungsi||'';
+    document.getElementById('ndkSyaratPenyedia').value = nota.syarat_penyedia||'';
+    document.getElementById('ndkWaktuPelaksanaan').value = nota.waktu_pelaksanaan||'';
+    setTimeout(()=>{
+      document.getElementById('ndkNotaPPTK').value = nota.pptk_nota_id||'';
+      ndkOnNotaPPTKChange();
+    },50);
+  } else {
+    document.getElementById('modalNotaPPKTitle').textContent = 'Buat Nota Dinas PPK';
+    document.getElementById('ndkTanggal').value = ndToday();
+    if (pptk_id_default) {
+      setTimeout(()=>{
+        document.getElementById('ndkNotaPPTK').value = pptk_id_default;
+        ndkOnNotaPPTKChange();
+      },50);
+    }
+  }
+  modal.classList.add('open');
+}
+
+function ndkPopulateNotaPPTK() {
+  const sel = document.getElementById('ndkNotaPPTK');
+  if (!sel) return;
+  const list = STATE.notaDinas.pptk || [];
+  sel.innerHTML = '<option value="">— Pilih Nota PPTK Dasar —</option>' +
+    list.map(n =>
+      `<option value="${n.id}">${n.nomor_urut||'—'} | ${ndTanggalPanjang(n.tanggal)} | ${n.hal||''}</option>`
+    ).join('');
+}
+
+function ndkOnNotaPPTKChange() {
+  const id = document.getElementById('ndkNotaPPTK').value;
+  if (!id) { ndkClearInfo(); return; }
+  const nota = STATE.notaDinas.pptk.find(n=>n.id===id);
+  if (!nota) return;
+  const set = (elId,val) => { const el=document.getElementById(elId); if(el) el.textContent=val||'—'; };
+  set('ndkProgram', nota.program);
+  set('ndkKegiatan', nota.kegiatan);
+  set('ndkSubKegiatan', nota.sub_kegiatan);
+  set('ndkBelanja', nota.belanja);
+  set('ndkPagu', ndFmt(nota.pagu));
+  set('ndkSumberDana', nota.sumber_dana);
+  set('ndkPPTKNama', nota.pptk_nama);
+  // Auto-isi Hal & Kode RUP
+  const hal = document.getElementById('ndkHal');
+  if (hal && !hal.value) hal.value = 'Pelaksanaan Pengadaan ' + (nota.belanja||'');
+  const rup = document.getElementById('ndkKodeRup');
+  if (rup && !rup.value) rup.value = nota.kode_rup||'';
+  const nilai = document.getElementById('ndkNilaiPengadaan');
+  if (nilai && !nilai.value) nilai.value = nota.pagu||'';
+}
+
+function ndkClearInfo() {
+  ['ndkProgram','ndkKegiatan','ndkSubKegiatan','ndkBelanja','ndkPagu','ndkSumberDana','ndkPPTKNama'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.textContent='—';
+  });
+}
+
+async function saveNotaPPK() {
+  const pptk_id = document.getElementById('ndkNotaPPTK').value;
+  if (!pptk_id) { showToast('Pilih Nota PPTK dasar terlebih dahulu','error'); return; }
+  const notaPPTK = STATE.notaDinas.pptk.find(n=>n.id===pptk_id);
+  if (!notaPPTK) return;
+
+  const editId = document.getElementById('ndkId').value;
+  const tanggal = document.getElementById('ndkTanggal').value;
+  const nomor = ndGenerateNomor('ppk', tanggal, editId ? (STATE.notaDinas.ppk.find(n=>n.id===editId)||{}).nomor_urut : null);
+
+  const hal = document.getElementById('ndkHal').value.trim();
+  if (!hal) { showToast('Perihal / Hal wajib diisi','error'); return; }
+
+  const nota = {
+    id: editId || genId(),
+    nomor_urut: nomor,
+    tanggal,
+    hal,
+    pptk_nota_id: pptk_id,
+    kode_rekening: notaPPTK.kode_rekening,
+    program: notaPPTK.program, kegiatan: notaPPTK.kegiatan,
+    sub_kegiatan: notaPPTK.sub_kegiatan, belanja: notaPPTK.belanja,
+    pagu: notaPPTK.pagu, sumber_dana: notaPPTK.sumber_dana,
+    kode_rup: document.getElementById('ndkKodeRup').value.trim(),
+    nilai_pengadaan: parseFloat(document.getElementById('ndkNilaiPengadaan').value)||0,
+    uraian_pekerjaan: document.getElementById('ndkUraianPekerjaan').value.trim(),
+    latar_belakang: document.getElementById('ndkLatarBelakang').value.trim(),
+    ruang_lingkup: document.getElementById('ndkRuangLingkup').value.trim(),
+    maksud_tujuan: document.getElementById('ndkMaksudTujuan').value.trim(),
+    keluaran: document.getElementById('ndkKeluaran').value.trim(),
+    manfaat: document.getElementById('ndkManfaat').value.trim(),
+    fungsi: document.getElementById('ndkFungsi').value.trim(),
+    syarat_penyedia: document.getElementById('ndkSyaratPenyedia').value.trim(),
+    waktu_pelaksanaan: document.getElementById('ndkWaktuPelaksanaan').value.trim(),
+    pptk_nama: notaPPTK.pptk_nama,
+    items: notaPPTK.items || [],
+    created_by: STATE.user.username,
+    created_at: new Date().toISOString(),
+  };
+
+  if (!STATE.notaDinas.ppk) STATE.notaDinas.ppk = [];
+  if (editId) {
+    const idx = STATE.notaDinas.ppk.findIndex(n=>n.id===editId);
+    if (idx>=0) STATE.notaDinas.ppk[idx] = nota;
+  } else {
+    STATE.notaDinas.ppk.push(nota);
+  }
+
+  ndSave();
+  closeModal('modalNotaPPK');
+  showToast('Nota Dinas PPK tersimpan ✅');
+  showPage('notaPPK');
+}
+
+function hapusNotaPPK(id) {
+  if (!confirm('Hapus nota dinas PPK ini?')) return;
+  STATE.notaDinas.ppk = STATE.notaDinas.ppk.filter(n=>n.id!==id);
+  ndSave();
+  showToast('Nota PPK dihapus');
+  showPage('notaPPK');
+}
+
+// ============================================================
+// AI ASSIST
+// ============================================================
+async function ndAiAssist(fieldId, labelText, konteks) {
+  const el = document.getElementById(fieldId);
+  if (!el) return;
+  const btn = document.querySelector(`[data-ai-for="${fieldId}"]`);
+  if (btn) { btn.disabled=true; btn.textContent='⏳ Generating...'; }
+
+  const prompt = `Kamu adalah asisten penyusunan nota dinas pengadaan barang/jasa pemerintah daerah Indonesia.
+Tugas: Tulis teks untuk bagian "${labelText}" pada nota dinas pengadaan.
+Konteks pengadaan:
+${konteks}
+Instruksi:
+- Gunakan bahasa Indonesia formal dan resmi sesuai tata naskah dinas pemerintah
+- Ringkas, padat, tidak bertele-tele
+- Langsung isi teksnya saja, tanpa heading atau penjelasan tambahan
+- Maksimal 3-4 kalimat`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens:400,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content && data.content[0] ? data.content[0].text : '';
+    if (text) {
+      el.value = text.trim();
+      showToast('✨ AI selesai mengisi "' + labelText + '"');
+    } else {
+      showToast('AI tidak memberikan respons','error');
+    }
+  } catch(e) {
+    showToast('Gagal menghubungi AI: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled=false; btn.textContent='✨ AI'; }
+  }
+}
+
+function ndAiKonteksPPTK() {
+  const kode = document.getElementById('ndpRekening').value;
+  const a = kode ? STATE.anggaran.find(x=>x.kode_rekening===kode) : null;
+  return [
+    'Program: ' + (a ? a.program : '—'),
+    'Kegiatan: ' + (a ? a.kegiatan : '—'),
+    'Sub Kegiatan: ' + (a ? a.sub_kegiatan : '—'),
+    'Jenis Belanja: ' + (a ? a.belanja : '—'),
+    'Pagu Anggaran: ' + (a ? ndFmt(parseFloat(a.pagu)||0) : '—'),
+    'Sumber Dana: ' + (a ? a.sumber_dana : '—'),
+    'Perihal: ' + (document.getElementById('ndpHal').value||'—'),
+    'Barang/Jasa yang diadakan: ' + (ndpItems.map(i=>i.uraian).filter(Boolean).join(', ')||'—'),
+  ].join('\n');
+}
+
+function ndAiKonteksPPK() {
+  const id = document.getElementById('ndkNotaPPTK').value;
+  const n = id ? STATE.notaDinas.pptk.find(x=>x.id===id) : null;
+  return [
+    'Program: ' + (n ? n.program : '—'),
+    'Kegiatan: ' + (n ? n.kegiatan : '—'),
+    'Sub Kegiatan: ' + (n ? n.sub_kegiatan : '—'),
+    'Jenis Belanja: ' + (n ? n.belanja : '—'),
+    'Nilai Pengadaan: ' + ndFmt(parseFloat(document.getElementById('ndkNilaiPengadaan').value)||0),
+    'Perihal: ' + (document.getElementById('ndkHal').value||'—'),
+    'Barang/Jasa: ' + (n && n.items ? n.items.map(i=>i.uraian).filter(Boolean).join(', ') : '—'),
+  ].join('\n');
+}
+
+// ============================================================
+// CETAK / PREVIEW NOTA DINAS PPTK
+// ============================================================
+function cetakNotaPPTK(id) {
+  const n = STATE.notaDinas.pptk.find(x=>x.id===id);
+  if (!n) return;
+  const kpa = ndGetKPA();
+  const pptk = ndGetPPTK(n.pptk_nama) || {};
+  const totalHarga = (n.items||[]).reduce((s,it)=>s+(it.jumlah||0)*(it.harga||0),0);
+
+  const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
+<title>Nota Dinas PPTK - ${n.nomor_urut}</title>
+<style>
+  body{font-family:'Times New Roman',serif;font-size:12pt;color:#000;margin:0;padding:0}
+  .page{width:210mm;min-height:297mm;padding:25mm 25mm 20mm 30mm;box-sizing:border-box;margin:auto}
+  h3{text-align:center;text-transform:uppercase;text-decoration:underline;font-size:13pt;margin:16px 0 10px}
+  table{width:100%;border-collapse:collapse;margin:10px 0}
+  table.header-nd td{padding:2px 4px;vertical-align:top;font-size:11.5pt}
+  table.data-table td,table.data-table th{border:1px solid #000;padding:4px 6px;font-size:10.5pt;vertical-align:top}
+  table.data-table th{background:#f0f0f0;text-align:center;font-weight:bold}
+  .ttd{display:flex;justify-content:space-between;margin-top:30px;gap:20px}
+  .ttd-box{text-align:center;min-width:200px}
+  .ttd-nama{font-weight:bold;text-decoration:underline;margin-top:60px}
+  .ttd-nip{font-size:10.5pt}
+  @media print{body{margin:0}@page{size:A4;margin:0}}
+</style></head><body>
+<div class="page">
+  <div style="text-align:center;margin-bottom:16px">
+    <div style="font-size:13pt;font-weight:bold;text-transform:uppercase">PEMERINTAH KABUPATEN MALANG</div>
+    <div style="font-size:12.5pt;font-weight:bold">SEKRETARIAT DAERAH</div>
+    <div style="font-size:12pt">Bagian Perekonomian dan Sumber Daya Alam</div>
+    <div style="font-size:11pt">Jl. KH. Agus Salim No. 7 Kepanjen, Malang 65163</div>
+    <hr style="border:2px solid #000;margin:8px 0 2px">
+    <hr style="border:1px solid #000;margin:0">
+  </div>
+
+  <h3>NOTA DINAS</h3>
+
+  <table class="header-nd" style="margin-bottom:8px">
+    <tr><td width="120">Kepada</td><td width="10">:</td><td>Yth. ${kpa?kpa.jabatan_resmi||kpa.jabatan:'Pejabat Pembuat Komitmen'}</td></tr>
+    <tr><td>Dari</td><td>:</td><td>${pptk.jabatan_resmi||pptk.jabatan||'Pejabat Pelaksana Teknis Kegiatan'}</td></tr>
+    <tr><td>Nomor</td><td>:</td><td>027/${n.nomor_urut}/PPTK-NODIN/${n.kode_rekening}/${STATE.tahun}</td></tr>
+    <tr><td>Tanggal</td><td>:</td><td>${ndTanggalPanjang(n.tanggal)}</td></tr>
+    <tr><td>Sifat</td><td>:</td><td>Penting</td></tr>
+    <tr><td>Lampiran</td><td>:</td><td>1 (satu) berkas</td></tr>
+    <tr><td>Hal</td><td>:</td><td><b>${n.hal}</b></td></tr>
+  </table>
+  <hr style="border:1px solid #000;margin:8px 0">
+
+  <p style="text-align:justify;line-height:1.8">
+    Dengan hormat, bersama ini disampaikan bahwa dalam rangka pelaksanaan Anggaran Pendapatan dan Belanja Daerah (APBD)
+    Tahun Anggaran ${STATE.tahun} sesuai Dokumen Pelaksanaan Anggaran (DPA) Nomor ${n.kode_rekening} tanggal ${ndTanggalPanjang(n.tanggal_dpa)||'—'},
+    dengan ini mengajukan permohonan persiapan pengadaan barang/jasa melalui Katalog Elektronik (e-Katalog) Inaproc
+    sebagaimana data terlampir.
+  </p>
+  ${n.latar_belakang?`<p style="text-align:justify;line-height:1.8"><b>Latar Belakang:</b> ${n.latar_belakang}</p>`:''}
+  ${n.uraian?`<p style="text-align:justify;line-height:1.8">${n.uraian}</p>`:''}
+
+  <h3 style="font-size:12pt">LAMPIRAN: DATA UMUM PERSIAPAN PENGADAAN</h3>
+  <table class="data-table">
+    <tr><td width="30" style="text-align:center">1</td><td width="200">Program</td><td>${n.program||'—'}</td></tr>
+    <tr><td style="text-align:center">2</td><td>Kegiatan</td><td>${n.kegiatan||'—'}</td></tr>
+    <tr><td style="text-align:center">3</td><td>Sub Kegiatan</td><td>${n.sub_kegiatan||'—'}</td></tr>
+    <tr><td style="text-align:center">4</td><td>Jenis Belanja</td><td>${n.belanja||'—'}</td></tr>
+    <tr><td style="text-align:center">5</td><td>Pagu Anggaran</td><td>${ndFmt(n.pagu)}</td></tr>
+    <tr><td style="text-align:center">6</td><td>Sumber Dana</td><td>${n.sumber_dana||'—'}</td></tr>
+    <tr><td style="text-align:center">7</td><td>Kode RUP</td><td>${n.kode_rup||'—'}</td></tr>
+    <tr><td style="text-align:center">8</td><td>Tujuan Pengadaan</td><td>${n.tujuan||'—'}</td></tr>
+    <tr><td style="text-align:center">9</td><td>Sasaran</td><td>${n.sasaran||'—'}</td></tr>
+    <tr><td style="text-align:center">10</td><td>Metode Pemilihan</td><td>Pengadaan Langsung melalui Katalog Elektronik (e-Katalog)</td></tr>
+  </table>
+
+  <h3 style="font-size:12pt;margin-top:16px">IDENTIFIKASI KEBUTUHAN BARANG/JASA</h3>
+  <table class="data-table">
+    <thead><tr>
+      <th width="30">No</th><th>Nama Barang/Jasa</th><th>Spesifikasi</th><th>Sat</th><th>Qty</th><th>Harga Satuan</th><th>Total Harga</th><th>Link Inaproc</th>
+    </tr></thead>
+    <tbody>
+      ${(n.items||[]).map((it,i)=>`
+      <tr>
+        <td style="text-align:center">${i+1}</td>
+        <td>${it.uraian||'—'}</td><td>${it.spek||'—'}</td>
+        <td style="text-align:center">${it.satuan||'—'}</td>
+        <td style="text-align:right">${it.jumlah||0}</td>
+        <td style="text-align:right">${ndFmt(it.harga)}</td>
+        <td style="text-align:right">${ndFmt((it.jumlah||0)*(it.harga||0))}</td>
+        <td style="font-size:9pt;word-break:break-all">${it.link||'—'}</td>
+      </tr>`).join('')}
+    </tbody>
+    <tfoot><tr>
+      <td colspan="6" style="text-align:right;font-weight:bold">TOTAL</td>
+      <td style="text-align:right;font-weight:bold">${ndFmt(totalHarga)}</td>
+      <td></td>
+    </tr></tfoot>
+  </table>
+
+  <p style="text-align:justify;margin-top:12px;line-height:1.8">
+    Demikian nota dinas ini disampaikan untuk dapat ditindaklanjuti sebagaimana mestinya. Atas perhatian dan kerjasamanya diucapkan terima kasih.
+  </p>
+
+  <div class="ttd">
+    <div style="flex:1"></div>
+    <div class="ttd-box">
+      <div>Kepanjen, ${ndTanggalPanjang(n.tanggal)}</div>
+      <div>${pptk.jabatan_resmi||'Pejabat Pelaksana Teknis Kegiatan'}</div>
+      <div class="ttd-nama">${n.pptk_nama||pptk.nama||'—'}</div>
+      <div class="ttd-nip">NIP. ${pptk.nip||'—'}</div>
+    </div>
+  </div>
+</div>
+<script>window.onload=()=>{window.print();}<\/script>
+</body></html>`;
+  openPrintWindow(html, 'Nota Dinas PPTK');
+}
+
+function previewNotaPPTK(id) { cetakNotaPPTK(id); }
+
+// ============================================================
+// CETAK / PREVIEW NOTA DINAS PPK
+// ============================================================
+function cetakNotaPPK(id) {
+  const n = STATE.notaDinas.ppk.find(x=>x.id===id);
+  if (!n) return;
+  const kpa = ndGetKPA();
+  const totalHarga = (n.items||[]).reduce((s,it)=>s+(it.jumlah||0)*(it.harga||0),0);
+
+  const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
+<title>Nota Dinas PPK - ${n.nomor_urut}</title>
+<style>
+  body{font-family:'Times New Roman',serif;font-size:12pt;color:#000;margin:0;padding:0}
+  .page{width:210mm;min-height:297mm;padding:25mm 25mm 20mm 30mm;box-sizing:border-box;margin:auto}
+  h3{text-align:center;text-transform:uppercase;text-decoration:underline;font-size:13pt;margin:16px 0 10px}
+  table{width:100%;border-collapse:collapse;margin:10px 0}
+  table.header-nd td{padding:2px 4px;vertical-align:top;font-size:11.5pt}
+  table.data-table td,table.data-table th{border:1px solid #000;padding:4px 6px;font-size:10.5pt;vertical-align:top}
+  table.data-table th{background:#f0f0f0;text-align:center;font-weight:bold}
+  .ttd{display:flex;justify-content:flex-end;margin-top:30px}
+  .ttd-box{text-align:center;min-width:220px}
+  .ttd-nama{font-weight:bold;text-decoration:underline;margin-top:60px}
+  .ttd-nip{font-size:10.5pt}
+  @media print{body{margin:0}@page{size:A4;margin:0}}
+</style></head><body>
+<div class="page">
+  <div style="text-align:center;margin-bottom:16px">
+    <div style="font-size:13pt;font-weight:bold;text-transform:uppercase">PEMERINTAH KABUPATEN MALANG</div>
+    <div style="font-size:12.5pt;font-weight:bold">SEKRETARIAT DAERAH</div>
+    <div style="font-size:12pt">Bagian Perekonomian dan Sumber Daya Alam</div>
+    <div style="font-size:11pt">Jl. KH. Agus Salim No. 7 Kepanjen, Malang 65163</div>
+    <hr style="border:2px solid #000;margin:8px 0 2px">
+    <hr style="border:1px solid #000;margin:0">
+  </div>
+
+  <h3>NOTA DINAS</h3>
+
+  <table class="header-nd" style="margin-bottom:8px">
+    <tr><td width="120">Kepada</td><td width="10">:</td><td>Yth. Pejabat Pengadaan Barang/Jasa<br>Bagian Perekonomian dan Sumber Daya Alam</td></tr>
+    <tr><td>Dari</td><td>:</td><td>${kpa?kpa.jabatan_resmi||kpa.jabatan:'Kuasa Pengguna Anggaran / Pejabat Pembuat Komitmen'}</td></tr>
+    <tr><td>Nomor</td><td>:</td><td>027/${n.nomor_urut}/PPK-NODIN/${n.kode_rekening}/${STATE.tahun}</td></tr>
+    <tr><td>Tanggal</td><td>:</td><td>${ndTanggalPanjang(n.tanggal)}</td></tr>
+    <tr><td>Sifat</td><td>:</td><td>Penting</td></tr>
+    <tr><td>Lampiran</td><td>:</td><td>1 (satu) berkas</td></tr>
+    <tr><td>Hal</td><td>:</td><td><b>${n.hal}</b></td></tr>
+  </table>
+  <hr style="border:1px solid #000;margin:8px 0">
+
+  <p style="text-align:justify;line-height:1.8">
+    Dengan hormat, dalam rangka pelaksanaan kegiatan pengadaan barang/jasa Tahun Anggaran ${STATE.tahun},
+    bersama ini diperintahkan kepada Pejabat Pengadaan untuk melaksanakan pengadaan barang/jasa
+    melalui Katalog Elektronik (e-Katalog) Inaproc dengan spesifikasi teknis sebagai berikut.
+  </p>
+  ${n.uraian_pekerjaan?`<p style="text-align:justify;line-height:1.8">${n.uraian_pekerjaan}</p>`:''}
+
+  <h3 style="font-size:12pt">LAMPIRAN: SPESIFIKASI TEKNIS / KAK</h3>
+  <table class="data-table">
+    <tr><th colspan="2" style="text-align:left;padding:6px">A. DATA UMUM</th></tr>
+    <tr><td width="220">Program</td><td>${n.program||'—'}</td></tr>
+    <tr><td>Kegiatan</td><td>${n.kegiatan||'—'}</td></tr>
+    <tr><td>Sub Kegiatan</td><td>${n.sub_kegiatan||'—'}</td></tr>
+    <tr><td>Jenis Belanja</td><td>${n.belanja||'—'}</td></tr>
+    <tr><td>Nilai Pengadaan</td><td>${ndFmt(n.nilai_pengadaan)}</td></tr>
+    <tr><td>Sumber Dana</td><td>${n.sumber_dana||'—'}</td></tr>
+    <tr><td>Kode RUP</td><td>${n.kode_rup||'—'}</td></tr>
+    <tr><td>PPTK</td><td>${n.pptk_nama||'—'}</td></tr>
+    <tr><th colspan="2" style="text-align:left;padding:6px;border-top:2px solid #000">B. SPESIFIKASI TEKNIS</th></tr>
+    <tr><td>Latar Belakang</td><td>${n.latar_belakang||'—'}</td></tr>
+    <tr><td>Ruang Lingkup</td><td>${n.ruang_lingkup||'—'}</td></tr>
+    <tr><td>Maksud dan Tujuan</td><td>${n.maksud_tujuan||'—'}</td></tr>
+    <tr><td>Keluaran (Output)</td><td>${n.keluaran||'—'}</td></tr>
+    <tr><td>Manfaat</td><td>${n.manfaat||'—'}</td></tr>
+    <tr><td>Fungsi</td><td>${n.fungsi||'—'}</td></tr>
+    <tr><td>Syarat Penyedia</td><td>${n.syarat_penyedia||'—'}</td></tr>
+    <tr><td>Waktu Pelaksanaan</td><td>${n.waktu_pelaksanaan||'—'}</td></tr>
+  </table>
+
+  <h3 style="font-size:12pt;margin-top:16px">DAFTAR KEBUTUHAN BARANG/JASA</h3>
+  <table class="data-table">
+    <thead><tr>
+      <th width="30">No</th><th>Nama Barang/Jasa</th><th>Spesifikasi</th><th>Sat</th><th>Qty</th><th>Harga Satuan</th><th>Total</th>
+    </tr></thead>
+    <tbody>
+      ${(n.items||[]).map((it,i)=>`
+      <tr>
+        <td style="text-align:center">${i+1}</td>
+        <td>${it.uraian||'—'}</td><td>${it.spek||'—'}</td>
+        <td style="text-align:center">${it.satuan||'—'}</td>
+        <td style="text-align:right">${it.jumlah||0}</td>
+        <td style="text-align:right">${ndFmt(it.harga)}</td>
+        <td style="text-align:right">${ndFmt((it.jumlah||0)*(it.harga||0))}</td>
+      </tr>`).join('')}
+    </tbody>
+    <tfoot><tr>
+      <td colspan="6" style="text-align:right;font-weight:bold">TOTAL NILAI PENGADAAN</td>
+      <td style="text-align:right;font-weight:bold">${ndFmt(n.nilai_pengadaan||totalHarga)}</td>
+    </tr></tfoot>
+  </table>
+
+  <p style="text-align:justify;margin-top:12px;line-height:1.8">
+    Demikian nota dinas ini dibuat untuk dilaksanakan sebagaimana mestinya.
+  </p>
+
+  <div class="ttd">
+    <div class="ttd-box">
+      <div>Kepanjen, ${ndTanggalPanjang(n.tanggal)}</div>
+      <div>${kpa?kpa.jabatan_resmi||kpa.jabatan:'Kuasa Pengguna Anggaran'}</div>
+      <div class="ttd-nama">${kpa?kpa.nama:'—'}</div>
+      <div class="ttd-nip">NIP. ${kpa?kpa.nip||'—':'—'}</div>
+    </div>
+  </div>
+</div>
+<script>window.onload=()=>{window.print();}<\/script>
+</body></html>`;
+  openPrintWindow(html, 'Nota Dinas PPK');
+}
+
+function previewNotaPPK(id) { cetakNotaPPK(id); }
+
+// Load nota dinas from Supabase on init (called after login)
 
 // ============ MUSIC PLAYER ============
 var MP_DEFAULT_TRACKS = [
