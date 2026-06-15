@@ -3953,6 +3953,14 @@ window.addEventListener('resize', function() {
           <input class="form-input" id="ndpKodeRup" placeholder="Kode RUP dari SIRUP">
         </div>
         <div class="form-group">
+          <label class="form-label">Jenis DPA</label>
+          <select class="form-select" id="ndpJenisDpa">
+            <option value="DPA Murni">DPA Murni</option>
+            <option value="DPA Pergeseran">DPA Pergeseran</option>
+            <option value="DPA Perubahan">DPA Perubahan</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label class="form-label">Sumber Dana Tambahan</label>
           <input class="form-input" id="ndpSumberDana2" placeholder="(jika berbeda dari master)">
         </div>
@@ -4032,6 +4040,17 @@ window.addEventListener('resize', function() {
         </div>
         <div style="text-align:right;margin-top:6px;font-size:13px;font-weight:700">
           Total: <span id="ndpTotalHarga" style="color:var(--c-primary)">Rp 0</span>
+        </div>
+      </div>
+
+      <!-- REFERENSI LINK INAPROC -->
+      <div style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label class="form-label" style="margin:0;font-weight:700">🔗 Referensi Harga / Link Inaproc</label>
+          <button class="btn btn-sm btn-outline" onclick="ndpAddLink()">+ Tambah Link</button>
+        </div>
+        <div id="ndpLinksBody">
+          <p style="font-size:12px;color:var(--c-text-muted);text-align:center;padding:8px">Belum ada link — klik "+ Tambah Link"</p>
         </div>
       </div>
     </div>
@@ -4588,9 +4607,8 @@ function renderNotaPPTK() {
         + (rekaCount > 0 ? '<div style="font-size:11px;color:var(--c-success);margin-top:4px">✅ Sudah ada ' + rekaCount + ' Nota PPK terkait</div>' : '')
         + '</div>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">'
-        + '<button class="btn btn-sm btn-outline" onclick="previewNotaPPTK(&quot;' + n.id + '&quot;)">👁 Preview</button>'
         + '<button class="btn btn-sm btn-outline" onclick="openModalNotaPPTK(&quot;' + n.id + '&quot;)">✏️ Edit</button>'
-        + '<button class="btn btn-sm btn-blue" onclick="cetakNotaPPTK(&quot;' + n.id + '&quot;)">🖨️ Cetak</button>'
+        + '<button class="btn btn-sm btn-blue" onclick="cetakNotaPPTK(&quot;' + n.id + '&quot;)">🖨️ Cetak/Unduh</button>'
         + '<button class="btn btn-sm btn-outline" onclick="buatNotaPPKDari(&quot;' + n.id + '&quot;)">📋 Buat Nota PPK</button>'
         + '<button class="btn btn-sm btn-red" onclick="hapusNotaPPTK(&quot;' + n.id + '&quot;)">🗑️</button>'
         + '</div></div></div>';
@@ -4637,9 +4655,8 @@ function renderNotaPPK() {
         + (notaPPTK ? '<div style="font-size:11px;color:var(--c-text-muted);margin-top:4px">Berdasarkan Nota PPTK: ' + (notaPPTK.nomor_urut||'—') + '</div>' : '')
         + '</div>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">'
-        + '<button class="btn btn-sm btn-outline" onclick="previewNotaPPK(&quot;' + n.id + '&quot;)">👁 Preview</button>'
         + '<button class="btn btn-sm btn-outline" onclick="openModalNotaPPK(&quot;' + n.id + '&quot;)">✏️ Edit</button>'
-        + '<button class="btn btn-sm btn-blue" onclick="cetakNotaPPK(&quot;' + n.id + '&quot;)">🖨️ Cetak</button>'
+        + '<button class="btn btn-sm btn-blue" onclick="cetakNotaPPK(&quot;' + n.id + '&quot;)">🖨️ Cetak/Unduh</button>'
         + (!isKPA ? '<button class="btn btn-sm btn-red" onclick="hapusNotaPPK(&quot;' + n.id + '&quot;)">🗑️</button>' : '')
         + '</div></div></div>';
     });
@@ -4667,7 +4684,9 @@ function openModalNotaPPTK(editId) {
   document.getElementById('ndpTujuan').value = '';
   document.getElementById('ndpSasaran').value = '';
   document.getElementById('ndpSumberDana2').value = '';
+  document.getElementById('ndpJenisDpa').value = 'DPA Murni';
   ndpClearItems();
+  ndpLinks = []; ndpRenderLinks();
 
   // Isi dropdown rekening
   ndpPopulateRekening();
@@ -4689,11 +4708,12 @@ function openModalNotaPPTK(editId) {
     // Pilih rekening
     setTimeout(()=>{
       document.getElementById('ndpRekening').value = nota.kode_rekening||'';
+      if (nota.jenis_dpa) document.getElementById('ndpJenisDpa').value = nota.jenis_dpa;
       ndpOnRekeningChange();
-      // Restore items
-      if (nota.items && nota.items.length > 0) {
-        nota.items.forEach(item => ndpAddItem(item));
-      }
+      if (nota.items && nota.items.length > 0) nota.items.forEach(item => ndpAddItem(item));
+      ndpLinks = [];
+      if (nota.links && nota.links.length > 0) nota.links.forEach(lnk => ndpAddLink(lnk));
+      else ndpRenderLinks();
     }, 50);
   } else {
     document.getElementById('modalNotaPPTKTitle').textContent = 'Buat Nota Dinas PPTK';
@@ -4754,6 +4774,33 @@ let ndpItems = [];
 function ndpClearItems() {
   ndpItems = [];
   ndpRenderItems();
+}
+
+// Links Referensi Inaproc
+var ndpLinks = [];
+function ndpClearLinks() { ndpLinks = []; ndpRenderLinks(); }
+function ndpAddLink(link) {
+  ndpLinks.push(link || {uraian:'', link:''});
+  ndpRenderLinks();
+}
+function ndpRemoveLink(i) { ndpLinks.splice(i,1); ndpRenderLinks(); }
+function ndpLinkChange(i, field, val) { ndpLinks[i][field] = val; }
+function ndpRenderLinks() {
+  const el = document.getElementById('ndpLinksBody');
+  if (!el) return;
+  if (ndpLinks.length === 0) {
+    el.innerHTML = '<p style="font-size:12px;color:var(--c-text-muted);text-align:center;padding:8px">Belum ada link — klik "+ Tambah Link"</p>';
+    return;
+  }
+  el.innerHTML = ndpLinks.map((lnk,i)=>`
+    <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+      <span style="font-size:11px;min-width:18px;text-align:center;color:var(--c-text-muted)">${i+1}</span>
+      <input class="form-input" style="flex:1;font-size:12px" value="${escHtml(lnk.uraian||'')}"
+        oninput="ndpLinkChange(${i},'uraian',this.value)" placeholder="Nama barang/jasa">
+      <input class="form-input" style="flex:2;font-size:11px;font-family:monospace" value="${escHtml(lnk.link||'')}"
+        oninput="ndpLinkChange(${i},'link',this.value)" placeholder="https://katalog.inaproc.id/...">
+      <button onclick="ndpRemoveLink(${i})" class="btn btn-sm btn-red">✕</button>
+    </div>`).join('');
 }
 function ndpAddItem(item) {
   ndpItems.push(item || {uraian:'',spek:'',satuan:'',jumlah:0,harga:0,link:''});
@@ -4823,7 +4870,9 @@ async function saveNotaPPTK() {
     tujuan: document.getElementById('ndpTujuan').value.trim(),
     sasaran: document.getElementById('ndpSasaran').value.trim(),
     sumber_dana_tambahan: document.getElementById('ndpSumberDana2').value.trim(),
+    jenis_dpa: document.getElementById('ndpJenisDpa').value,
     items: ndpItems.map(it=>({...it})),
+    links: ndpLinks.map(lnk=>({...lnk})),
     created_by: STATE.user.username,
     created_at: new Date().toISOString(),
   };
@@ -5205,139 +5254,273 @@ function ndAiKonteksPPK() {
 // ============================================================
 // CETAK / PREVIEW NOTA DINAS PPTK
 // ============================================================
+// ============================================================
+// HELPER: KOP SURAT KOTA BATU
+// ============================================================
+function ndKopSurat(withBorder) {
+  return `
+  <div class="kop">
+    <div class="kop-nama">PEMERINTAH KOTA BATU</div>
+    <div class="kop-unit">SEKRETARIAT DAERAH</div>
+    <div class="kop-sub">Bagian Perekonomian dan Sumber Daya Alam</div>
+    <div class="kop-alamat">Jl. Panglima Sudirman No. 507 Kota Batu Kode Pos 65313</div>
+    <div class="kop-garis1"></div>
+    <div class="kop-garis2"></div>
+  </div>`;
+}
+
+function ndStyleCetak() {
+  return `
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Times New Roman',Times,serif;font-size:11pt;color:#000;background:#fff}
+    .page{
+      width:210mm;min-height:297mm;
+      padding:20mm 30mm 20mm 30mm;
+      margin:0 auto;
+    }
+    /* Kop surat */
+    .kop{text-align:center;margin-bottom:10px}
+    .kop-nama{font-size:12pt;font-weight:bold;text-transform:uppercase;letter-spacing:.5px}
+    .kop-unit{font-size:12pt;font-weight:bold;text-transform:uppercase}
+    .kop-sub{font-size:11pt;font-weight:bold}
+    .kop-alamat{font-size:10pt;margin-top:2px}
+    .kop-garis1{border-top:3px solid #000;margin:6px 0 2px}
+    .kop-garis2{border-top:1px solid #000}
+    /* Heading */
+    h3.judul{
+      text-align:center;text-transform:uppercase;
+      text-decoration:underline;font-size:12pt;
+      font-weight:bold;margin:14px 0 10px;letter-spacing:1px
+    }
+    /* Header nota */
+    table.hdr{width:100%;border-collapse:collapse;margin-bottom:6px}
+    table.hdr td{padding:2px 4px;vertical-align:top;font-size:11pt;line-height:1.6}
+    td.lbl{width:130px;font-weight:normal}
+    td.sep{width:12px}
+    /* Paragraf isi */
+    p.isi{
+      text-align:justify;line-height:1.8;
+      font-size:11pt;margin:8px 0;
+      text-indent:0
+    }
+    /* Tanda tangan */
+    .ttd-wrap{margin-top:28px}
+    .ttd-box{text-align:center;display:inline-block;min-width:220px}
+    .ttd-nama{font-weight:bold;text-decoration:underline;margin-top:64px;font-size:11pt}
+    .ttd-jab{font-size:11pt;margin-top:2px}
+    .ttd-nip{font-size:11pt}
+    /* Tabel data */
+    table.dt{
+      width:100%;border-collapse:collapse;margin:8px 0;font-size:11pt
+    }
+    table.dt td,table.dt th{
+      border:1px solid #000;padding:3px 6px;vertical-align:top;line-height:1.5
+    }
+    table.dt th{
+      background:#e8e8e8;text-align:center;font-weight:bold;font-size:11pt
+    }
+    table.dt td.no{text-align:center;width:30px}
+    table.dt td.rp{text-align:right}
+    table.dt td.center{text-align:center}
+    /* Sub-judul lampiran */
+    p.lamp-sub{
+      font-weight:bold;font-size:11pt;
+      margin:10px 0 4px;text-decoration:underline
+    }
+    /* Ref harga link */
+    .link-ref{font-size:10pt;word-break:break-all;color:#000}
+    /* Page break */
+    .page-break{page-break-before:always;break-before:page}
+    @media print{
+      body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .page-break{page-break-before:always}
+      @page{size:A4;margin:0}
+    }
+  </style>`;
+}
+
+// ============================================================
+// CETAK NOTA DINAS PPTK
+// ============================================================
 function cetakNotaPPTK(id) {
   const n = STATE.notaDinas.pptk.find(x=>x.id===id);
   if (!n) return;
-  const kpa = ndGetKPA();
+  const kpa  = ndGetKPA() || {};
   const pptk = ndGetPPTK(n.pptk_nama) || {};
-  const totalHarga = (n.items||[]).reduce((s,it)=>s+(it.jumlah||0)*(it.harga||0),0);
+  const totalHarga = (n.items||[]).reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
+  const nomorNota = `027/${n.nomor_urut}/PPTK-NODIN/${n.kode_sub_kegiatan||''}${n.kode_sub_kegiatan&&n.kode_belanja?'-':''}${n.kode_belanja||''}/35.79.121/${STATE.tahun}`;
+  const namaKota  = 'Batu';
+  const tglCetak  = ndTanggalPanjang(n.tanggal);
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
-<title>Nota Dinas PPTK - ${n.nomor_urut}</title>
-<style>
-  body{font-family:'Times New Roman',serif;font-size:12pt;color:#000;margin:0;padding:0}
-  .page{width:210mm;min-height:297mm;padding:25mm 25mm 20mm 30mm;box-sizing:border-box;margin:0 auto}
-  .page-break{page-break-before:always;break-before:page}
-  h3{text-align:center;text-transform:uppercase;text-decoration:underline;font-size:13pt;margin:16px 0 10px}
-  .kop{text-align:center;margin-bottom:14px}
-  table{width:100%;border-collapse:collapse;margin:10px 0}
-  table.header-nd td{padding:2px 4px;vertical-align:top;font-size:11.5pt}
-  table.data-table td,table.data-table th{border:1px solid #000;padding:4px 6px;font-size:10.5pt;vertical-align:top}
-  table.data-table th{background:#f0f0f0;text-align:center;font-weight:bold}
-  .ttd{display:flex;justify-content:space-between;margin-top:30px;gap:20px}
-  .ttd-box{text-align:center;min-width:200px}
-  .ttd-nama{font-weight:bold;text-decoration:underline;margin-top:60px}
-  .ttd-nip{font-size:10.5pt}
-  p{text-align:justify;line-height:1.8;margin:6px 0}
-  @media print{body{margin:0}.page-break{page-break-before:always}@page{size:A4;margin:20mm 20mm 20mm 25mm}}
-</style></head><body>
+<title>Nota Dinas PPTK ${n.nomor_urut||''}</title>
+${ndStyleCetak()}
+</head><body>
 
-<!-- ===== HALAMAN 1: NOTA DINAS ===== -->
+<!-- ===== HALAMAN 1: NOTA DINAS PPTK ===== -->
 <div class="page">
-  <div class="kop">
-    <div style="font-size:13pt;font-weight:bold;text-transform:uppercase">PEMERINTAH KOTA BATU</div>
-    <div style="font-size:12.5pt;font-weight:bold">SEKRETARIAT DAERAH</div>
-    <div style="font-size:12pt">Bagian Perekonomian dan Sumber Daya Alam</div>
-    <div style="font-size:11pt">Jl. Panglima Sudirman No. 507 Kota Batu, Kode Pos 65313</div>
-    <hr style="border:2px solid #000;margin:8px 0 2px">
-    <hr style="border:1px solid #000;margin:0">
-  </div>
+  ${ndKopSurat()}
+  <h3 class="judul">NOTA DINAS</h3>
 
-  <h3>NOTA DINAS</h3>
-
-  <table class="header-nd" style="margin-bottom:8px">
-    <tr><td width="120">Kepada</td><td width="10">:</td><td>Yth. ${kpa?kpa.jabatan_resmi||kpa.jabatan:'Pejabat Pembuat Komitmen'}</td></tr>
-    <tr><td>Dari</td><td>:</td><td>${pptk.jabatan_resmi||pptk.jabatan||'Pejabat Pelaksana Teknis Kegiatan'}</td></tr>
-    <tr><td>Nomor</td><td>:</td><td>027/${n.nomor_urut}/PPTK-NODIN/${n.kode_rekening}/${STATE.tahun}</td></tr>
-    <tr><td>Tanggal</td><td>:</td><td>${ndTanggalPanjang(n.tanggal)}</td></tr>
-    <tr><td>Sifat</td><td>:</td><td>Penting</td></tr>
-    <tr><td>Lampiran</td><td>:</td><td>1 (satu) berkas</td></tr>
-    <tr><td>Hal</td><td>:</td><td><b>${n.hal}</b></td></tr>
+  <table class="hdr">
+    <tr><td class="lbl">Kepada</td><td class="sep">:</td><td>Yth. Kuasa Pengguna Anggaran selaku Pejabat Pembuat Komitmen<br>Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu</td></tr>
+    <tr><td class="lbl">Dari</td><td class="sep">:</td><td>Pejabat Pelaksana Teknis Kegiatan<br>Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu</td></tr>
+    <tr><td class="lbl">Tembusan</td><td class="sep">:</td><td>-</td></tr>
+    <tr><td class="lbl">Tanggal</td><td class="sep">:</td><td>${tglCetak}</td></tr>
+    <tr><td class="lbl">Nomor</td><td class="sep">:</td><td>${nomorNota}</td></tr>
+    <tr><td class="lbl">Sifat</td><td class="sep">:</td><td>Segera</td></tr>
+    <tr><td class="lbl">Lampiran</td><td class="sep">:</td><td>1 (satu) berkas</td></tr>
+    <tr><td class="lbl">Hal</td><td class="sep">:</td><td><b>${n.hal||'Persiapan Pengadaan Barang dan Jasa'}</b></td></tr>
   </table>
-  <hr style="border:1px solid #000;margin:8px 0">
+  <div class="kop-garis2" style="margin:8px 0"></div>
 
-  <p>Dengan hormat, bersama ini disampaikan bahwa dalam rangka pelaksanaan Anggaran Pendapatan dan Belanja Daerah (APBD) Tahun Anggaran ${STATE.tahun} sesuai Dokumen Pelaksanaan Anggaran (DPA) Nomor ${n.kode_rekening} tanggal ${ndTanggalPanjang(n.tanggal_dpa)||'—'}, dengan ini mengajukan permohonan persiapan pengadaan barang/jasa melalui Katalog Elektronik (e-Katalog) Inaproc sebagaimana data terlampir.</p>
-  ${n.latar_belakang?`<p>${n.latar_belakang}</p>`:''}
-  ${n.uraian?`<p>${n.uraian}</p>`:''}
-  ${n.tujuan?`<p>${n.tujuan}</p>`:''}
+  <p class="isi">Dalam rangka pelaksanaan Kegiatan <b>${n.kegiatan||'...'}</b> Sub Kegiatan <b>${n.sub_kegiatan||'...'}</b> untuk pelaksanaan pekerjaan <b>${n.nama_belanja||n.belanja||'...'}</b> mendukung Program <b>${n.program||'...'}</b> pada Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu, maka membutuhkan proses pengadaan barang/jasa untuk pekerjaan dimaksud tersebut benar-benar merupakan kebutuhan Satuan Kerja Perangkat Daerah (SKPD) yang telah direncanakan sebelumnya sehingga tertuang dalam Dokumen Pelaksanaan Anggaran Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Tahun Anggaran ${STATE.tahun}.</p>
 
-  <p>Demikian nota dinas ini disampaikan untuk dapat ditindaklanjuti sebagaimana mestinya. Atas perhatian dan kerja samanya diucapkan terima kasih.</p>
+  <p class="isi">Adapun data pendukung yang kami lampirkan sebagai bahan untuk proses pelaksanaan pengadaan barang/jasa antara lain Dokumen Pelaksanaan Anggaran DPA (${n.jenis_dpa||'DPA Murni/DPA Pergeseran/DPA Perubahan'}), Rencana Umum Pengadaan (RUP) dan data umum persiapan pengadaan barang/jasa pemerintah.</p>
 
-  <div class="ttd">
-    <div style="flex:1"></div>
+  <p class="isi">Demikian untuk dijadikan periksa dan mohon petunjuk lebih lanjut.</p>
+
+  <div class="ttd-wrap" style="text-align:right">
     <div class="ttd-box">
-      <div>${pptk.jabatan_resmi||'Pejabat Pelaksana Teknis Kegiatan'}</div>
-      <div class="ttd-nama">${n.pptk_nama||pptk.nama||'—'}</div>
-      <div class="ttd-nip">NIP. ${pptk.nip||'—'}</div>
+      <p class="isi" style="text-align:center">Pejabat Pelaksana Teknis Kegiatan<br>Bagian Perekonomian dan Sumber Daya Alam<br>Sekretariat Daerah Kota Batu</p>
+      <div class="ttd-nama">${n.pptk_nama||pptk.nama||'...'}</div>
+      <div class="ttd-nip">NIP. ${pptk.nip||'...'}</div>
     </div>
   </div>
 </div>
 
-<!-- ===== HALAMAN 2: LAMPIRAN ===== -->
+<!-- ===== HALAMAN 2: LAMPIRAN PPTK ===== -->
 <div class="page page-break">
-  <div class="kop">
-    <div style="font-size:13pt;font-weight:bold;text-transform:uppercase">PEMERINTAH KOTA BATU</div>
-    <div style="font-size:12.5pt;font-weight:bold">SEKRETARIAT DAERAH</div>
-    <div style="font-size:12pt">Bagian Perekonomian dan Sumber Daya Alam</div>
-    <hr style="border:2px solid #000;margin:8px 0 2px">
-    <hr style="border:1px solid #000;margin:0">
-  </div>
-
-  <h3 style="font-size:12.5pt">LAMPIRAN NOTA DINAS</h3>
-  <p style="text-align:center;margin-bottom:10px">Nomor: 027/${n.nomor_urut}/PPTK-NODIN/${n.kode_rekening}/${STATE.tahun}<br>Tanggal: ${ndTanggalPanjang(n.tanggal)}</p>
-
-  <h3 style="font-size:12pt">A. DATA UMUM PERSIAPAN PENGADAAN</h3>
-  <table class="data-table">
-    <tr><td width="30" style="text-align:center">1</td><td width="220">Program</td><td>${n.program||'—'}</td></tr>
-    <tr><td style="text-align:center">2</td><td>Kegiatan</td><td>${n.kegiatan||'—'}</td></tr>
-    <tr><td style="text-align:center">3</td><td>Sub Kegiatan</td><td>${n.sub_kegiatan||'—'}</td></tr>
-    <tr><td style="text-align:center">4</td><td>Jenis Belanja</td><td>${n.nama_belanja||n.belanja||'—'}</td></tr>
-    <tr><td style="text-align:center">5</td><td>Pagu Anggaran</td><td>${ndFmt(n.pagu)}</td></tr>
-    <tr><td style="text-align:center">6</td><td>Sumber Dana</td><td>${n.sumber_dana||'—'}</td></tr>
-    <tr><td style="text-align:center">7</td><td>Kode RUP</td><td>${n.kode_rup||'—'}</td></tr>
-    <tr><td style="text-align:center">8</td><td>Latar Belakang</td><td>${n.latar_belakang||'—'}</td></tr>
-    <tr><td style="text-align:center">9</td><td>Tujuan Pengadaan</td><td>${n.tujuan||'—'}</td></tr>
-    <tr><td style="text-align:center">10</td><td>Sasaran</td><td>${n.sasaran||'—'}</td></tr>
-    <tr><td style="text-align:center">11</td><td>Metode Pemilihan</td><td>Pengadaan Langsung melalui Katalog Elektronik (e-Katalog) Inaproc</td></tr>
+  ${ndKopSurat()}
+  <h3 class="judul">LAMPIRAN NOTA DINAS PEJABAT PELAKSANA TEKNIS KEGIATAN</h3>
+  <table class="hdr" style="margin-bottom:10px">
+    <tr><td class="lbl">Nomor</td><td class="sep">:</td><td>${nomorNota}</td></tr>
+    <tr><td class="lbl">Tanggal</td><td class="sep">:</td><td>${tglCetak}</td></tr>
   </table>
 
-  <h3 style="font-size:12pt;margin-top:16px">B. IDENTIFIKASI KEBUTUHAN BARANG/JASA</h3>
-  <table class="data-table">
-    <thead><tr>
-      <th width="28">No</th><th>Nama Barang/Jasa</th><th>Spesifikasi</th>
-      <th width="40">Sat</th><th width="40">Qty</th>
-      <th width="110">Harga Satuan</th><th width="110">Total Harga</th>
-      <th width="90">Link Inaproc</th>
-    </tr></thead>
-    <tbody>
-      ${(n.items||[]).map((it,i)=>`
-      <tr>
-        <td style="text-align:center">${i+1}</td>
-        <td>${it.uraian||'—'}</td><td>${it.spek||'—'}</td>
-        <td style="text-align:center">${it.satuan||'—'}</td>
-        <td style="text-align:right">${it.jumlah||0}</td>
-        <td style="text-align:right">${ndFmt(it.harga)}</td>
-        <td style="text-align:right">${ndFmt((it.jumlah||0)*(it.harga||0))}</td>
-        <td style="font-size:8.5pt;word-break:break-all">${it.link||'—'}</td>
-      </tr>`).join('')}
-    </tbody>
-    <tfoot><tr>
-      <td colspan="6" style="text-align:right;font-weight:bold;border:1px solid #000;padding:4px 6px">TOTAL</td>
-      <td style="text-align:right;font-weight:bold;border:1px solid #000;padding:4px 6px">${ndFmt(totalHarga)}</td>
-      <td style="border:1px solid #000"></td>
-    </tr></tfoot>
+  <p class="lamp-sub">Data Umum Persiapan Pengadaan Barang/Jasa</p>
+  <table class="dt">
+    <tr><td class="no">1</td><td style="width:220px">Program</td><td class="sep">:</td><td>${n.program||'—'}</td></tr>
+    <tr><td class="no">2</td><td>Kegiatan</td><td class="sep">:</td><td>${n.kegiatan||'—'}</td></tr>
+    <tr><td class="no">3</td><td>Sub Kegiatan</td><td class="sep">:</td><td>${n.sub_kegiatan||'—'}</td></tr>
+    <tr><td class="no">4</td><td>Pekerjaan / Belanja</td><td class="sep">:</td><td>${n.nama_belanja||n.belanja||'—'}</td></tr>
+    <tr><td class="no">5</td><td>Kode Rekening</td><td class="sep">:</td><td>${n.kode_rekening||'—'}</td></tr>
+    <tr><td class="no">6</td><td>Kode RUP</td><td class="sep">:</td><td>${n.kode_rup||'—'}</td></tr>
+    <tr><td class="no">7</td><td>Tanggal DPA</td><td class="sep">:</td><td>${ndTanggalPanjang(n.tanggal_dpa)||'—'}</td></tr>
+    <tr><td class="no">8</td><td>Uraian Pekerjaan</td><td class="sep">:</td><td>${n.uraian||'—'}</td></tr>
+    <tr><td class="no">9</td><td>Pagu Anggaran</td><td class="sep">:</td><td>${ndFmt(n.pagu)}</td></tr>
+    <tr><td class="no">10</td><td>Sisa Pagu Anggaran</td><td class="sep">:</td><td>${ndFmt(n.sisa_pagu||0)}</td></tr>
+    <tr><td class="no">11</td><td>Sisa SPD per-tanggal</td><td class="sep">:</td><td>${tglCetak}</td></tr>
+    <tr>
+      <td class="no" colspan="4" style="padding:0">
+        <table class="dt" style="margin:0;border:none">
+          <tr style="background:#e8e8e8">
+            <th style="width:28px">No</th><th>Uraian</th><th style="width:50px">Jumlah</th>
+            <th style="width:55px">Satuan</th><th style="width:105px">Harga Satuan (Rp)</th>
+            <th style="width:105px">Pagu Kebutuhan (Rp)</th>
+          </tr>
+          ${(n.items||[]).map((it,i)=>`
+          <tr>
+            <td class="no">${i+1}</td>
+            <td>${it.uraian||'—'}</td>
+            <td class="center">${it.jumlah||0}</td>
+            <td class="center">${it.satuan||'—'}</td>
+            <td class="rp">${ndFmt(it.harga)}</td>
+            <td class="rp">${ndFmt((parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0))}</td>
+          </tr>`).join('')}
+          <tr>
+            <td colspan="5" class="rp" style="font-weight:bold">Jumlah Harga (sudah termasuk pajak)</td>
+            <td class="rp" style="font-weight:bold">${ndFmt(totalHarga)}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr><td class="no">12</td><td>Lokasi Pekerjaan</td><td class="sep">:</td><td>Kantor Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu</td></tr>
+    <tr><td class="no">13</td><td>Ruang Lingkup</td><td class="sep">:</td><td>${n.ruang_lingkup||n.sasaran||'—'}</td></tr>
+    <tr><td class="no">14</td><td>Metode Pengadaan</td><td class="sep">:</td><td>e-Purchasing (e-Katalog / Toko Daring)</td></tr>
+    <tr><td class="no">15</td><td>Kriteria Barang/Jasa</td><td class="sep">:</td><td>Produk Dalam Negeri (PDN)</td></tr>
+    <tr><td class="no">16</td><td>Kriteria Pelaku Usaha</td><td class="sep">:</td><td>Usaha Kecil / Usaha Non Kecil</td></tr>
   </table>
 
-  <div class="ttd" style="margin-top:24px">
-    <div style="flex:1"></div>
+  <p class="lamp-sub" style="margin-top:12px">Identifikasi Kebutuhan Barang/Jasa</p>
+  <table class="dt">
+    <tr><td class="no">1</td><td style="width:220px">Nama Barang/Jasa</td><td class="sep">:</td><td>${n.nama_belanja||n.belanja||'—'}</td></tr>
+    <tr>
+      <td class="no">2</td><td>Manfaat dan Fungsi Pengadaan</td><td class="sep">:</td>
+      <td>
+        <b>Manfaat :</b> ${n.manfaat||'—'}<br>
+        <b>Fungsi :</b> ${n.fungsi||'—'}
+      </td>
+    </tr>
+    <tr><td class="no">3</td><td>Pihak Pengguna/Pengelola</td><td class="sep">:</td><td>Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu</td></tr>
+    <tr><td class="no">4</td><td>Garansi</td><td class="sep">:</td><td>-</td></tr>
+    <tr><td class="no">5</td><td>Perkiraan Waktu Proses Pengadaan</td><td class="sep">:</td><td>${n.waktu_pelaksanaan||'—'}</td></tr>
+    <tr><td class="no">6</td><td>Tingkat Prioritas</td><td class="sep">:</td><td>Tinggi</td></tr>
+    <tr>
+      <td class="no">7</td><td>Spesifikasi</td><td class="sep">:</td>
+      <td>
+        ${n.latar_belakang?`<b>Aspek Kualitas/Mutu :</b> ${n.latar_belakang}<br>`:''}
+        <b>Aspek Penggunaan PDN :</b> PDN (Produk Dalam Negeri)<br>
+        <b>Aspek Kuantitas/Jumlah :</b><br>
+        <table class="dt" style="margin:4px 0">
+          <tr style="background:#e8e8e8"><th class="no">No</th><th>Uraian</th><th style="width:60px">Jumlah</th><th style="width:55px">Satuan</th></tr>
+          ${(n.items||[]).map((it,i)=>`<tr><td class="no">${i+1}</td><td>${it.uraian||'—'}</td><td class="center">${it.jumlah||0}</td><td class="center">${it.satuan||'—'}</td></tr>`).join('')}
+        </table>
+        <b>Aspek Tempat :</b> Kantor Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu<br>
+        ${n.tujuan?`<b>Aspek Pelayanan :</b> ${n.tujuan}`:''}
+      </td>
+    </tr>
+    <tr><td class="no">8</td><td>Masa Pemanfaatan</td><td class="sep">:</td><td>Tahun Anggaran ${STATE.tahun}</td></tr>
+    <tr><td class="no">9</td><td>Analisis Pasar</td><td class="sep">:</td><td>Barang/Jasa tersedia di e-Katalog/Toko Daring</td></tr>
+    <tr><td class="no">10</td><td>Metode Pemilihan</td><td class="sep">:</td><td>e-Purchasing / Toko Daring</td></tr>
+    <tr><td class="no">11</td><td>Cara Pengiriman</td><td class="sep">:</td><td>Pengiriman mandiri oleh Penyedia</td></tr>
+  </table>
+
+  <p class="lamp-sub" style="margin-top:12px">Referensi Harga</p>
+  <table class="dt">
+    <tr style="background:#e8e8e8">
+      <th class="no">No</th><th>Uraian</th><th style="width:50px">Jml</th>
+      <th style="width:55px">Satuan</th><th style="width:105px">Harga Satuan (Rp)</th>
+      <th style="width:105px">Pagu Kebutuhan (Rp)</th>
+    </tr>
+    ${(n.items||[]).map((it,i)=>`
+    <tr>
+      <td class="no">${i+1}</td>
+      <td>${it.uraian||'—'}</td>
+      <td class="center">${it.jumlah||0}</td>
+      <td class="center">${it.satuan||'—'}</td>
+      <td class="rp">${ndFmt(it.harga)}</td>
+      <td class="rp">${ndFmt((parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0))}</td>
+    </tr>`).join('')}
+    <tr>
+      <td colspan="5" class="rp" style="font-weight:bold">Jumlah Harga (sudah termasuk pajak)</td>
+      <td class="rp" style="font-weight:bold">${ndFmt(totalHarga)}</td>
+    </tr>
+  </table>
+
+  <p style="font-size:11pt;margin:8px 0">Sumber Referensi Harga Satuan:</p>
+  <table class="dt">
+    <tr style="background:#e8e8e8"><th class="no">No</th><th style="width:180px">Kebutuhan Barang/Jasa</th><th>Link Inaproc</th></tr>
+    ${(n.links||[{uraian:n.nama_belanja||n.belanja||'—',link:'https://katalog.inaproc.id/'}]).map((lnk,i)=>`
+    <tr>
+      <td class="no">${i+1}</td>
+      <td>${lnk.uraian||'—'}</td>
+      <td class="link-ref">${lnk.link||'—'}</td>
+    </tr>`).join('')}
+  </table>
+
+  <p class="isi" style="margin-top:10px">Data umum dan daftar kebutuhan barang/jasa di atas dapat dijadikan dasar oleh Pejabat Pembuat Komitmen/Pejabat Pengadaan Barang/Jasa untuk proses pengadaan barang/jasa sehingga dapat segera dilaksanakan sesuai dengan aturan yang berlaku.</p>
+
+  <div class="ttd-wrap" style="text-align:right">
     <div class="ttd-box">
-      <div>${pptk.jabatan_resmi||'Pejabat Pelaksana Teknis Kegiatan'}</div>
-      <div class="ttd-nama">${n.pptk_nama||pptk.nama||'—'}</div>
-      <div class="ttd-nip">NIP. ${pptk.nip||'—'}</div>
+      <p class="isi" style="text-align:center">Pejabat Pelaksana Teknis Kegiatan<br>Bagian Perekonomian dan Sumber Daya Alam<br>Sekretariat Daerah Kota Batu</p>
+      <div class="ttd-nama">${n.pptk_nama||pptk.nama||'...'}</div>
+      <div class="ttd-nip">NIP. ${pptk.nip||'...'}</div>
     </div>
   </div>
 </div>
-<script>window.onload=()=>{window.print();}<\/script>
+<script>window.onload=()=>window.print();<\/script>
 </body></html>`;
   openPrintWindow(html, 'Nota Dinas PPTK');
 }
@@ -5345,143 +5528,187 @@ function cetakNotaPPTK(id) {
 function previewNotaPPTK(id) { cetakNotaPPTK(id); }
 
 // ============================================================
-// CETAK / PREVIEW NOTA DINAS PPK
+// CETAK NOTA DINAS PPK
 // ============================================================
 function cetakNotaPPK(id) {
   const n = STATE.notaDinas.ppk.find(x=>x.id===id);
   if (!n) return;
-  const kpa = ndGetKPA();
-  const totalHarga = (n.items||[]).reduce((s,it)=>s+(it.jumlah||0)*(it.harga||0),0);
+  const kpa  = ndGetKPA() || {};
+  const notaPPTK = (STATE.notaDinas.pptk||[]).find(p=>p.id===n.pptk_nota_id)||{};
+  const items = n.items || notaPPTK.items || [];
+  const totalHarga = items.reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
+  const nomorNota  = `027/${n.nomor_urut}/PPK-NODIN/${n.kode_sub_kegiatan||notaPPTK.kode_sub_kegiatan||''}${(n.kode_sub_kegiatan||notaPPTK.kode_sub_kegiatan)&&(n.kode_belanja||notaPPTK.kode_belanja)?'-':''}${n.kode_belanja||notaPPTK.kode_belanja||''}/35.79.121/${STATE.tahun}`;
+  const tglCetak   = ndTanggalPanjang(n.tanggal);
+  const namaKPA    = kpa.nama||'...';
+  const nipKPA     = kpa.nip||'...';
+  const jabKPA     = 'Kuasa Pengguna Anggaran selaku Pejabat Pembuat Komitmen';
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
-<title>Nota Dinas PPK - ${n.nomor_urut}</title>
-<style>
-  body{font-family:'Times New Roman',serif;font-size:12pt;color:#000;margin:0;padding:0}
-  .page{width:210mm;min-height:297mm;padding:25mm 25mm 20mm 30mm;box-sizing:border-box;margin:0 auto}
-  .page-break{page-break-before:always;break-before:page}
-  .kop{text-align:center;margin-bottom:14px}
-  h3{text-align:center;text-transform:uppercase;text-decoration:underline;font-size:13pt;margin:14px 0 8px}
-  table{width:100%;border-collapse:collapse;margin:8px 0}
-  table.header-nd td{padding:2px 4px;vertical-align:top;font-size:11.5pt}
-  table.data-table td,table.data-table th{border:1px solid #000;padding:4px 6px;font-size:10.5pt;vertical-align:top}
-  table.data-table th{background:#f0f0f0;font-weight:bold}
-  .ttd{display:flex;justify-content:flex-end;margin-top:28px}
-  .ttd-box{text-align:center;min-width:220px}
-  .ttd-nama{font-weight:bold;text-decoration:underline;margin-top:60px}
-  .ttd-nip{font-size:10.5pt}
-  p{text-align:justify;line-height:1.8;margin:6px 0}
-  @media print{.page-break{page-break-before:always}@page{size:A4;margin:20mm 20mm 20mm 25mm}}
-</style></head><body>
+<title>Nota Dinas PPK ${n.nomor_urut||''}</title>
+${ndStyleCetak()}
+</head><body>
 
 <!-- ===== HALAMAN 1: NOTA DINAS PPK ===== -->
 <div class="page">
-  <div class="kop">
-    <div style="font-size:13pt;font-weight:bold;text-transform:uppercase">PEMERINTAH KOTA BATU</div>
-    <div style="font-size:12.5pt;font-weight:bold">SEKRETARIAT DAERAH</div>
-    <div style="font-size:12pt">Bagian Perekonomian dan Sumber Daya Alam</div>
-    <div style="font-size:11pt">Jl. Panglima Sudirman No. 507 Kota Batu, Kode Pos 65313</div>
-    <hr style="border:2px solid #000;margin:8px 0 2px">
-    <hr style="border:1px solid #000;margin:0">
-  </div>
+  ${ndKopSurat()}
+  <h3 class="judul">NOTA DINAS</h3>
 
-  <h3>NOTA DINAS</h3>
-
-  <table class="header-nd" style="margin-bottom:8px">
-    <tr><td width="120">Kepada</td><td width="10">:</td><td>Yth. Pejabat Pengadaan Barang/Jasa<br>Bagian Perekonomian dan Sumber Daya Alam</td></tr>
-    <tr><td>Dari</td><td>:</td><td>${kpa?kpa.jabatan_resmi||kpa.jabatan:'Kuasa Pengguna Anggaran / Pejabat Pembuat Komitmen'}</td></tr>
-    <tr><td>Nomor</td><td>:</td><td>027/${n.nomor_urut}/PPK-NODIN/${n.kode_rekening}/${STATE.tahun}</td></tr>
-    <tr><td>Tanggal</td><td>:</td><td>${ndTanggalPanjang(n.tanggal)}</td></tr>
-    <tr><td>Sifat</td><td>:</td><td>Penting</td></tr>
-    <tr><td>Lampiran</td><td>:</td><td>1 (satu) berkas</td></tr>
-    <tr><td>Hal</td><td>:</td><td><b>${n.hal}</b></td></tr>
+  <table class="hdr">
+    <tr><td class="lbl">Kepada</td><td class="sep">:</td><td>Pejabat Pengadaan Barang/Jasa<br>Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu</td></tr>
+    <tr><td class="lbl">Dari</td><td class="sep">:</td><td>Pejabat Pembuat Komitmen<br>Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu</td></tr>
+    <tr><td class="lbl">Tembusan</td><td class="sep">:</td><td>-</td></tr>
+    <tr><td class="lbl">Tanggal</td><td class="sep">:</td><td>${tglCetak}</td></tr>
+    <tr><td class="lbl">Nomor</td><td class="sep">:</td><td>${nomorNota}</td></tr>
+    <tr><td class="lbl">Sifat</td><td class="sep">:</td><td>Segera</td></tr>
+    <tr><td class="lbl">Lampiran</td><td class="sep">:</td><td>1 (satu) berkas</td></tr>
+    <tr><td class="lbl">Perihal</td><td class="sep">:</td><td><b>${n.hal||'Pelaksanaan Pengadaan Barang/Jasa'}</b></td></tr>
   </table>
-  <hr style="border:1px solid #000;margin:8px 0">
+  <div class="kop-garis2" style="margin:8px 0"></div>
 
-  <p>Dengan hormat, dalam rangka pelaksanaan kegiatan pengadaan barang/jasa Tahun Anggaran ${STATE.tahun}, bersama ini diperintahkan kepada Pejabat Pengadaan untuk melaksanakan pengadaan barang/jasa melalui Katalog Elektronik (e-Katalog) Inaproc dengan spesifikasi teknis sebagaimana terlampir.</p>
-  ${n.uraian_pekerjaan?`<p>${n.uraian_pekerjaan}</p>`:''}
-  ${n.latar_belakang?`<p>${n.latar_belakang}</p>`:''}
+  <p class="isi">Dalam rangka pelaksanaan Kegiatan <b>${n.kegiatan||notaPPTK.kegiatan||'...'}</b> Sub Kegiatan <b>${n.sub_kegiatan||notaPPTK.sub_kegiatan||'...'}</b> untuk pelaksanaan pekerjaan <b>${n.nama_belanja||n.belanja||notaPPTK.nama_belanja||'...'}</b> mendukung Program <b>${n.program||notaPPTK.program||'...'}</b> pada Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu, maka membutuhkan proses pengadaan barang/jasa untuk pekerjaan dimaksud tersebut benar-benar merupakan kebutuhan Satuan Kerja Perangkat Daerah (SKPD) yang telah direncanakan sebelumnya sehingga tertuang dalam Dokumen Pelaksanaan Anggaran Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Tahun Anggaran ${STATE.tahun}.</p>
 
-  <p>Demikian nota dinas ini dibuat untuk dilaksanakan sebagaimana mestinya. Atas perhatian dan kerja samanya diucapkan terima kasih.</p>
+  <p class="isi">Atas dasar hal tersebut, bersama ini disampaikan kepada Pejabat Pengadaan Barang/Jasa Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu Tahun Anggaran ${STATE.tahun} untuk melaksanakan persiapan administrasi serta melaksanakan proses pemilihan penyedia barang/jasa terhadap kebutuhan barang/jasa tersebut. Adapun data pendukung yang kami lampirkan sebagai bahan untuk proses pemilihan penyedia barang/jasa antara lain Dokumen Pelaksanaan Anggaran DPA (${n.jenis_dpa||notaPPTK.jenis_dpa||'Murni/Pergeseran/Perubahan'}), Spesifikasi Teknis dan Daftar Kebutuhan Barang/Jasa.</p>
 
-  <div class="ttd">
+  <p class="isi">Demikian atas pelaksanaannya diucapkan terima kasih.</p>
+
+  <div class="ttd-wrap" style="text-align:right">
     <div class="ttd-box">
-      <div>${kpa?kpa.jabatan_resmi||kpa.jabatan:'Kuasa Pengguna Anggaran'}</div>
-      <div class="ttd-nama">${kpa?kpa.nama:'—'}</div>
-      <div class="ttd-nip">NIP. ${kpa?kpa.nip||'—':'—'}</div>
+      <p class="isi" style="text-align:center">${jabKPA}</p>
+      <div class="ttd-nama">${namaKPA}</div>
+      <div class="ttd-nip">NIP. ${nipKPA}</div>
     </div>
   </div>
 </div>
 
-<!-- ===== HALAMAN 2: LAMPIRAN SPESIFIKASI TEKNIS / KAK ===== -->
+<!-- ===== HALAMAN 2: LAMPIRAN SPESIFIKASI TEKNIS / KAK PPK ===== -->
 <div class="page page-break">
-  <div class="kop">
-    <div style="font-size:13pt;font-weight:bold;text-transform:uppercase">PEMERINTAH KOTA BATU</div>
-    <div style="font-size:12.5pt;font-weight:bold">SEKRETARIAT DAERAH</div>
-    <div style="font-size:12pt">Bagian Perekonomian dan Sumber Daya Alam</div>
-    <hr style="border:2px solid #000;margin:8px 0 2px">
-    <hr style="border:1px solid #000;margin:0">
-  </div>
-
-  <h3 style="font-size:12.5pt">LAMPIRAN NOTA DINAS</h3>
-  <p style="text-align:center;margin-bottom:10px">Nomor: 027/${n.nomor_urut}/PPK-NODIN/${n.kode_rekening}/${STATE.tahun}<br>Tanggal: ${ndTanggalPanjang(n.tanggal)}</p>
-
-  <h3 style="font-size:12pt">A. DATA UMUM</h3>
-  <table class="data-table">
-    <tr><td width="220">Program</td><td>${n.program||'—'}</td></tr>
-    <tr><td>Kegiatan</td><td>${n.kegiatan||'—'}</td></tr>
-    <tr><td>Sub Kegiatan</td><td>${n.sub_kegiatan||'—'}</td></tr>
-    <tr><td>Jenis Belanja</td><td>${n.nama_belanja||n.belanja||'—'}</td></tr>
-    <tr><td>Nilai Pengadaan</td><td>${ndFmt(n.nilai_pengadaan)}</td></tr>
-    <tr><td>Sumber Dana</td><td>${n.sumber_dana||'—'}</td></tr>
-    <tr><td>Kode RUP</td><td>${n.kode_rup||'—'}</td></tr>
-    <tr><td>PPTK</td><td>${n.pptk_nama||'—'}</td></tr>
+  ${ndKopSurat()}
+  <h3 class="judul">LAMPIRAN NOTA DINAS KUASA PENGGUNA ANGGARAN</h3>
+  <table class="hdr" style="margin-bottom:10px">
+    <tr><td class="lbl">Nomor</td><td class="sep">:</td><td>${nomorNota}</td></tr>
+    <tr><td class="lbl">Tanggal</td><td class="sep">:</td><td>${tglCetak}</td></tr>
   </table>
 
-  <h3 style="font-size:12pt;margin-top:12px">B. SPESIFIKASI TEKNIS / KERANGKA ACUAN KERJA</h3>
-  <table class="data-table">
-    <tr><td width="200">Latar Belakang</td><td>${n.latar_belakang||'—'}</td></tr>
-    <tr><td>Ruang Lingkup</td><td>${n.ruang_lingkup||'—'}</td></tr>
-    <tr><td>Maksud dan Tujuan</td><td>${n.maksud_tujuan||'—'}</td></tr>
-    <tr><td>Keluaran (Output)</td><td>${n.keluaran||'—'}</td></tr>
-    <tr><td>Manfaat</td><td>${n.manfaat||'—'}</td></tr>
-    <tr><td>Fungsi</td><td>${n.fungsi||'—'}</td></tr>
-    <tr><td>Syarat Penyedia</td><td>${n.syarat_penyedia||'—'}</td></tr>
-    <tr><td>Waktu Pelaksanaan</td><td>${n.waktu_pelaksanaan||'—'}</td></tr>
+  <h3 class="judul" style="font-size:11pt;margin:8px 0">Spesifikasi Teknis/Kerangka Acuan Kerja</h3>
+  <p class="isi">Dalam rangka menunjang aktivitas Kegiatan <b>${n.sub_kegiatan||notaPPTK.sub_kegiatan||'...'}</b>, maka perlu adanya dukungan sarana dan prasarana yang memadai guna kelancaran pelaksanaannya. Sehubungan dengan hal tersebut dipandang perlu dilakukan pemilihan penyedia pengadaan barang/jasa untuk pekerjaan <b>${n.nama_belanja||n.belanja||notaPPTK.nama_belanja||'...'}</b>, yang telah tertuang dalam Dokumen Pelaksanaan Anggaran DPA, Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu Tahun Anggaran ${STATE.tahun}. Data umum sebagai berikut:</p>
+
+  <p class="lamp-sub">Data Umum Pelaksanaan Pengadaan Barang/Jasa</p>
+  <table class="dt">
+    <tr><td class="no">1</td><td style="width:220px">Program</td><td class="sep">:</td><td>${n.program||notaPPTK.program||'—'}</td></tr>
+    <tr><td class="no">2</td><td>Kegiatan</td><td class="sep">:</td><td>${n.kegiatan||notaPPTK.kegiatan||'—'}</td></tr>
+    <tr><td class="no">3</td><td>Sub Kegiatan</td><td class="sep">:</td><td>${n.sub_kegiatan||notaPPTK.sub_kegiatan||'—'}</td></tr>
+    <tr><td class="no">4</td><td>Kode Rekening</td><td class="sep">:</td><td>${n.kode_rekening||notaPPTK.kode_rekening||'—'}</td></tr>
+    <tr><td class="no">5</td><td>Pekerjaan / Belanja</td><td class="sep">:</td><td>${n.nama_belanja||n.belanja||notaPPTK.nama_belanja||'—'}</td></tr>
+    <tr><td class="no">6</td><td>Kode RUP</td><td class="sep">:</td><td>${n.kode_rup||notaPPTK.kode_rup||'—'}</td></tr>
+    <tr><td class="no">7</td><td>Tanggal DPA</td><td class="sep">:</td><td>${ndTanggalPanjang(n.tanggal_dpa||notaPPTK.tanggal_dpa)||'—'}</td></tr>
+    <tr><td class="no">8</td><td>Latar Belakang</td><td class="sep">:</td><td>${n.latar_belakang||'—'}</td></tr>
+    <tr><td class="no">9</td><td>Maksud dan Tujuan</td><td class="sep">:</td><td>${n.maksud_tujuan||'—'}</td></tr>
+    <tr><td class="no">10</td><td>Pagu Anggaran</td><td class="sep">:</td><td>${ndFmt(n.pagu||notaPPTK.pagu||0)}</td></tr>
+    <tr><td class="no">11</td><td>Sisa Pagu Anggaran</td><td class="sep">:</td><td>${ndFmt(n.sisa_pagu||0)}</td></tr>
+    <tr>
+      <td class="no" colspan="4" style="padding:0">
+        <table class="dt" style="margin:0;border:none">
+          <tr style="background:#e8e8e8">
+            <th class="no">No</th><th>Uraian</th><th style="width:50px">Jumlah</th>
+            <th style="width:55px">Satuan</th><th style="width:105px">Harga Satuan (Rp)</th>
+            <th style="width:105px">Pagu Kebutuhan (Rp)</th>
+          </tr>
+          ${items.map((it,i)=>`
+          <tr>
+            <td class="no">${i+1}</td><td>${it.uraian||'—'}</td>
+            <td class="center">${it.jumlah||0}</td><td class="center">${it.satuan||'—'}</td>
+            <td class="rp">${ndFmt(it.harga)}</td>
+            <td class="rp">${ndFmt((parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0))}</td>
+          </tr>`).join('')}
+          <tr>
+            <td colspan="5" class="rp" style="font-weight:bold">Jumlah Harga (sudah termasuk pajak)</td>
+            <td class="rp" style="font-weight:bold">${ndFmt(n.nilai_pengadaan||totalHarga)}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr><td class="no">12</td><td>Jangka Waktu</td><td class="sep">:</td><td>${n.waktu_pelaksanaan||'—'}</td></tr>
+    <tr><td class="no">13</td><td>Lokasi Pekerjaan</td><td class="sep">:</td><td>Kantor Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu</td></tr>
   </table>
 
-  <h3 style="font-size:12pt;margin-top:12px">C. DAFTAR KEBUTUHAN BARANG/JASA</h3>
-  <table class="data-table">
-    <thead><tr>
-      <th width="28">No</th><th>Nama Barang/Jasa</th><th>Spesifikasi</th>
-      <th width="40">Sat</th><th width="40">Qty</th>
-      <th width="110">Harga Satuan</th><th width="110">Total</th>
-    </tr></thead>
-    <tbody>
-      ${(n.items||[]).map((it,i)=>`
-      <tr>
-        <td style="text-align:center">${i+1}</td>
-        <td>${it.uraian||'—'}</td><td>${it.spek||'—'}</td>
-        <td style="text-align:center">${it.satuan||'—'}</td>
-        <td style="text-align:right">${it.jumlah||0}</td>
-        <td style="text-align:right">${ndFmt(it.harga)}</td>
-        <td style="text-align:right">${ndFmt((it.jumlah||0)*(it.harga||0))}</td>
-      </tr>`).join('')}
-    </tbody>
-    <tfoot><tr>
-      <td colspan="6" style="text-align:right;font-weight:bold;border:1px solid #000;padding:4px 6px">TOTAL NILAI PENGADAAN</td>
-      <td style="text-align:right;font-weight:bold;border:1px solid #000;padding:4px 6px">${ndFmt(n.nilai_pengadaan||totalHarga)}</td>
-    </tr></tfoot>
+  <p class="lamp-sub" style="margin-top:10px">Spesifikasi Teknis</p>
+  <table class="dt">
+    <tr>
+      <td class="no">1</td><td style="width:160px">Aspek Kualitas</td><td class="sep">:</td>
+      <td>
+        <table class="dt" style="margin:0">
+          <tr style="background:#e8e8e8"><th class="no">No</th><th>Kebutuhan Barang/Jasa</th><th>Spesifikasi Umum</th></tr>
+          ${items.map((it,i)=>`<tr><td class="no">${i+1}</td><td>${it.uraian||'—'}</td><td>${it.spek||'—'}</td></tr>`).join('')}
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td class="no">2</td><td>Aspek Kuantitas</td><td class="sep">:</td>
+      <td>
+        <table class="dt" style="margin:0">
+          <tr style="background:#e8e8e8"><th class="no">No</th><th>Uraian</th><th style="width:60px">Jumlah</th><th style="width:55px">Satuan</th></tr>
+          ${items.map((it,i)=>`<tr><td class="no">${i+1}</td><td>${it.uraian||'—'}</td><td class="center">${it.jumlah||0}</td><td class="center">${it.satuan||'—'}</td></tr>`).join('')}
+        </table>
+      </td>
+    </tr>
+    <tr><td class="no">3</td><td>Aspek Waktu</td><td class="sep">:</td><td>Bulan Januari s.d. Desember ${STATE.tahun}</td></tr>
+    <tr><td class="no">4</td><td>Aspek Tempat</td><td class="sep">:</td><td>Kantor Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu</td></tr>
+    <tr><td class="no">5</td><td>Aspek Layanan</td><td class="sep">:</td><td>${n.fungsi||'—'}</td></tr>
+    <tr><td class="no">6</td><td>Ruang Lingkup Belanja</td><td class="sep">:</td><td>${n.ruang_lingkup||'—'}</td></tr>
+    <tr><td class="no">7</td><td>Manfaat</td><td class="sep">:</td><td>${n.manfaat||'—'}</td></tr>
   </table>
 
-  <div class="ttd" style="margin-top:20px">
+  <p class="lamp-sub" style="margin-top:10px">Daftar Kebutuhan Barang dan Referensi Harga</p>
+  <table class="dt">
+    <tr style="background:#e8e8e8">
+      <th class="no">No</th><th>Uraian</th><th style="width:50px">Jml</th>
+      <th style="width:55px">Satuan</th><th style="width:105px">Harga Satuan (Rp)</th>
+      <th style="width:105px">Pagu Kebutuhan (Rp)</th>
+    </tr>
+    ${items.map((it,i)=>`
+    <tr>
+      <td class="no">${i+1}</td><td>${it.uraian||'—'}</td>
+      <td class="center">${it.jumlah||0}</td><td class="center">${it.satuan||'—'}</td>
+      <td class="rp">${ndFmt(it.harga)}</td>
+      <td class="rp">${ndFmt((parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0))}</td>
+    </tr>`).join('')}
+    <tr>
+      <td colspan="5" class="rp" style="font-weight:bold">Jumlah Harga (sudah termasuk pajak)</td>
+      <td class="rp" style="font-weight:bold">${ndFmt(n.nilai_pengadaan||totalHarga)}</td>
+    </tr>
+  </table>
+
+  <p style="font-size:10pt;margin:4px 0">*) harga yang tercantum adalah harga terendah/harga terbaik/harga rata-rata</p>
+  <p style="font-size:10pt;margin:0 0 8px">**) harga sudah termasuk pajak</p>
+
+  <p style="font-size:11pt;margin:6px 0">Sumber Referensi Harga Satuan:</p>
+  <table class="dt">
+    <tr style="background:#e8e8e8"><th class="no">No</th><th style="width:180px">Kebutuhan Barang/Jasa</th><th>Link</th></tr>
+    ${(n.links||notaPPTK.links||[{uraian:n.nama_belanja||notaPPTK.nama_belanja||'—',link:'https://katalog.inaproc.id/'}]).map((lnk,i)=>`
+    <tr><td class="no">${i+1}</td><td>${lnk.uraian||'—'}</td><td class="link-ref">${lnk.link||'—'}</td></tr>`).join('')}
+  </table>
+
+  <p class="lamp-sub" style="margin-top:10px">Syarat Penyedia</p>
+  <table class="dt">
+    <tr>
+      <td class="no">1</td><td style="width:160px">Syarat Penyedia</td><td class="sep">:</td>
+      <td>${n.syarat_penyedia||'Terdaftar pada aplikasi e-Katalog/Toko Daring/Bela Pengadaan; Memiliki kelengkapan administrasi yang dibutuhkan (NIB, NPWP, SIUP, NPWPD, KTP, No. Rekening); KBKI dan KBLI sesuai dengan pekerjaan/nama belanja'}</td>
+    </tr>
+    <tr><td class="no">2</td><td>Metode Pemilihan</td><td class="sep">:</td><td>e-Purchasing (negosiasi / mini kompetisi)</td></tr>
+  </table>
+
+  <p class="isi" style="margin-top:10px">Data kegiatan tersebut dapat dijadikan dasar oleh Pejabat Pengadaan Barang/Jasa untuk segera melaksanakan persiapan dan/atau pelaksanaan pemilihan penyedia.</p>
+  <p class="isi">Demikian atas perhatian dan kerjasamanya disampaikan terima kasih.</p>
+
+  <div class="ttd-wrap" style="text-align:right">
     <div class="ttd-box">
-      <div>${kpa?kpa.jabatan_resmi||kpa.jabatan:'Kuasa Pengguna Anggaran'}</div>
-      <div class="ttd-nama">${kpa?kpa.nama:'—'}</div>
-      <div class="ttd-nip">NIP. ${kpa?kpa.nip||'—':'—'}</div>
+      <p class="isi" style="text-align:center">${jabKPA}</p>
+      <div class="ttd-nama">${namaKPA}</div>
+      <div class="ttd-nip">NIP. ${nipKPA}</div>
     </div>
   </div>
 </div>
-<script>window.onload=()=>{window.print();}<\/script>
+<script>window.onload=()=>window.print();<\/script>
 </body></html>`;
   openPrintWindow(html, 'Nota Dinas PPK');
 }
@@ -5489,6 +5716,7 @@ function cetakNotaPPK(id) {
 function previewNotaPPK(id) { cetakNotaPPK(id); }
 
 // Load nota dinas from Supabase on init (called after login)
+
 
 // ============ MUSIC PLAYER ============
 var MP_DEFAULT_TRACKS = [
