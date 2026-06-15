@@ -5266,7 +5266,6 @@ function cetakNotaPPTK(id) {
   <div class="ttd">
     <div style="flex:1"></div>
     <div class="ttd-box">
-      <div>Kepanjen, ${ndTanggalPanjang(n.tanggal)}</div>
       <div>${pptk.jabatan_resmi||'Pejabat Pelaksana Teknis Kegiatan'}</div>
       <div class="ttd-nama">${n.pptk_nama||pptk.nama||'—'}</div>
       <div class="ttd-nip">NIP. ${pptk.nip||'—'}</div>
@@ -5332,7 +5331,6 @@ function cetakNotaPPTK(id) {
   <div class="ttd" style="margin-top:24px">
     <div style="flex:1"></div>
     <div class="ttd-box">
-      <div>Kepanjen, ${ndTanggalPanjang(n.tanggal)}</div>
       <div>${pptk.jabatan_resmi||'Pejabat Pelaksana Teknis Kegiatan'}</div>
       <div class="ttd-nama">${n.pptk_nama||pptk.nama||'—'}</div>
       <div class="ttd-nip">NIP. ${pptk.nip||'—'}</div>
@@ -5407,7 +5405,6 @@ function cetakNotaPPK(id) {
 
   <div class="ttd">
     <div class="ttd-box">
-      <div>Kepanjen, ${ndTanggalPanjang(n.tanggal)}</div>
       <div>${kpa?kpa.jabatan_resmi||kpa.jabatan:'Kuasa Pengguna Anggaran'}</div>
       <div class="ttd-nama">${kpa?kpa.nama:'—'}</div>
       <div class="ttd-nip">NIP. ${kpa?kpa.nip||'—':'—'}</div>
@@ -5478,7 +5475,6 @@ function cetakNotaPPK(id) {
 
   <div class="ttd" style="margin-top:20px">
     <div class="ttd-box">
-      <div>Kepanjen, ${ndTanggalPanjang(n.tanggal)}</div>
       <div>${kpa?kpa.jabatan_resmi||kpa.jabatan:'Kuasa Pengguna Anggaran'}</div>
       <div class="ttd-nama">${kpa?kpa.nama:'—'}</div>
       <div class="ttd-nip">NIP. ${kpa?kpa.nip||'—':'—'}</div>
