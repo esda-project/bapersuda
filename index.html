@@ -977,6 +977,11 @@ td.center{text-align:center}
     </div>
     <div class="modal-body">
       <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Nomor Transaksi</label>
+          <input class="form-input" id="rNomorTransaksi" type="text" placeholder="Contoh: 027/SP/KAT/2026 atau 031/SPK/NON-KAT/2026">
+          <span class="form-hint">Nomor surat pesanan paket katalog Inaproc maupun non katalog</span>
+        </div>
         <div class="form-group">
           <label class="form-label">Tanggal Transaksi</label>
           <input class="form-input" id="rTanggal" type="date">
@@ -2855,6 +2860,7 @@ function openModalRealisasi(idx) {
   }
   document.getElementById('rSumberDana').value = '';
   document.getElementById('rBelanja').innerHTML = '<option value="">-- Pilih Belanja --</option>';
+  document.getElementById('rNomorTransaksi').value = '';
   document.getElementById('rTanggal').value = new Date().toISOString().split('T')[0];
   document.getElementById('rTanggalSP2D').value = '';
   document.getElementById('rUraian').value = '';
@@ -2867,6 +2873,7 @@ function openModalRealisasi(idx) {
     const r = STATE.realisasi[idx];
     document.getElementById('modalRealisasiTitle').textContent = 'Edit Transaksi';
     document.getElementById('rId').value = idx;
+    document.getElementById('rNomorTransaksi').value = r.nomor_transaksi||'';
     document.getElementById('rTanggal').value = r.tanggal;
     document.getElementById('rTanggalSP2D').value = r.tanggal_sp2d||'';
     document.getElementById('rUraian').value = r.uraian;
@@ -2964,6 +2971,7 @@ async function saveRealisasi() {
 
   const obj = {
     id: idx !== '' ? STATE.realisasi[parseInt(idx)].id : genId(),
+    nomor_transaksi: document.getElementById('rNomorTransaksi').value.trim()||null,
     tanggal: document.getElementById('rTanggal').value,
     tanggal_sp2d: document.getElementById('rTanggalSP2D').value||null,
     uraian: document.getElementById('rUraian').value,
