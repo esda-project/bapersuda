@@ -27026,6 +27026,15 @@ window.addEventListener('resize', function() {
         </div>
       </div>
 
+      <!-- TOMBOL ISI OTOMATIS -->
+      <div style="margin-bottom:14px;padding:12px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--c-text)">
+          <b>💡 Isi Otomatis</b><br>
+          <span style="color:var(--c-text-muted)">Mengisi Uraian, Latar Belakang, Tujuan, Sasaran, Ruang Lingkup, Manfaat, Fungsi, Spesifikasi, Aspek Kualitas, Aspek Pelayanan, dan Syarat Penyedia berdasarkan jenis belanja pada rekening yang dipilih.</span>
+        </div>
+        <button class="btn btn-sm btn-blue" onclick="ndpIsiOtomatis()">🔄 Isi Otomatis dari Database</button>
+      </div>
+
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
         <div class="form-group">
           <label class="form-label">Uraian / Paragraf Pembuka</label>
@@ -27042,6 +27051,38 @@ window.addEventListener('resize', function() {
         <div class="form-group">
           <label class="form-label">Sasaran</label>
           <textarea class="form-input" id="ndpSasaran" rows="3" style="resize:vertical" placeholder="Sasaran..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ruang Lingkup</label>
+          <textarea class="form-input" id="ndpRuangLingkup" rows="2" style="resize:vertical" placeholder="Ruang lingkup pekerjaan..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Manfaat</label>
+          <textarea class="form-input" id="ndpManfaat" rows="2" style="resize:vertical" placeholder="Manfaat pekerjaan..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fungsi</label>
+          <textarea class="form-input" id="ndpFungsi" rows="2" style="resize:vertical" placeholder="Fungsi pekerjaan..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Spesifikasi Umum</label>
+          <textarea class="form-input" id="ndpSpesifikasi" rows="2" style="resize:vertical" placeholder="Spesifikasi umum barang/jasa..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Aspek Kualitas/Mutu</label>
+          <textarea class="form-input" id="ndpAspekKualitas" rows="2" style="resize:vertical" placeholder="Aspek kualitas/mutu..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Aspek Pelayanan</label>
+          <textarea class="form-input" id="ndpAspekPelayanan" rows="2" style="resize:vertical" placeholder="Aspek pelayanan..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Syarat Penyedia</label>
+          <textarea class="form-input" id="ndpSyaratPenyedia" rows="3" style="resize:vertical" placeholder="Syarat penyedia (NIB, NPWP, KBLI, KBKI, dll)..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Perkiraan Waktu Proses Pengadaan</label>
+          <input class="form-input" id="ndpWaktuProses" placeholder="Misal: 7 (tujuh) hari kerja">
         </div>
       </div>
 
@@ -27145,6 +27186,15 @@ window.addEventListener('resize', function() {
         </div>
       </div>
 
+      <!-- TOMBOL WARISI DARI PPTK -->
+      <div style="margin-bottom:14px;padding:12px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--c-text)">
+          <b>💡 Warisi Narasi dari Nota PPTK</b><br>
+          <span style="color:var(--c-text-muted)">Mengisi seluruh narasi teknis berdasarkan data yang sudah tersimpan pada Nota PPTK terkait.</span>
+        </div>
+        <button class="btn btn-sm btn-blue" onclick="ndkWarisiDariPPTK()">🔄 Warisi dari Nota PPTK</button>
+      </div>
+
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
         <div class="form-group">
           <label class="form-label">Uraian Pekerjaan</label>
@@ -27173,6 +27223,14 @@ window.addEventListener('resize', function() {
         <div class="form-group">
           <label class="form-label">Fungsi</label>
           <textarea class="form-input" id="ndkFungsi" rows="2" style="resize:vertical" placeholder="Fungsi..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Aspek Kualitas</label>
+          <textarea class="form-input" id="ndkAspekKualitas" rows="2" style="resize:vertical" placeholder="Aspek kualitas..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Aspek Pelayanan / Layanan</label>
+          <textarea class="form-input" id="ndkAspekPelayanan" rows="2" style="resize:vertical" placeholder="Aspek pelayanan..."></textarea>
         </div>
         <div class="form-group">
           <label class="form-label">Syarat Penyedia</label>
@@ -27463,6 +27521,293 @@ function toggleSidebarCollapse() {
 // ============================================================
 // NOTA DINAS — STATE & HELPERS
 // ============================================================
+// ============================================================
+// DATABASE LOOKUP NARASI OTOMATIS PER JENIS BELANJA
+// Sumber: Tambahan_Nota_Dinas_PPTK_PPK_Lengkap.xlsx
+// ============================================================
+const ND_BELANJA_LOOKUP = [
+  {
+    "nama_belanja": "Belanja Alat Tulis Kantor (ATK)",
+    "uraian": "Pengadaan belanja alat tulis kantor (atk) untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja alat tulis kantor (atk) secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja alat tulis kantor (atk) sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja alat tulis kantor (atk).",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB yang masih berlaku dengan KBLI perdagangan besar/eceran alat tulis kantor yang sesuai; memiliki NPWP; tidak sedang dikenakan sanksi daftar hitam; mampu menyediakan barang sesuai spesifikasi. KBLI yang relevan: 46499, 47612. KBKI: Alat tulis kantor dan perlengkapan administrasi."
+  },
+  {
+    "nama_belanja": "Belanja Kertas dan Cover",
+    "uraian": "Pengadaan belanja kertas dan cover untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja kertas dan cover secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja kertas dan cover sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja kertas dan cover.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI perdagangan kertas dan barang dari kertas yang sesuai; NPWP; mampu menyediakan kertas sesuai spesifikasi. KBLI: 46491, 46694. KBKI: Kertas cetak, kertas fotokopi dan sejenisnya."
+  },
+  {
+    "nama_belanja": "Belanja Benda Pos",
+    "uraian": "Pengadaan belanja benda pos untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja benda pos secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja benda pos sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja benda pos.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki izin usaha/NIB yang sesuai dengan perdagangan atau penyediaan materai dan benda pos; NPWP; mampu menyediakan benda pos yang sah sesuai ketentuan peraturan perundang-undangan."
+  },
+  {
+    "nama_belanja": "Belanja Bahan Komputer",
+    "uraian": "Pengadaan belanja bahan komputer untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja bahan komputer secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja bahan komputer sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja bahan komputer.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI perdagangan komputer, perangkat komputer dan perlengkapannya; NPWP; mampu menyediakan barang asli dan bergaransi. KBLI: 46511, 47411. KBKI: Perlengkapan komputer dan consumable printer."
+  },
+  {
+    "nama_belanja": "Belanja Alat Listrik",
+    "uraian": "Pengadaan belanja alat listrik untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja alat listrik secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja alat listrik sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja alat listrik.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI perdagangan peralatan listrik; NPWP; mampu menyediakan barang sesuai SNI apabila dipersyaratkan. KBLI: 46599, 47599. KBKI: Peralatan listrik dan perlengkapannya."
+  },
+  {
+    "nama_belanja": "Belanja Alat/Bahan Kantor Lainnya",
+    "uraian": "Pengadaan belanja alat/bahan kantor lainnya untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja alat/bahan kantor lainnya secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja alat/bahan kantor lainnya sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja alat/bahan kantor lainnya.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB sesuai bidang perdagangan umum; NPWP; mampu menyediakan barang sesuai spesifikasi teknis."
+  },
+  {
+    "nama_belanja": "Belanja Perabot Kantor",
+    "uraian": "Pengadaan belanja perabot kantor untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja perabot kantor secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja perabot kantor sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja perabot kantor.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI perdagangan/perakitan furnitur; NPWP; mampu menyediakan furnitur kantor sesuai spesifikasi. KBLI: 31001, 46491, 47591. KBKI: Furnitur kantor."
+  },
+  {
+    "nama_belanja": "Belanja Makanan dan Minuman Aktivitas Lapangan",
+    "uraian": "Pengadaan belanja makanan dan minuman aktivitas lapangan untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja makanan dan minuman aktivitas lapangan secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja makanan dan minuman aktivitas lapangan sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja makanan dan minuman aktivitas lapangan.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dan Sertifikat Laik Higiene Sanitasi atau perizinan berusaha yang sesuai bidang usaha penyediaan makanan; NPWP; mampu menyediakan konsumsi sesuai kebutuhan. KBLI: 56210, 56290. KBKI: Jasa penyediaan makanan."
+  },
+  {
+    "nama_belanja": "Belanja Makanan dan Minuman Rapat",
+    "uraian": "Pengadaan belanja makanan dan minuman rapat untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja makanan dan minuman rapat secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja makanan dan minuman rapat sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja makanan dan minuman rapat.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dan izin usaha/sertifikat yang dipersyaratkan untuk usaha katering atau penyediaan makanan; NPWP. KBLI: 56210, 56290. KBKI: Jasa katering dan penyediaan konsumsi rapat."
+  },
+  {
+    "nama_belanja": "Belanja Modal Alat Penyimpan Perlengkapan Kantor",
+    "uraian": "Pengadaan belanja modal alat penyimpan perlengkapan kantor untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja modal alat penyimpan perlengkapan kantor secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja modal alat penyimpan perlengkapan kantor sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja modal alat penyimpan perlengkapan kantor.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB sesuai perdagangan/perakitan furnitur atau peralatan penyimpanan; NPWP; mampu menyediakan barang sesuai spesifikasi. KBLI: 31001, 47591. KBKI: Lemari arsip dan sarana penyimpanan kantor."
+  },
+  {
+    "nama_belanja": "Belanja Jasa Tenaga Kebersihan",
+    "uraian": "Pengadaan belanja jasa tenaga kebersihan untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja jasa tenaga kebersihan secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja jasa tenaga kebersihan sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja jasa tenaga kebersihan.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI jasa kebersihan gedung; NPWP; memiliki tenaga kebersihan yang memadai. KBLI: 81210. KBKI: Jasa kebersihan umum."
+  },
+  {
+    "nama_belanja": "Belanja Pembayaran Pajak, Bea dan Perizinan",
+    "uraian": "Pengadaan belanja pembayaran pajak, bea dan perizinan untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja pembayaran pajak, bea dan perizinan secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja pembayaran pajak, bea dan perizinan sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja pembayaran pajak, bea dan perizinan.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Tidak memerlukan penyedia barang/jasa karena merupakan pembayaran kewajiban kepada instansi pemerintah yang berwenang."
+  },
+  {
+    "nama_belanja": "Belanja Pemeliharaan Kendaraan Bermotor Penumpang",
+    "uraian": "Pengadaan belanja pemeliharaan kendaraan bermotor penumpang untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja pemeliharaan kendaraan bermotor penumpang secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja pemeliharaan kendaraan bermotor penumpang sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja pemeliharaan kendaraan bermotor penumpang.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI reparasi dan perawatan kendaraan bermotor; NPWP; memiliki bengkel dan tenaga teknis yang kompeten. KBLI: 45201, 45202. KBKI: Jasa pemeliharaan kendaraan bermotor."
+  },
+  {
+    "nama_belanja": "Belanja Pemeliharaan Kendaraan Bermotor Beroda Dua",
+    "uraian": "Pengadaan belanja pemeliharaan kendaraan bermotor beroda dua untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja pemeliharaan kendaraan bermotor beroda dua secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja pemeliharaan kendaraan bermotor beroda dua sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja pemeliharaan kendaraan bermotor beroda dua.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI reparasi dan perawatan sepeda motor; NPWP; memiliki mekanik yang kompeten. KBLI: 45407. KBKI: Jasa pemeliharaan sepeda motor."
+  },
+  {
+    "nama_belanja": "Belanja Pemeliharaan Komputer – Personal Computer",
+    "uraian": "Pengadaan belanja pemeliharaan komputer – personal computer untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja pemeliharaan komputer – personal computer secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja pemeliharaan komputer – personal computer sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja pemeliharaan komputer – personal computer.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI reparasi komputer dan perlengkapan komputer; NPWP; memiliki tenaga teknis yang kompeten. KBLI: 95110. KBKI: Jasa perbaikan dan pemeliharaan komputer."
+  },
+  {
+    "nama_belanja": "Belanja Pemeliharaan Peralatan Personal Computer",
+    "uraian": "Pengadaan belanja pemeliharaan peralatan personal computer untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja pemeliharaan peralatan personal computer secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja pemeliharaan peralatan personal computer sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja pemeliharaan peralatan personal computer.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI reparasi komputer dan perangkat pendukung; NPWP; mampu menyediakan suku cadang yang diperlukan. KBLI: 95110. KBKI: Jasa pemeliharaan peralatan komputer."
+  },
+  {
+    "nama_belanja": "Belanja Sewa Hotel",
+    "uraian": "Pengadaan belanja sewa hotel untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja sewa hotel secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja sewa hotel sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja sewa hotel.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dan TDUP/Perizinan Berusaha sektor akomodasi yang masih berlaku; NPWP; hotel beroperasi secara legal. KBLI: 55110, 55120. KBKI: Jasa akomodasi hotel dan meeting package."
+  },
+  {
+    "nama_belanja": "Belanja Jasa Konsultansi Berorientasi Layanan – Jasa Khusus",
+    "uraian": "Pengadaan belanja jasa konsultansi berorientasi layanan – jasa khusus untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja jasa konsultansi berorientasi layanan – jasa khusus secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja jasa konsultansi berorientasi layanan – jasa khusus sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja jasa konsultansi berorientasi layanan – jasa khusus.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dan bidang usaha sesuai layanan konsultansi yang dibutuhkan; NPWP; memiliki tenaga ahli sesuai ruang lingkup pekerjaan. KBLI menyesuaikan substansi pekerjaan. KBKI: Jasa konsultansi profesional yang relevan."
+  },
+  {
+    "nama_belanja": "Kontribusi Kursus Singkat/Pelatihan/Sosialisasi/Bimtek/Diklat",
+    "uraian": "Pengadaan kontribusi kursus singkat/pelatihan/sosialisasi/bimtek/diklat untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan kontribusi kursus singkat/pelatihan/sosialisasi/bimtek/diklat secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan kontribusi kursus singkat/pelatihan/sosialisasi/bimtek/diklat sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait kontribusi kursus singkat/pelatihan/sosialisasi/bimtek/diklat.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dan bidang usaha jasa pendidikan/pelatihan yang sesuai; NPWP; memiliki tenaga pengajar/narasumber yang kompeten. KBLI: 85499, 85500. KBKI: Jasa pelatihan dan pendidikan nonformal."
+  },
+  {
+    "nama_belanja": "Belanja Jasa Penyelenggaraan Acara",
+    "uraian": "Pengadaan belanja jasa penyelenggaraan acara untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan belanja jasa penyelenggaraan acara secara efektif dan efisien.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan belanja jasa penyelenggaraan acara sesuai kebutuhan dan spesifikasi.",
+    "manfaat": "Meningkatkan efektivitas, efisiensi, dan kualitas layanan.",
+    "fungsi": "Sarana pendukung pelaksanaan tugas terkait belanja jasa penyelenggaraan acara.",
+    "spesifikasi": "Sesuai spesifikasi teknis, baru, layak pakai, dan memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB dengan KBLI penyelenggara pertemuan, perjalanan insentif, konferensi dan pameran (MICE); NPWP; memiliki pengalaman pekerjaan sejenis; memiliki personel dan peralatan pendukung acara. KBLI: 82301, 82302. KBKI: Jasa penyelenggaraan acara (Event Organizer/MICE)."
+  }
+];
+
 if (!STATE.notaDinas) STATE.notaDinas = { pptk: [], ppk: [] };
 
 function ndSave() {
@@ -27669,6 +28014,14 @@ function openModalNotaPPTK(editId) {
   document.getElementById('ndpLatarBelakang').value = '';
   document.getElementById('ndpTujuan').value = '';
   document.getElementById('ndpSasaran').value = '';
+  document.getElementById('ndpRuangLingkup').value = '';
+  document.getElementById('ndpManfaat').value = '';
+  document.getElementById('ndpFungsi').value = '';
+  document.getElementById('ndpSpesifikasi').value = '';
+  document.getElementById('ndpAspekKualitas').value = '';
+  document.getElementById('ndpAspekPelayanan').value = '';
+  document.getElementById('ndpSyaratPenyedia').value = '';
+  document.getElementById('ndpWaktuProses').value = '';
   document.getElementById('ndpSumberDana2').value = '';
   document.getElementById('ndpJenisDpa').value = 'DPA Murni';
   ndpClearItems();
@@ -27690,6 +28043,14 @@ function openModalNotaPPTK(editId) {
     document.getElementById('ndpLatarBelakang').value = nota.latar_belakang||'';
     document.getElementById('ndpTujuan').value = nota.tujuan||'';
     document.getElementById('ndpSasaran').value = nota.sasaran||'';
+    document.getElementById('ndpRuangLingkup').value = nota.ruang_lingkup||'';
+    document.getElementById('ndpManfaat').value = nota.manfaat||'';
+    document.getElementById('ndpFungsi').value = nota.fungsi||'';
+    document.getElementById('ndpSpesifikasi').value = nota.spesifikasi||'';
+    document.getElementById('ndpAspekKualitas').value = nota.aspek_kualitas||'';
+    document.getElementById('ndpAspekPelayanan').value = nota.aspek_pelayanan||'';
+    document.getElementById('ndpSyaratPenyedia').value = nota.syarat_penyedia||'';
+    document.getElementById('ndpWaktuProses').value = nota.waktu_proses||'';
     document.getElementById('ndpSumberDana2').value = nota.sumber_dana_tambahan||'';
     // Pilih rekening
     setTimeout(()=>{
@@ -27724,7 +28085,7 @@ function ndpPopulateRekening() {
 function ndpOnRekeningChange() {
   const kode = document.getElementById('ndpRekening').value;
   if (!kode) {
-    ['ndpProgram','ndpKegiatan','ndpSubKegiatan','ndpBelanja','ndpPagu','ndpSumberDana','ndpPPTK'].forEach(id=>{
+    ['ndpProgram','ndpKegiatan','ndpSubKegiatan','ndpBelanja','ndpPagu','ndpSisa','ndpSumberDana','ndpPPTK'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.textContent='—';
     });
     return;
@@ -27732,18 +28093,18 @@ function ndpOnRekeningChange() {
   const a = STATE.anggaran.find(x=>x.kode_rekening===kode);
   if (!a) return;
 
-  // Hitung sisa pagu
-  const reals = STATE.realisasi.filter(r=>r.kode_rekening===kode);
-  const totalReal = reals.reduce((s,r)=>s+(parseFloat(r.nominal)||0),0);
-  const pagu = parseFloat(a.pagu)||0;
-  const sisa = pagu - totalReal;
+  // Pagu mengikuti tahapan aktif (Murni/Pergeseran/Perubahan) — sama seperti menu Input Anggaran
+  const pagu = getPagu(a);
+  // Realisasi & Sisa Pagu — rumus identik dengan menu Pencarian > Cari Sisa Anggaran
+  const realisasi = getRealisasiByRekening(a.kode_rekening);
+  const sisa = pagu - realisasi;
 
   const set = (id,val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
   set('ndpProgram', a.program||'—');
   set('ndpKegiatan', a.kegiatan||'—');
   set('ndpSubKegiatan', a.sub_kegiatan||'—');
-  set('ndpBelanja', a.belanja||'—');
-  set('ndpPagu', ndFmt(pagu));
+  set('ndpBelanja', a.nama_belanja||a.belanja||'—');
+  set('ndpPagu', ndFmt(pagu) + ' (' + STATE.tahapan + ')');
   set('ndpSisa', ndFmt(sisa));
   set('ndpSumberDana', a.sumber_dana||'—');
   set('ndpPPTK', a.pptk||'—');
@@ -27751,8 +28112,54 @@ function ndpOnRekeningChange() {
   // Auto-isi Hal
   const halEl = document.getElementById('ndpHal');
   if (halEl && !halEl.value) {
-    halEl.value = 'Persiapan Pengadaan ' + (a.belanja||'');
+    halEl.value = 'Persiapan Pengadaan ' + (a.nama_belanja||a.belanja||'');
   }
+}
+
+// ============================================================
+// LOOKUP OTOMATIS NARASI BERDASARKAN JENIS BELANJA
+// ============================================================
+function ndCariLookupBelanja(namaBelanja) {
+  if (!namaBelanja) return null;
+  const target = namaBelanja.trim().toLowerCase();
+  // Exact match dulu
+  let found = ND_BELANJA_LOOKUP.find(b => b.nama_belanja.trim().toLowerCase() === target);
+  if (found) return found;
+  // Partial match (kontain salah satu arah)
+  found = ND_BELANJA_LOOKUP.find(b =>
+    target.includes(b.nama_belanja.trim().toLowerCase()) ||
+    b.nama_belanja.trim().toLowerCase().includes(target)
+  );
+  return found || null;
+}
+
+function ndpIsiOtomatis() {
+  const kode = document.getElementById('ndpRekening').value;
+  if (!kode) { showToast('Pilih rekening terlebih dahulu','error'); return; }
+  const a = STATE.anggaran.find(x=>x.kode_rekening===kode);
+  if (!a) return;
+  const namaBelanja = a.nama_belanja || a.belanja || '';
+  const lk = ndCariLookupBelanja(namaBelanja);
+  if (!lk) {
+    showToast('Tidak ditemukan data otomatis untuk jenis belanja "' + namaBelanja + '". Silakan isi manual.', 'error');
+    return;
+  }
+  const fill = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val || '';
+  };
+  fill('ndpUraian', lk.uraian);
+  fill('ndpLatarBelakang', lk.latar_belakang);
+  fill('ndpTujuan', lk.maksud_tujuan);
+  fill('ndpSasaran', lk.sasaran);
+  fill('ndpRuangLingkup', lk.ruang_lingkup);
+  fill('ndpManfaat', lk.manfaat);
+  fill('ndpFungsi', lk.fungsi);
+  fill('ndpSpesifikasi', lk.spesifikasi);
+  fill('ndpAspekKualitas', lk.aspek_kualitas);
+  fill('ndpAspekPelayanan', lk.aspek_pelayanan);
+  fill('ndpSyaratPenyedia', lk.syarat_penyedia);
+  showToast('✅ Narasi otomatis terisi untuk "' + lk.nama_belanja + '"');
 }
 
 // Items tabel kebutuhan
@@ -27837,16 +28244,27 @@ async function saveNotaPPTK() {
   const tanggal = document.getElementById('ndpTanggal').value;
   const nomor = ndGenerateNomor('pptk', tanggal, editId ? (STATE.notaDinas.pptk.find(n=>n.id===editId)||{}).nomor_urut : null);
 
+  // Pagu sesuai tahapan aktif (Murni/Pergeseran/Perubahan) — sama dengan menu Input Anggaran
+  const pagu = getPagu(a);
+  // Realisasi & Sisa Pagu — rumus identik dengan menu Pencarian > Cari Sisa Anggaran
+  const realisasi = getRealisasiByRekening(a.kode_rekening);
+  const sisaPagu = pagu - realisasi;
+
   const nota = {
     id: editId || genId(),
     nomor_urut: nomor,
     tanggal,
     hal: document.getElementById('ndpHal').value.trim(),
     kode_rekening: kode,
+    kode_sub_kegiatan: a.kode_sub_kegiatan||'',
+    kode_belanja: a.kode_belanja||'',
     program: a.program, kegiatan: a.kegiatan,
     sub_kegiatan: a.sub_kegiatan,
     nama_belanja: a.nama_belanja||a.belanja||'',
-    pagu: parseFloat(a.pagu)||0,
+    pagu: pagu,
+    tahapan_anggaran: STATE.tahapan,
+    realisasi_saat_nota: realisasi,
+    sisa_pagu: sisaPagu,
     sumber_dana: a.sumber_dana,
     kode_rup: document.getElementById('ndpKodeRup').value.trim(),
     tanggal_dpa: document.getElementById('ndpTanggalDpa').value,
@@ -27855,6 +28273,14 @@ async function saveNotaPPTK() {
     latar_belakang: document.getElementById('ndpLatarBelakang').value.trim(),
     tujuan: document.getElementById('ndpTujuan').value.trim(),
     sasaran: document.getElementById('ndpSasaran').value.trim(),
+    ruang_lingkup: document.getElementById('ndpRuangLingkup').value.trim(),
+    manfaat: document.getElementById('ndpManfaat').value.trim(),
+    fungsi: document.getElementById('ndpFungsi').value.trim(),
+    spesifikasi: document.getElementById('ndpSpesifikasi').value.trim(),
+    aspek_kualitas: document.getElementById('ndpAspekKualitas').value.trim(),
+    aspek_pelayanan: document.getElementById('ndpAspekPelayanan').value.trim(),
+    syarat_penyedia: document.getElementById('ndpSyaratPenyedia').value.trim(),
+    waktu_proses: document.getElementById('ndpWaktuProses').value.trim(),
     sumber_dana_tambahan: document.getElementById('ndpSumberDana2').value.trim(),
     jenis_dpa: document.getElementById('ndpJenisDpa').value,
     items: ndpItems.map(it=>({...it})),
@@ -27910,6 +28336,7 @@ function openModalNotaPPK(editId, pptk_id_default) {
   ['ndkId','ndkTanggal','ndkHal','ndkKodeRup','ndkNilaiPengadaan',
    'ndkUraianPekerjaan','ndkLatarBelakang','ndkRuangLingkup',
    'ndkMaksudTujuan','ndkKeluaran','ndkManfaat','ndkFungsi',
+   'ndkAspekKualitas','ndkAspekPelayanan',
    'ndkSyaratPenyedia','ndkWaktuPelaksanaan'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
@@ -27933,6 +28360,8 @@ function openModalNotaPPK(editId, pptk_id_default) {
     document.getElementById('ndkKeluaran').value = nota.keluaran||'';
     document.getElementById('ndkManfaat').value = nota.manfaat||'';
     document.getElementById('ndkFungsi').value = nota.fungsi||'';
+    document.getElementById('ndkAspekKualitas').value = nota.aspek_kualitas||'';
+    document.getElementById('ndkAspekPelayanan').value = nota.aspek_pelayanan||'';
     document.getElementById('ndkSyaratPenyedia').value = nota.syarat_penyedia||'';
     document.getElementById('ndkWaktuPelaksanaan').value = nota.waktu_pelaksanaan||'';
     setTimeout(()=>{
@@ -27971,13 +28400,13 @@ function ndkOnNotaPPTKChange() {
   set('ndkProgram', nota.program);
   set('ndkKegiatan', nota.kegiatan);
   set('ndkSubKegiatan', nota.sub_kegiatan);
-  set('ndkBelanja', nota.belanja);
-  set('ndkPagu', ndFmt(nota.pagu));
+  set('ndkBelanja', nota.nama_belanja||nota.belanja);
+  set('ndkPagu', ndFmt(nota.pagu) + (nota.tahapan_anggaran ? ' (' + nota.tahapan_anggaran + ')' : ''));
   set('ndkSumberDana', nota.sumber_dana);
   set('ndkPPTKNama', nota.pptk_nama);
   // Auto-isi Hal & Kode RUP
   const hal = document.getElementById('ndkHal');
-  if (hal && !hal.value) hal.value = 'Pelaksanaan Pengadaan ' + (nota.belanja||'');
+  if (hal && !hal.value) hal.value = 'Pelaksanaan Pengadaan ' + (nota.nama_belanja||nota.belanja||'');
   const rup = document.getElementById('ndkKodeRup');
   if (rup && !rup.value) rup.value = nota.kode_rup||'';
   const nilai = document.getElementById('ndkNilaiPengadaan');
@@ -27988,6 +28417,27 @@ function ndkClearInfo() {
   ['ndkProgram','ndkKegiatan','ndkSubKegiatan','ndkBelanja','ndkPagu','ndkSumberDana','ndkPPTKNama'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.textContent='—';
   });
+}
+
+// Warisi seluruh narasi teknis dari Nota PPTK terkait ke form Nota PPK
+function ndkWarisiDariPPTK() {
+  const id = document.getElementById('ndkNotaPPTK').value;
+  if (!id) { showToast('Pilih Nota PPTK dasar terlebih dahulu','error'); return; }
+  const nota = STATE.notaDinas.pptk.find(n=>n.id===id);
+  if (!nota) return;
+
+  const fill = (elId, val) => { const el=document.getElementById(elId); if(el) el.value = val || ''; };
+  fill('ndkUraianPekerjaan', nota.uraian);
+  fill('ndkLatarBelakang', nota.latar_belakang);
+  fill('ndkRuangLingkup', nota.ruang_lingkup);
+  fill('ndkMaksudTujuan', nota.tujuan);
+  fill('ndkManfaat', nota.manfaat);
+  fill('ndkFungsi', nota.fungsi);
+  fill('ndkAspekKualitas', nota.aspek_kualitas);
+  fill('ndkAspekPelayanan', nota.aspek_pelayanan);
+  fill('ndkSyaratPenyedia', nota.syarat_penyedia);
+  fill('ndkWaktuPelaksanaan', nota.waktu_proses);
+  showToast('✅ Narasi diwarisi dari Nota PPTK "' + (nota.nomor_urut||'') + '"');
 }
 
 async function saveNotaPPK() {
@@ -28010,9 +28460,13 @@ async function saveNotaPPK() {
     hal,
     pptk_nota_id: pptk_id,
     kode_rekening: notaPPTK.kode_rekening,
+    kode_sub_kegiatan: notaPPTK.kode_sub_kegiatan||'',
+    kode_belanja: notaPPTK.kode_belanja||'',
     program: notaPPTK.program, kegiatan: notaPPTK.kegiatan,
     sub_kegiatan: notaPPTK.sub_kegiatan, nama_belanja: notaPPTK.nama_belanja||notaPPTK.belanja,
     pagu: notaPPTK.pagu, sumber_dana: notaPPTK.sumber_dana,
+    tahapan_anggaran: notaPPTK.tahapan_anggaran||STATE.tahapan,
+    sisa_pagu: notaPPTK.sisa_pagu||0,
     kode_rup: document.getElementById('ndkKodeRup').value.trim(),
     nilai_pengadaan: parseFloat(document.getElementById('ndkNilaiPengadaan').value)||0,
     uraian_pekerjaan: document.getElementById('ndkUraianPekerjaan').value.trim(),
@@ -28022,10 +28476,13 @@ async function saveNotaPPK() {
     keluaran: document.getElementById('ndkKeluaran').value.trim(),
     manfaat: document.getElementById('ndkManfaat').value.trim(),
     fungsi: document.getElementById('ndkFungsi').value.trim(),
+    aspek_kualitas: document.getElementById('ndkAspekKualitas').value.trim(),
+    aspek_pelayanan: document.getElementById('ndkAspekPelayanan').value.trim(),
     syarat_penyedia: document.getElementById('ndkSyaratPenyedia').value.trim(),
     waktu_pelaksanaan: document.getElementById('ndkWaktuPelaksanaan').value.trim(),
     pptk_nama: notaPPTK.pptk_nama,
     items: notaPPTK.items || [],
+    links: notaPPTK.links || [],
     created_by: STATE.user.username,
     created_at: new Date().toISOString(),
   };
