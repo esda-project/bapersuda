@@ -6,6 +6,7 @@
 <title>SIANGGARAN — Sistem Informasi Anggaran SKPD</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@9.6.1/build/index.umd.js"></script>
 <style>
 /* ===== CSS VARIABLES ===== */
 :root {
@@ -977,11 +978,6 @@ td.center{text-align:center}
     </div>
     <div class="modal-body">
       <div class="form-grid">
-        <div class="form-group span2">
-          <label class="form-label">Nomor Transaksi</label>
-          <input class="form-input" id="rNomorTransaksi" type="text" placeholder="Contoh: 027/SP/KAT/2026 atau 031/SPK/NON-KAT/2026">
-          <span class="form-hint">Nomor surat pesanan paket katalog Inaproc maupun non katalog</span>
-        </div>
         <div class="form-group">
           <label class="form-label">Tanggal Transaksi</label>
           <input class="form-input" id="rTanggal" type="date">
@@ -2441,7 +2437,6 @@ function cetakRealisasi() {
     rows += `<tr>
       <td class="center">${i + 1}</td>
       <td class="center">${r.tanggal ? new Date(r.tanggal+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-'}</td>
-      <td style="font-size:10px">${r.nomor_transaksi || '-'}</td>
       <td style="max-width:200px">${r.uraian || '-'}</td>
       <td style="font-size:10px">${r.nama_belanja || '-'}</td>
       <td><span class="badge ${r.sumber_dana === 'DBH CHT' ? 'badge-orange' : 'badge-blue'}">${r.sumber_dana || '-'}</span></td>
@@ -2466,7 +2461,6 @@ function cetakRealisasi() {
     <thead><tr>
       <th class="center">No</th>
       <th class="center">Tgl Transaksi</th>
-      <th>No. Transaksi</th>
       <th>Uraian</th>
       <th>Belanja</th>
       <th class="center">Sumber Dana</th>
@@ -2476,7 +2470,7 @@ function cetakRealisasi() {
     </tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr class="total-row">
-      <td colspan="6"><b>TOTAL</b></td>
+      <td colspan="5"><b>TOTAL</b></td>
       <td class="right mono"><b>Rp ${fmt(total)}</b></td>
       <td colspan="2"></td>
     </tr></tfoot>
@@ -2787,11 +2781,10 @@ async function simpanKas() {
 function renderRealisasi() {
   const filteredReal = getFilteredRealisasi();
   const rows = filteredReal.length === 0
-    ? `<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">📑</div><p>Belum ada transaksi realisasi.</p></div></td></tr>`
+    ? `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📑</div><p>Belum ada transaksi realisasi.</p></div></td></tr>`
     : filteredReal.map((r,i)=>`<tr>
         <td class="center">${i+1}</td>
         <td>${r.tanggal||'-'}</td>
-        <td style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nomor_transaksi||''}">${r.nomor_transaksi||'-'}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.uraian}">${r.uraian||'-'}</td>
         <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="mono">${r.kode_rekening||'-'}</td>
         <td class="right mono">${fmt(r.nominal)}</td>
@@ -2826,7 +2819,6 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
       <thead><tr>
         <th style="width:40px">#</th>
         <th>Tanggal</th>
-        <th>No. Transaksi</th>
         <th>Uraian</th>
         <th>Kode Rekening</th>
         <th class="right">Nominal</th>
@@ -2864,7 +2856,6 @@ function openModalRealisasi(idx) {
   }
   document.getElementById('rSumberDana').value = '';
   document.getElementById('rBelanja').innerHTML = '<option value="">-- Pilih Belanja --</option>';
-  document.getElementById('rNomorTransaksi').value = '';
   document.getElementById('rTanggal').value = new Date().toISOString().split('T')[0];
   document.getElementById('rTanggalSP2D').value = '';
   document.getElementById('rUraian').value = '';
@@ -2877,7 +2868,6 @@ function openModalRealisasi(idx) {
     const r = STATE.realisasi[idx];
     document.getElementById('modalRealisasiTitle').textContent = 'Edit Transaksi';
     document.getElementById('rId').value = idx;
-    document.getElementById('rNomorTransaksi').value = r.nomor_transaksi||'';
     document.getElementById('rTanggal').value = r.tanggal;
     document.getElementById('rTanggalSP2D').value = r.tanggal_sp2d||'';
     document.getElementById('rUraian').value = r.uraian;
@@ -2975,7 +2965,6 @@ async function saveRealisasi() {
 
   const obj = {
     id: idx !== '' ? STATE.realisasi[parseInt(idx)].id : genId(),
-    nomor_transaksi: document.getElementById('rNomorTransaksi').value.trim()||null,
     tanggal: document.getElementById('rTanggal').value,
     tanggal_sp2d: document.getElementById('rTanggalSP2D').value||null,
     uraian: document.getElementById('rUraian').value,
@@ -4620,7 +4609,8 @@ function renderNotaPPTK() {
         + '</div>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">'
         + '<button class="btn btn-sm btn-outline" onclick="openModalNotaPPTK(&quot;' + n.id + '&quot;)">✏️ Edit</button>'
-        + '<button class="btn btn-sm btn-blue" onclick="cetakNotaPPTK(&quot;' + n.id + '&quot;)">🖨️ Cetak/Unduh</button>'
+        + '<button class="btn btn-sm btn-blue" onclick="cetakNotaPPTK(&quot;' + n.id + '&quot;)">🖨️ Cetak (PDF)</button>'
+        + '<button class="btn btn-sm" style="background:#2b579a;color:#fff" onclick="unduhNotaPPTKDocx(&quot;' + n.id + '&quot;)">📄 Unduh DOCX</button>'
         + '<button class="btn btn-sm btn-outline" onclick="buatNotaPPKDari(&quot;' + n.id + '&quot;)">📋 Buat Nota PPK</button>'
         + '<button class="btn btn-sm btn-red" onclick="hapusNotaPPTK(&quot;' + n.id + '&quot;)">🗑️</button>'
         + '</div></div></div>';
@@ -4668,7 +4658,8 @@ function renderNotaPPK() {
         + '</div>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">'
         + '<button class="btn btn-sm btn-outline" onclick="openModalNotaPPK(&quot;' + n.id + '&quot;)">✏️ Edit</button>'
-        + '<button class="btn btn-sm btn-blue" onclick="cetakNotaPPK(&quot;' + n.id + '&quot;)">🖨️ Cetak/Unduh</button>'
+        + '<button class="btn btn-sm btn-blue" onclick="cetakNotaPPK(&quot;' + n.id + '&quot;)">🖨️ Cetak (PDF)</button>'
+        + '<button class="btn btn-sm" style="background:#2b579a;color:#fff" onclick="unduhNotaPPKDocx(&quot;' + n.id + '&quot;)">📄 Unduh DOCX</button>'
         + (!isKPA ? '<button class="btn btn-sm btn-red" onclick="hapusNotaPPK(&quot;' + n.id + '&quot;)">🗑️</button>' : '')
         + '</div></div></div>';
     });
@@ -6041,6 +6032,728 @@ function mmTestUrl() {
   testAudio.src = url;
   document.getElementById('mmTestArea').style.display = 'block';
   showToast('Silakan klik play di bawah untuk tes audio 🔊');
+}
+
+</script>
+
+<script>
+// ============================================================
+// SIANGGARAN — DOCX Generator untuk Nota Dinas PPTK & PPK
+// Dijalankan via: node docx_generator.js <json_data> <tipe>
+// Output: /tmp/nota_output.docx
+// ============================================================
+const {
+  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+  AlignmentType, BorderStyle, WidthType, ShadingType, VerticalAlign,
+  Header, HeadingLevel, UnderlineType
+} = window.docx;
+
+
+// ---- Konstanta ----
+const MM = mm => Math.round(mm * 56.7);
+const PT = pt => pt * 2; // half-points for docx
+const PAGE_W  = 11906;
+const PAGE_H  = 16838;
+const M_TOP   = MM(30);
+const M_BOT   = MM(30);
+const M_LEFT  = MM(30);
+const M_RIGHT = MM(20);
+const CW      = PAGE_W - M_LEFT - M_RIGHT; // 9071 DXA ~16cm
+
+// ---- Warna & Border ----
+const BLK = '000000';
+const GREY = 'D9D9D9';
+const BD1 = { style: BorderStyle.SINGLE, size: 6, color: BLK };
+const BD_NONE = { style: BorderStyle.NONE, size: 0, color: BLK };
+const CELL_BORDERS = { top: BD1, bottom: BD1, left: BD1, right: BD1 };
+const NO_BORDERS = { top: BD_NONE, bottom: BD_NONE, left: BD_NONE, right: BD_NONE };
+
+// ---- Helper: TextRun ----
+function tr(text, opts = {}) {
+  return new TextRun({
+    text: String(text || ''),
+    font: 'Times New Roman',
+    size: PT(opts.size || 11),
+    bold: opts.bold || false,
+    italics: opts.italic || false,
+    underline: opts.underline ? { type: UnderlineType.SINGLE } : undefined,
+    color: BLK,
+  });
+}
+
+// ---- Helper: Paragraph ----
+function para(runs, opts = {}) {
+  return new Paragraph({
+    alignment: opts.align || AlignmentType.JUSTIFIED,
+    spacing: {
+      before: opts.spaceBefore !== undefined ? MM(opts.spaceBefore) : (opts.compact ? 0 : MM(1)),
+      after:  opts.spaceAfter  !== undefined ? MM(opts.spaceAfter)  : (opts.compact ? 0 : MM(1)),
+      line: opts.lineHeight ? opts.lineHeight * 240 : 360, // 360 = 1.5x; 480=2x
+    },
+    indent: opts.indent ? { left: opts.indent } : undefined,
+    children: Array.isArray(runs) ? runs : [runs],
+  });
+}
+
+// Paragraf justify dengan line height 1.5
+function paraIsi(teks, bold) {
+  return para([tr(teks, { bold: !!bold })], { align: AlignmentType.JUSTIFIED, lineHeight: 1.5 });
+}
+
+// Paragraf kosong
+const EMPTY = () => para([tr('')], { compact: true, lineHeight: 1 });
+
+// ---- Helper: Cell ----
+function cell(children, opts = {}) {
+  return new TableCell({
+    borders: opts.noBorder ? NO_BORDERS : CELL_BORDERS,
+    shading: opts.shade ? { fill: GREY, type: ShadingType.CLEAR } : { fill: 'FFFFFF', type: ShadingType.CLEAR },
+    width: opts.w ? { size: opts.w, type: WidthType.DXA } : undefined,
+    columnSpan: opts.span || undefined,
+    verticalAlign: VerticalAlign.TOP,
+    margins: { top: 60, bottom: 60, left: 80, right: 80 },
+    children: Array.isArray(children) ? children : [
+      para([tr(children, { bold: opts.bold, size: opts.size || 11 })],
+           { align: opts.align || AlignmentType.LEFT, compact: true, lineHeight: 1.3 })
+    ],
+  });
+}
+
+// Tabel 2-kolom sederhana (label : isi)
+function tblLabelValue(rows, col1W = 2600) {
+  return new Table({
+    width: { size: CW, type: WidthType.DXA },
+    columnWidths: [col1W, 200, CW - col1W - 200],
+    rows: rows.map(([no, label, value, opts = {}]) => new TableRow({ cantSplit: true,
+      children: [
+        cell(no,    { w: col1W * 0.15, align: AlignmentType.CENTER }),
+        cell(label, { w: col1W }),
+        cell(':',   { w: 200, align: AlignmentType.CENTER }),
+        cell(value, { w: CW - col1W - 200, ...opts }),
+      ]
+    }))
+  });
+}
+
+// Tabel data (barang)
+function tblBarang(items, withLink) {
+  const colW = withLink
+    ? [300, 2200, 2000, 500, 500, 1200, 1200, 1171]
+    : [300, 2700, 2000, 500, 600, 1400, 1371, 0];
+  const hdrs = withLink
+    ? ['No','Nama Barang/Jasa','Spesifikasi','Sat','Qty','Harga Satuan (Rp)','Total (Rp)','Link']
+    : ['No','Uraian','Spesifikasi','Sat','Qty','Harga Satuan (Rp)','Total (Rp)'];
+
+  const hdrRow = new TableRow({ cantSplit: true,
+    tableHeader: true,
+    children: hdrs.map((h, i) => cell(h, { w: colW[i], shade: true, bold: true, align: AlignmentType.CENTER }))
+  });
+
+  const dataRows = (items||[]).map((it, i) => new TableRow({ cantSplit: true,
+    children: [
+      cell(String(i+1), { w: colW[0], align: AlignmentType.CENTER }),
+      cell(it.uraian||'', { w: colW[1] }),
+      cell(it.spek||'', { w: colW[2] }),
+      cell(it.satuan||'', { w: colW[3], align: AlignmentType.CENTER }),
+      cell(String(it.jumlah||0), { w: colW[4], align: AlignmentType.RIGHT }),
+      cell(fmtRp(it.harga), { w: colW[5], align: AlignmentType.RIGHT }),
+      cell(fmtRp((parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0)), { w: colW[6], align: AlignmentType.RIGHT }),
+      ...(withLink ? [cell(it.link||'', { w: colW[7], size: 9 })] : [])
+    ]
+  }));
+
+  const total = (items||[]).reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
+  const totRow = new TableRow({ cantSplit: true,
+    children: [
+      new TableCell({
+        borders: CELL_BORDERS,
+        columnSpan: withLink ? 6 : 6,
+        width: { size: withLink ? (colW[0]+colW[1]+colW[2]+colW[3]+colW[4]+colW[5]) : (colW[0]+colW[1]+colW[2]+colW[3]+colW[4]+colW[5]), type: WidthType.DXA },
+        margins: { top:60, bottom:60, left:80, right:80 },
+        children: [para([tr('Jumlah Harga (sudah termasuk pajak)', {bold:true})], {align:AlignmentType.RIGHT,compact:true,lineHeight:1.3})]
+      }),
+      cell(fmtRp(total), { w: colW[6], align: AlignmentType.RIGHT, bold: true }),
+      ...(withLink ? [cell('', { w: colW[7] })] : [])
+    ]
+  });
+
+  return new Table({
+    width: { size: CW, type: WidthType.DXA },
+    columnWidths: withLink ? colW : colW.slice(0,7),
+    rows: [hdrRow, ...dataRows, totRow]
+  });
+}
+
+// Format Rupiah
+function fmtRp(n) {
+  return 'Rp ' + (parseFloat(n)||0).toLocaleString('id-ID');
+}
+
+// Tanggal panjang
+function tglPanjang(str) {
+  if (!str) return '—';
+  const BLN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const d = new Date(str);
+  return `${d.getDate()} ${BLN[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// ---- KOP SURAT sebagai paragraf-paragraf ----
+function kopSurat() {
+  return [
+    para([tr('PEMERINTAH KOTA BATU', {bold:true, size:13})], {align:AlignmentType.CENTER, compact:true, lineHeight:1.3}),
+    para([tr('SEKRETARIAT DAERAH', {bold:true, size:12})], {align:AlignmentType.CENTER, compact:true, lineHeight:1.3}),
+    para([tr('Bagian Perekonomian dan Sumber Daya Alam', {bold:true, size:12})], {align:AlignmentType.CENTER, compact:true, lineHeight:1.3}),
+    para([tr('Jl. Panglima Sudirman No. 507 Kota Batu Kode Pos 65313', {size:10})], {align:AlignmentType.CENTER, compact:true, lineHeight:1.3}),
+    new Paragraph({
+      spacing: { before: MM(2), after: 0 },
+      border: { bottom: { style: BorderStyle.DOUBLE, size: 9, color: BLK, space: 1 } },
+      children: []
+    }),
+    new Paragraph({
+      spacing: { before: MM(1), after: MM(2) },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: BLK, space: 1 } },
+      children: []
+    }),
+  ];
+}
+
+// ---- Header Nota Dinas (tabel) ----
+function headerNota(rows) {
+  const W1 = 1900, W2 = 200;
+  return new Table({
+    width: { size: CW, type: WidthType.DXA },
+    columnWidths: [W1, W2, CW - W1 - W2],
+    borders: { top: BD_NONE, bottom: BD_NONE, left: BD_NONE, right: BD_NONE, insideH: BD_NONE, insideV: BD_NONE },
+    rows: rows.map(([label, value]) => new TableRow({ cantSplit: true,
+      children: [
+        new TableCell({ borders: NO_BORDERS, width: {size:W1,type:WidthType.DXA}, margins:{top:30,bottom:30,left:0,right:80},
+          children:[para([tr(label)],{compact:true,lineHeight:1.4})] }),
+        new TableCell({ borders: NO_BORDERS, width: {size:W2,type:WidthType.DXA}, margins:{top:30,bottom:30,left:0,right:0},
+          children:[para([tr(':')],{compact:true,lineHeight:1.4,align:AlignmentType.CENTER})] }),
+        new TableCell({ borders: NO_BORDERS, width: {size:CW-W1-W2,type:WidthType.DXA}, margins:{top:30,bottom:30,left:80,right:0},
+          children:[para(Array.isArray(value)?value:[tr(value)],{compact:true,lineHeight:1.4})] }),
+      ]
+    }))
+  });
+}
+
+// Garis separator
+function garis() {
+  return new Paragraph({
+    spacing: { before: MM(1), after: MM(1) },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: BLK, space: 1 } },
+    children: []
+  });
+}
+
+// TTD block
+function ttdBlock(jabatan1, jabatan2, nama, nip, align) {
+  const al = align === 'left' ? AlignmentType.LEFT : AlignmentType.RIGHT;
+  return [
+    EMPTY(),
+    para([tr(jabatan1, {bold:false})], {align:al, compact:true, lineHeight:1.4}),
+    ...(jabatan2 ? [para([tr(jabatan2)], {align:al, compact:true, lineHeight:1.4})] : []),
+    EMPTY(), EMPTY(), EMPTY(), EMPTY(),
+    para([tr(nama, {bold:true, underline:true})], {align:al, compact:true, lineHeight:1.4}),
+    para([tr(`NIP. ${nip||'—'}`)], {align:al, compact:true, lineHeight:1.4}),
+  ];
+}
+
+// Sub-judul lampiran
+function subJudul(teks) {
+  return para([tr(teks, {bold:true, underline:true})], {align:AlignmentType.LEFT, spaceBefore:3, spaceAfter:1, lineHeight:1.3});
+}
+
+// Tabel kuantitas sederhana (No, Uraian, Jumlah, Satuan)
+function tblKuantitas(items) {
+  const colW = [300, 4571, 1000, 1000];
+  return new Table({
+    width: { size: CW, type: WidthType.DXA },
+    columnWidths: colW,
+    rows: [
+      new TableRow({ cantSplit: true, tableHeader:true, children:[
+        cell('No',{w:colW[0],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Uraian',{w:colW[1],shade:true,bold:true}),
+        cell('Jumlah',{w:colW[2],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Satuan',{w:colW[3],shade:true,bold:true,align:AlignmentType.CENTER}),
+      ]}),
+      ...(items||[]).map((it,i)=>new TableRow({ cantSplit: true,children:[
+        cell(String(i+1),{w:colW[0],align:AlignmentType.CENTER}),
+        cell(it.uraian||'',{w:colW[1]}),
+        cell(String(it.jumlah||0),{w:colW[2],align:AlignmentType.CENTER}),
+        cell(it.satuan||'',{w:colW[3],align:AlignmentType.CENTER}),
+      ]}))
+    ]
+  });
+}
+
+// Tabel referensi link
+function tblLinks(links) {
+  const colW = [300, 3200, 5571];
+  return new Table({
+    width: { size: CW, type: WidthType.DXA },
+    columnWidths: colW,
+    rows: [
+      new TableRow({ cantSplit: true, tableHeader:true, children:[
+        cell('No',{w:colW[0],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Kebutuhan Barang/Jasa',{w:colW[1],shade:true,bold:true}),
+        cell('Link Katalog Inaproc',{w:colW[2],shade:true,bold:true}),
+      ]}),
+      ...(links||[]).map((lnk,i)=>new TableRow({ cantSplit: true,children:[
+        cell(String(i+1),{w:colW[0],align:AlignmentType.CENTER}),
+        cell(lnk.uraian||'',{w:colW[1]}),
+        cell(lnk.link||'https://katalog.inaproc.id/',{w:colW[2],size:9}),
+      ]}))
+    ]
+  });
+}
+
+// ============================================================
+// GENERATE NOTA PPTK
+// ============================================================
+function generateNotaPPTK(n, pptk, kpa, tahun) {
+  const tgl = tglPanjang(n.tanggal);
+  const nomor = `027/${n.nomor_urut||''}/PPTK-NODIN/${n.kode_sub_kegiatan||''}${(n.kode_sub_kegiatan&&n.kode_belanja)?'-':''}${n.kode_belanja||''}/35.79.121/${tahun}`;
+  const items = n.items || [];
+  const links = n.links && n.links.length > 0 ? n.links : [{uraian: n.nama_belanja||'—', link:'https://katalog.inaproc.id/'}];
+  const total = items.reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
+  const pptkNama = n.pptk_nama || pptk.nama || '—';
+  const pptkNip  = pptk.nip || '—';
+  const pptkJab  = pptk.jabatan_resmi || 'Pejabat Pelaksana Teknis Kegiatan';
+
+  const pageProps = {
+    size: { width: PAGE_W, height: PAGE_H },
+    margin: { top: M_TOP, bottom: M_BOT, left: M_LEFT, right: M_RIGHT },
+  };
+
+  // ============ HALAMAN 1: NOTA DINAS ============
+  const hal1 = [
+    ...kopSurat(),
+    para([tr('NOTA DINAS', {bold:true, underline:true, size:12})], {align:AlignmentType.CENTER, spaceBefore:2, spaceAfter:2, lineHeight:1.3}),
+    headerNota([
+      ['Kepada', [tr('Yth. Kuasa Pengguna Anggaran selaku Pejabat Pembuat Komitmen')]],
+      ['',       [tr('Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu')]],
+      ['Dari',   [tr('Pejabat Pelaksana Teknis Kegiatan')]],
+      ['',       [tr('Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu')]],
+      ['Tembusan', [tr('-')]],
+      ['Tanggal',  [tr(tgl)]],
+      ['Nomor',    [tr(nomor)]],
+      ['Sifat',    [tr('Segera')]],
+      ['Lampiran', [tr('1 (satu) berkas')]],
+      ['Hal',      [tr(n.hal||'Persiapan Pengadaan Barang dan Jasa', {bold:true})]],
+    ]),
+    garis(),
+    paraIsi(`Dalam rangka pelaksanaan Kegiatan ${n.kegiatan||'...'} Sub Kegiatan ${n.sub_kegiatan||'...'} untuk pelaksanaan pekerjaan ${n.nama_belanja||n.belanja||'...'} mendukung Program ${n.program||'...'} pada Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu, maka membutuhkan proses pengadaan barang/jasa untuk pekerjaan dimaksud tersebut benar-benar merupakan kebutuhan Satuan Kerja Perangkat Daerah (SKPD) yang telah direncanakan sebelumnya sehingga tertuang dalam Dokumen Pelaksanaan Anggaran Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Tahun Anggaran ${tahun}.`),
+    paraIsi(`Adapun data pendukung yang kami lampirkan sebagai bahan untuk proses pelaksanaan pengadaan barang/jasa antara lain Dokumen Pelaksanaan Anggaran DPA (${n.jenis_dpa||'DPA Murni/DPA Pergeseran/DPA Perubahan'}), Rencana Umum Pengadaan (RUP) dan data umum persiapan pengadaan barang/jasa pemerintah.`),
+    paraIsi('Demikian untuk dijadikan periksa dan mohon petunjuk lebih lanjut.'),
+    ...ttdBlock('Pejabat Pelaksana Teknis Kegiatan', 'Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu', pptkNama, pptkNip, 'right'),
+  ];
+
+  // ============ HALAMAN 2: LAMPIRAN ============
+  const hal2 = [
+    new Paragraph({ pageBreakBefore: true, children: [] }),
+    ...kopSurat(),
+    para([tr('LAMPIRAN NOTA DINAS PEJABAT PELAKSANA TEKNIS KEGIATAN', {bold:true, underline:true, size:11})],
+         {align:AlignmentType.CENTER, spaceBefore:1, spaceAfter:1, lineHeight:1.3}),
+    headerNota([
+      ['Nomor',   [tr(nomor)]],
+      ['Tanggal', [tr(tgl)]],
+    ]),
+    EMPTY(),
+
+    subJudul('Data Umum Persiapan Pengadaan Barang/Jasa'),
+    new Table({
+      width: {size:CW, type:WidthType.DXA},
+      columnWidths: [300, 2800, 200, CW-3300],
+      rows: [
+        ['1','Program',n.program||'—'],
+        ['2','Kegiatan',n.kegiatan||'—'],
+        ['3','Sub Kegiatan',n.sub_kegiatan||'—'],
+        ['4','Pekerjaan / Belanja',n.nama_belanja||n.belanja||'—'],
+        ['5','Kode Rekening',n.kode_rekening||'—'],
+        ['6','Kode RUP',n.kode_rup||'—'],
+        ['7','Tanggal DPA',tglPanjang(n.tanggal_dpa)||'—'],
+        ['8','Uraian Pekerjaan',n.uraian||'—'],
+        ['9','Pagu Anggaran',fmtRp(n.pagu)],
+        ['10','Sisa Pagu Anggaran',fmtRp(n.sisa_pagu||0)],
+        ['11','Sisa SPD per-tanggal',tgl],
+      ].map(([no,lbl,val])=>new TableRow({ cantSplit: true,children:[
+        cell(no,{w:300,align:AlignmentType.CENTER}),
+        cell(lbl,{w:2800}),
+        cell(':',{w:200,align:AlignmentType.CENTER}),
+        cell(val,{w:CW-3300}),
+      ]})).concat([
+        // Row tabel kebutuhan
+        new TableRow({ cantSplit: true, children:[
+          new TableCell({
+            borders: CELL_BORDERS,
+            columnSpan: 4,
+            width: {size:CW, type:WidthType.DXA},
+            margins:{top:60,bottom:60,left:80,right:80},
+            children: [tblBarang(items, false)]
+          })
+        ]}),
+        ...(['12','13','14','15','16'].map((no,i)=>{
+          const vals = [
+            ['Lokasi Pekerjaan','Kantor Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu'],
+            ['Ruang Lingkup',n.ruang_lingkup||n.sasaran||'—'],
+            ['Metode Pengadaan','e-Purchasing (e-Katalog / Toko Daring)'],
+            ['Kriteria Barang/Jasa','Produk Dalam Negeri (PDN)'],
+            ['Kriteria Pelaku Usaha','Usaha Kecil / Usaha Non Kecil'],
+          ];
+          return new TableRow({ cantSplit: true,children:[
+            cell(no,{w:300,align:AlignmentType.CENTER}),
+            cell(vals[i][0],{w:2800}),
+            cell(':',{w:200,align:AlignmentType.CENTER}),
+            cell(vals[i][1],{w:CW-3300}),
+          ]});
+        }))
+      ])
+    }),
+
+    EMPTY(),
+    subJudul('Identifikasi Kebutuhan Barang/Jasa'),
+    new Table({
+      width: {size:CW, type:WidthType.DXA},
+      columnWidths: [300, 2800, 200, CW-3300],
+      rows: [
+        new TableRow({ cantSplit: true,children:[
+          cell('1',{w:300,align:AlignmentType.CENTER}),
+          cell('Nama Barang/Jasa',{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          cell(n.nama_belanja||n.belanja||'—',{w:CW-3300}),
+        ]}),
+        new TableRow({ cantSplit: true,children:[
+          cell('2',{w:300,align:AlignmentType.CENTER}),
+          cell('Manfaat dan Fungsi Pengadaan',{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          new TableCell({
+            borders: CELL_BORDERS, width:{size:CW-3300,type:WidthType.DXA}, margins:{top:60,bottom:60,left:80,right:80},
+            children:[
+              para([tr('Manfaat : ',{bold:true}), tr(n.manfaat||'—')],{compact:true,lineHeight:1.3}),
+              para([tr('Fungsi : ',{bold:true}), tr(n.fungsi||'—')],{compact:true,lineHeight:1.3}),
+            ]
+          }),
+        ]}),
+        ...([
+          ['3','Pihak Pengguna/Pengelola','Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu'],
+          ['4','Garansi','-'],
+          ['5','Perkiraan Waktu Proses Pengadaan',n.waktu_pelaksanaan||'—'],
+          ['6','Tingkat Prioritas','Tinggi'],
+        ].map(([no,lbl,val])=>new TableRow({ cantSplit: true,children:[
+          cell(no,{w:300,align:AlignmentType.CENTER}),
+          cell(lbl,{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          cell(val,{w:CW-3300}),
+        ]}))),
+        new TableRow({ cantSplit: true,children:[
+          cell('7',{w:300,align:AlignmentType.CENTER}),
+          cell('Spesifikasi',{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          new TableCell({
+            borders: CELL_BORDERS, width:{size:CW-3300,type:WidthType.DXA}, margins:{top:60,bottom:60,left:80,right:80},
+            children:[
+              para([tr('Aspek Kualitas/Mutu : ',{bold:true}), tr(n.latar_belakang||'—')],{compact:true,lineHeight:1.3}),
+              para([tr('Aspek Penggunaan PDN : ',{bold:true}), tr('PDN (Produk Dalam Negeri)')],{compact:true,lineHeight:1.3}),
+              para([tr('Aspek Kuantitas/Jumlah :',{bold:true})],{compact:true,lineHeight:1.3}),
+              tblKuantitas(items),
+              para([tr('Aspek Tempat : ',{bold:true}), tr('Kantor Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu')],{compact:true,lineHeight:1.3}),
+              para([tr('Aspek Pelayanan : ',{bold:true}), tr(n.tujuan||'—')],{compact:true,lineHeight:1.3}),
+            ]
+          }),
+        ]}),
+        ...([
+          ['8','Masa Pemanfaatan',`Tahun Anggaran ${tahun}`],
+          ['9','Analisis Pasar','Barang/Jasa tersedia di e-Katalog/Toko Daring'],
+          ['10','Metode Pemilihan','e-Purchasing / Toko Daring'],
+          ['11','Cara Pengiriman','Pengiriman mandiri oleh Penyedia'],
+        ].map(([no,lbl,val])=>new TableRow({ cantSplit: true,children:[
+          cell(no,{w:300,align:AlignmentType.CENTER}),
+          cell(lbl,{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          cell(val,{w:CW-3300}),
+        ]}))),
+      ]
+    }),
+
+    EMPTY(),
+    subJudul('Referensi Harga'),
+    tblBarang(items, false),
+    EMPTY(),
+    para([tr('Sumber Referensi Harga Satuan:')],{compact:true,lineHeight:1.3}),
+    tblLinks(links),
+
+    EMPTY(),
+    paraIsi('Data umum dan daftar kebutuhan barang/jasa di atas dapat dijadikan dasar oleh Pejabat Pembuat Komitmen/Pejabat Pengadaan Barang/Jasa untuk proses pengadaan barang/jasa sehingga dapat segera dilaksanakan sesuai dengan aturan yang berlaku.'),
+    ...ttdBlock('Pejabat Pelaksana Teknis Kegiatan', 'Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu', pptkNama, pptkNip, 'right'),
+  ];
+
+  return new Document({
+    sections: [{
+      properties: { page: pageProps },
+      children: [...hal1, ...hal2],
+    }]
+  });
+}
+
+// ============================================================
+// GENERATE NOTA PPK
+// ============================================================
+function generateNotaPPK(n, notaPPTK, kpa, tahun) {
+  const tgl    = tglPanjang(n.tanggal);
+  const kode_sk = n.kode_sub_kegiatan || notaPPTK.kode_sub_kegiatan || '';
+  const kode_b  = n.kode_belanja      || notaPPTK.kode_belanja      || '';
+  const sep     = kode_sk && kode_b ? '-' : '';
+  const nomor   = `027/${n.nomor_urut||''}/PPK-NODIN/${kode_sk}${sep}${kode_b}/35.79.121/${tahun}`;
+  const items   = n.items || notaPPTK.items || [];
+  const links   = n.links || notaPPTK.links || [{uraian: n.nama_belanja||notaPPTK.nama_belanja||'—', link:'https://katalog.inaproc.id/'}];
+  const total   = items.reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
+  const kpaNama = kpa.nama || '—';
+  const kpaNip  = kpa.nip  || '—';
+  const jabKPA  = 'Kuasa Pengguna Anggaran';
+  const jabPPK  = 'selaku Pejabat Pembuat Komitmen';
+  const program    = n.program    || notaPPTK.program    || '—';
+  const kegiatan   = n.kegiatan   || notaPPTK.kegiatan   || '—';
+  const subKeg     = n.sub_kegiatan  || notaPPTK.sub_kegiatan  || '—';
+  const belanja    = n.nama_belanja  || n.belanja || notaPPTK.nama_belanja || '—';
+  const kodeRek    = n.kode_rekening || notaPPTK.kode_rekening || '—';
+  const kodeRUP    = n.kode_rup      || notaPPTK.kode_rup      || '—';
+  const tglDPA     = tglPanjang(n.tanggal_dpa || notaPPTK.tanggal_dpa);
+  const jenisDPA   = n.jenis_dpa || notaPPTK.jenis_dpa || 'Murni/Pergeseran/Perubahan';
+  const pagu       = n.pagu || notaPPTK.pagu || 0;
+
+  const pageProps = {
+    size: { width: PAGE_W, height: PAGE_H },
+    margin: { top: M_TOP, bottom: M_BOT, left: M_LEFT, right: M_RIGHT },
+  };
+
+  // ============ HALAMAN 1: NOTA DINAS PPK ============
+  const hal1 = [
+    ...kopSurat(),
+    para([tr('NOTA DINAS', {bold:true, underline:true, size:12})], {align:AlignmentType.CENTER, spaceBefore:2, spaceAfter:2, lineHeight:1.3}),
+    headerNota([
+      ['Kepada',   [tr('Pejabat Pengadaan Barang/Jasa')]],
+      ['',         [tr('Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu')]],
+      ['Dari',     [tr('Pejabat Pembuat Komitmen')]],
+      ['',         [tr('Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu')]],
+      ['Tembusan', [tr('-')]],
+      ['Tanggal',  [tr(tgl)]],
+      ['Nomor',    [tr(nomor)]],
+      ['Sifat',    [tr('Segera')]],
+      ['Lampiran', [tr('1 (satu) berkas')]],
+      ['Perihal',  [tr(n.hal||'Pelaksanaan Pengadaan Barang/Jasa', {bold:true})]],
+    ]),
+    garis(),
+    paraIsi(`Dalam rangka pelaksanaan Kegiatan ${kegiatan} Sub Kegiatan ${subKeg} untuk pelaksanaan pekerjaan ${belanja} mendukung Program ${program} pada Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu, maka membutuhkan proses pengadaan barang/jasa untuk pekerjaan dimaksud tersebut benar-benar merupakan kebutuhan Satuan Kerja Perangkat Daerah (SKPD) yang telah direncanakan sebelumnya sehingga tertuang dalam Dokumen Pelaksanaan Anggaran Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Tahun Anggaran ${tahun}.`),
+    paraIsi(`Atas dasar hal tersebut, bersama ini disampaikan kepada Pejabat Pengadaan Barang/Jasa Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu Tahun Anggaran ${tahun} untuk melaksanakan persiapan administrasi serta melaksanakan proses pemilihan penyedia barang/jasa terhadap kebutuhan barang/jasa tersebut. Adapun data pendukung yang kami lampirkan sebagai bahan untuk proses pemilihan penyedia barang/jasa antara lain Dokumen Pelaksanaan Anggaran DPA (${jenisDPA}), Spesifikasi Teknis dan Daftar Kebutuhan Barang/Jasa.`),
+    paraIsi('Demikian atas pelaksanaannya diucapkan terima kasih.'),
+    // TTD: 2 baris jabatan
+    ...ttdBlock(jabKPA, jabPPK, kpaNama, kpaNip, 'right'),
+  ];
+
+  // ============ HALAMAN 2: LAMPIRAN SPESIFIKASI TEKNIS ============
+  const hal2 = [
+    new Paragraph({ pageBreakBefore: true, children: [] }),
+    ...kopSurat(),
+    para([tr('LAMPIRAN NOTA DINAS KUASA PENGGUNA ANGGARAN', {bold:true, underline:true, size:11})],
+         {align:AlignmentType.CENTER, spaceBefore:1, spaceAfter:1, lineHeight:1.3}),
+    headerNota([
+      ['Nomor',   [tr(nomor)]],
+      ['Tanggal', [tr(tgl)]],
+    ]),
+    EMPTY(),
+    para([tr('Spesifikasi Teknis/Kerangka Acuan Kerja', {bold:true, underline:true, size:11})],
+         {align:AlignmentType.CENTER, spaceBefore:1, spaceAfter:1, lineHeight:1.3}),
+    para([tr(`Untuk ${belanja} secara e-Purchasing`)],
+         {align:AlignmentType.CENTER, compact:true, lineHeight:1.3}),
+    EMPTY(),
+    paraIsi(`Dalam rangka menunjang aktivitas Kegiatan ${subKeg}, maka perlu adanya dukungan sarana dan prasarana yang memadai guna kelancaran pelaksanaannya. Sehubungan dengan hal tersebut dipandang perlu dilakukan pemilihan penyedia pengadaan barang/jasa untuk pekerjaan ${belanja}, yang telah tertuang dalam Dokumen Pelaksanaan Anggaran DPA, Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu Tahun Anggaran ${tahun}. Data umum sebagai berikut:`),
+
+    EMPTY(),
+    subJudul('Data Umum Pelaksanaan Pengadaan Barang/Jasa'),
+    new Table({
+      width: {size:CW,type:WidthType.DXA},
+      columnWidths: [300, 2800, 200, CW-3300],
+      rows: [
+        ['1','Program',program],
+        ['2','Kegiatan',kegiatan],
+        ['3','Sub Kegiatan',subKeg],
+        ['4','Kode Rekening',kodeRek],
+        ['5','Pekerjaan / Belanja',belanja],
+        ['6','Kode RUP',kodeRUP],
+        ['7','Tanggal DPA',tglDPA||'—'],
+        ['8','Latar Belakang',n.latar_belakang||'—'],
+        ['9','Maksud dan Tujuan',n.maksud_tujuan||'—'],
+        ['10','Pagu Anggaran',fmtRp(pagu)],
+        ['11','Sisa Pagu Anggaran',fmtRp(n.sisa_pagu||0)],
+      ].map(([no,lbl,val])=>new TableRow({ cantSplit: true,children:[
+        cell(no,{w:300,align:AlignmentType.CENTER}),
+        cell(lbl,{w:2800}),
+        cell(':',{w:200,align:AlignmentType.CENTER}),
+        cell(val,{w:CW-3300}),
+      ]})).concat([
+        new TableRow({ cantSplit: true,children:[
+          new TableCell({borders:CELL_BORDERS,columnSpan:4,width:{size:CW,type:WidthType.DXA},margins:{top:60,bottom:60,left:80,right:80},
+            children:[tblBarang(items,false)]
+          })
+        ]}),
+        ...[
+          ['12','Jangka Waktu',n.waktu_pelaksanaan||'—'],
+          ['13','Lokasi Pekerjaan','Kantor Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu'],
+        ].map(([no,lbl,val])=>new TableRow({ cantSplit: true,children:[
+          cell(no,{w:300,align:AlignmentType.CENTER}),
+          cell(lbl,{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          cell(val,{w:CW-3300}),
+        ]}))
+      ])
+    }),
+
+    EMPTY(),
+    subJudul('Spesifikasi Teknis'),
+    new Table({
+      width:{size:CW,type:WidthType.DXA},
+      columnWidths:[300,2800,200,CW-3300],
+      rows:[
+        new TableRow({ cantSplit: true,children:[
+          cell('1',{w:300,align:AlignmentType.CENTER}),
+          cell('Aspek Kualitas',{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          new TableCell({borders:CELL_BORDERS,width:{size:CW-3300,type:WidthType.DXA},margins:{top:60,bottom:60,left:80,right:80},
+            children:[
+              new Table({width:{size:CW-3500,type:WidthType.DXA},columnWidths:[300,CW-3800,2000],
+                rows:[
+                  new TableRow({ cantSplit: true,tableHeader:true,children:[
+                    cell('No',{w:300,shade:true,bold:true,align:AlignmentType.CENTER}),
+                    cell('Kebutuhan Barang/Jasa',{w:CW-3800,shade:true,bold:true}),
+                    cell('Spesifikasi Umum',{w:2000,shade:true,bold:true}),
+                  ]}),
+                  ...items.map((it,i)=>new TableRow({ cantSplit: true,children:[
+                    cell(String(i+1),{w:300,align:AlignmentType.CENTER}),
+                    cell(it.uraian||'',{w:CW-3800}),
+                    cell(it.spek||'',{w:2000}),
+                  ]}))
+                ]
+              })
+            ]
+          }),
+        ]}),
+        new TableRow({ cantSplit: true,children:[
+          cell('2',{w:300,align:AlignmentType.CENTER}),
+          cell('Aspek Kuantitas',{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          new TableCell({borders:CELL_BORDERS,width:{size:CW-3300,type:WidthType.DXA},margins:{top:60,bottom:60,left:80,right:80},
+            children:[tblKuantitas(items)]
+          }),
+        ]}),
+        ...([
+          ['3','Aspek Waktu',`Bulan Januari s.d. Desember ${tahun}`],
+          ['4','Aspek Tempat','Kantor Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu'],
+          ['5','Aspek Layanan',n.fungsi||'—'],
+          ['6','Ruang Lingkup Belanja',n.ruang_lingkup||'—'],
+          ['7','Manfaat',n.manfaat||'—'],
+        ].map(([no,lbl,val])=>new TableRow({ cantSplit: true,children:[
+          cell(no,{w:300,align:AlignmentType.CENTER}),
+          cell(lbl,{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          cell(val,{w:CW-3300}),
+        ]}))),
+      ]
+    }),
+
+    EMPTY(),
+    subJudul('Daftar Kebutuhan Barang dan Referensi Harga'),
+    tblBarang(items, false),
+    EMPTY(),
+    para([tr('*) harga yang tercantum adalah harga terendah/harga terbaik/harga rata-rata', {italic:true, size:10})],{compact:true,lineHeight:1.2}),
+    para([tr('**) harga sudah termasuk pajak', {italic:true, size:10})],{compact:true,lineHeight:1.2}),
+    EMPTY(),
+    para([tr('Sumber Referensi Harga Satuan:')],{compact:true,lineHeight:1.3}),
+    tblLinks(links),
+
+    EMPTY(),
+    subJudul('Syarat Penyedia'),
+    new Table({
+      width:{size:CW,type:WidthType.DXA},
+      columnWidths:[300,2800,200,CW-3300],
+      rows:[
+        new TableRow({ cantSplit: true,children:[
+          cell('1',{w:300,align:AlignmentType.CENTER}),
+          cell('Syarat Penyedia',{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          cell(n.syarat_penyedia||'Terdaftar pada aplikasi e-Katalog/Toko Daring/Bela Pengadaan; Memiliki kelengkapan administrasi yang dibutuhkan (NIB, NPWP, SIUP, NPWPD, KTP, No. Rekening); KBKI dan KBLI sesuai dengan pekerjaan/nama belanja',{w:CW-3300}),
+        ]}),
+        new TableRow({ cantSplit: true,children:[
+          cell('2',{w:300,align:AlignmentType.CENTER}),
+          cell('Metode Pemilihan',{w:2800}),
+          cell(':',{w:200,align:AlignmentType.CENTER}),
+          cell('e-Purchasing (negosiasi / mini kompetisi)',{w:CW-3300}),
+        ]}),
+      ]
+    }),
+
+    EMPTY(),
+    paraIsi('Data kegiatan tersebut dapat dijadikan dasar oleh Pejabat Pengadaan Barang/Jasa untuk segera melaksanakan persiapan dan/atau pelaksanaan pemilihan penyedia.'),
+    paraIsi('Demikian atas perhatian dan kerjasamanya disampaikan terima kasih.'),
+    ...ttdBlock(jabKPA, jabPPK, kpaNama, kpaNip, 'right'),
+  ];
+
+  return new Document({
+    sections: [{
+      properties: { page: pageProps },
+      children: [...hal1, ...hal2],
+    }]
+  });
+}
+
+// ============================================================
+// DOWNLOAD HELPERS — dipanggil dari tombol UI
+// ============================================================
+async function unduhNotaPPTKDocx(id) {
+  const n = STATE.notaDinas.pptk.find(x=>x.id===id);
+  if (!n) { showToast('Nota tidak ditemukan','error'); return; }
+  const pptk = ndGetPPTK(n.pptk_nama) || {};
+  const kpa  = ndGetKPA() || {};
+  try {
+    showToast('⏳ Membuat file DOCX...');
+    const doc = generateNotaPPTK(n, pptk, kpa, STATE.tahun);
+    const blob = await Packer.toBlob(doc);
+    const filename = `Nota_Dinas_PPTK_${(n.nomor_urut||'').replace(/\\./g,'-')}_${(n.hal||'').substring(0,30).replace(/[^a-zA-Z0-9]/g,'_')}.docx`;
+    downloadBlob(blob, filename);
+    showToast('✅ File DOCX berhasil diunduh');
+  } catch(e) {
+    console.error(e);
+    showToast('Gagal membuat DOCX: ' + e.message, 'error');
+  }
+}
+
+async function unduhNotaPPKDocx(id) {
+  const n = STATE.notaDinas.ppk.find(x=>x.id===id);
+  if (!n) { showToast('Nota tidak ditemukan','error'); return; }
+  const notaPPTK = (STATE.notaDinas.pptk||[]).find(p=>p.id===n.pptk_nota_id) || {};
+  const kpa = ndGetKPA() || {};
+  try {
+    showToast('⏳ Membuat file DOCX...');
+    const doc = generateNotaPPK(n, notaPPTK, kpa, STATE.tahun);
+    const blob = await Packer.toBlob(doc);
+    const filename = `Nota_Dinas_PPK_${(n.nomor_urut||'').replace(/\\./g,'-')}_${(n.hal||'').substring(0,30).replace(/[^a-zA-Z0-9]/g,'_')}.docx`;
+    downloadBlob(blob, filename);
+    showToast('✅ File DOCX berhasil diunduh');
+  } catch(e) {
+    console.error(e);
+    showToast('Gagal membuat DOCX: ' + e.message, 'error');
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
 </script>
