@@ -2441,6 +2441,7 @@ function cetakRealisasi() {
     rows += `<tr>
       <td class="center">${i + 1}</td>
       <td class="center">${r.tanggal ? new Date(r.tanggal+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-'}</td>
+      <td style="font-size:10px">${r.nomor_transaksi || '-'}</td>
       <td style="max-width:200px">${r.uraian || '-'}</td>
       <td style="font-size:10px">${r.nama_belanja || '-'}</td>
       <td><span class="badge ${r.sumber_dana === 'DBH CHT' ? 'badge-orange' : 'badge-blue'}">${r.sumber_dana || '-'}</span></td>
@@ -2465,6 +2466,7 @@ function cetakRealisasi() {
     <thead><tr>
       <th class="center">No</th>
       <th class="center">Tgl Transaksi</th>
+      <th>No. Transaksi</th>
       <th>Uraian</th>
       <th>Belanja</th>
       <th class="center">Sumber Dana</th>
@@ -2474,7 +2476,7 @@ function cetakRealisasi() {
     </tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr class="total-row">
-      <td colspan="5"><b>TOTAL</b></td>
+      <td colspan="6"><b>TOTAL</b></td>
       <td class="right mono"><b>Rp ${fmt(total)}</b></td>
       <td colspan="2"></td>
     </tr></tfoot>
@@ -2785,10 +2787,11 @@ async function simpanKas() {
 function renderRealisasi() {
   const filteredReal = getFilteredRealisasi();
   const rows = filteredReal.length === 0
-    ? `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📑</div><p>Belum ada transaksi realisasi.</p></div></td></tr>`
+    ? `<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">📑</div><p>Belum ada transaksi realisasi.</p></div></td></tr>`
     : filteredReal.map((r,i)=>`<tr>
         <td class="center">${i+1}</td>
         <td>${r.tanggal||'-'}</td>
+        <td style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nomor_transaksi||''}">${r.nomor_transaksi||'-'}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.uraian}">${r.uraian||'-'}</td>
         <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="mono">${r.kode_rekening||'-'}</td>
         <td class="right mono">${fmt(r.nominal)}</td>
@@ -2823,6 +2826,7 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
       <thead><tr>
         <th style="width:40px">#</th>
         <th>Tanggal</th>
+        <th>No. Transaksi</th>
         <th>Uraian</th>
         <th>Kode Rekening</th>
         <th class="right">Nominal</th>
