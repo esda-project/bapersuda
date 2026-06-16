@@ -25064,10 +25064,11 @@ function initDashboardCharts() {
   runAIAnalysis();
 }
 
+// Fitur otomatisasi AI (api.anthropic.com) dinonaktifkan.
+// Ringkasan dihitung manual dari data tanpa panggilan API eksternal.
 async function runAIAnalysis() {
   const el = document.getElementById('aiAnalysisBody');
   if (!el) return;
-  el.innerHTML = '<div class="ai-loading"><div class="spinner"></div>Memuat analisis AI...</div>';
 
   const totalPagu = getTotalPagu();
   const totalReal = getTotalRealisasi();
@@ -25078,40 +25079,13 @@ async function runAIAnalysis() {
   const bulanBerjalan = now.getMonth()+1;
   const targetBulan = ((bulanBerjalan/12)*100).toFixed(1);
 
-  const byRek = {};
-  STATE.realisasi.filter(r=>r.tanggal_sp2d).forEach(r=>{
-    if(!byRek[r.kode_rekening]) byRek[r.kode_rekening]={nama:r.nama_belanja||r.kode_rekening,total:0};
-    byRek[r.kode_rekening].total+=r.nominal;
-  });
-
-  const summary = `
-Data Anggaran SKPD Bagian Perekonomian dan SDA TA ${STATE.tahun} (Tahapan: ${STATE.tahapan}):
-- Total Pagu: Rp ${fmt(totalPagu)}
-- Total Realisasi: Rp ${fmt(totalReal)}
-- Capaian: ${pct}%
-- Sisa: Rp ${fmt(sisa)}
-- Bulan berjalan: ${bulanBerjalan} (target proporsional ${targetBulan}%)
-- Jumlah rekening belanja: ${STATE.anggaran.length}
-- Jumlah transaksi: ${STATE.realisasi.length}
-  `;
-
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
-        system:`Kamu adalah analis keuangan pemerintah daerah yang ahli dalam analisis LRA (Laporan Realisasi Anggaran) SKPD. Berikan analisis singkat, tajam, dan actionable dalam Bahasa Indonesia. Format output: paragraf singkat 3-4 kalimat, tanpa header berlebihan. Fokus pada: status capaian vs target proporsional, risiko penyerapan, dan rekomendasi tindakan.`,
-        messages:[{role:'user',content:`Analisis capaian realisasi anggaran berikut dan berikan rekomendasi:\n${summary}`}]
-      })
-    });
-    const data = await resp.json();
-    const text = data.content?.find(c=>c.type==='text')?.text || 'Tidak ada analisis.';
-    el.innerHTML = `<div style="line-height:1.8">${text.replace(/\n/g,'<br>')}</div>`;
-  } catch(e) {
-    el.innerHTML = `<div style="color:var(--c-text-muted)">⚠️ Tidak dapat terhubung ke AI. Pastikan koneksi internet tersedia dan API key terkonfigurasi di Supabase.<br><br><b>Ringkasan Manual:</b><br>Capaian realisasi saat ini ${pct}% dari total pagu Rp ${fmt(totalPagu)}. ${pct<targetBulan?'Realisasi masih di bawah target proporsional '+targetBulan+'%. Perlu percepatan penyerapan anggaran.':'Realisasi sudah memenuhi target proporsional bulan berjalan.'}</div>`;
-  }
+  el.innerHTML = `<div style="line-height:1.8">
+    Capaian realisasi anggaran saat ini sebesar <b>${pct}%</b> dari total pagu Rp ${fmt(totalPagu)}
+    (terealisasi Rp ${fmt(totalReal)}, sisa Rp ${fmt(sisa)}).
+    ${pct < targetBulan
+      ? `Realisasi masih di bawah target proporsional bulan ke-${bulanBerjalan} (${targetBulan}%) — perlu percepatan penyerapan anggaran.`
+      : `Realisasi sudah memenuhi atau melampaui target proporsional bulan ke-${bulanBerjalan} (${targetBulan}%).`}
+  </div>`;
 }
 
 // ========================================
@@ -27052,49 +27026,21 @@ window.addEventListener('resize', function() {
         </div>
       </div>
 
-      <!-- Teks-teks dengan AI assist -->
-      <div style="margin-bottom:10px">
-        <button id="ndAiSemuaBtnpptk" class="btn btn-blue" style="width:100%;background:linear-gradient(135deg,#6366f1,#8b5cf6);font-size:13px;padding:9px"
-          onclick="ndAiIseSemua('pptk')">✨ Isi Semua Uraian dengan AI Sekaligus</button>
-        <p style="font-size:11px;color:var(--c-text-muted);margin-top:4px;text-align:center">Pastikan rekening dan perihal sudah dipilih/diisi terlebih dahulu</p>
-      </div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px">
-          <span style="font-size:12px;font-weight:700;color:var(--c-text)">📝 Uraian Narasi</span>
-          <button id="ndAiSemuaBtnpptk" class="btn btn-sm"
-            style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:5px 14px;border-radius:8px"
-            onclick="ndAiIseSemua('pptk')">✨ Isi Semua dengan AI</button>
-        </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Uraian / Paragraf Pembuka</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndpUraian" onclick="ndAiAssist('ndpUraian','Uraian / Paragraf Pembuka',ndAiKonteksPPTK())">✨ AI</button>
-          </div>
+          <label class="form-label">Uraian / Paragraf Pembuka</label>
           <textarea class="form-input" id="ndpUraian" rows="3" style="resize:vertical" placeholder="Uraian / Paragraf Pembuka..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Latar Belakang</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndpLatarBelakang" onclick="ndAiAssist('ndpLatarBelakang','Latar Belakang',ndAiKonteksPPTK())">✨ AI</button>
-          </div>
+          <label class="form-label">Latar Belakang</label>
           <textarea class="form-input" id="ndpLatarBelakang" rows="3" style="resize:vertical" placeholder="Latar Belakang..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Tujuan Pengadaan</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndpTujuan" onclick="ndAiAssist('ndpTujuan','Tujuan Pengadaan',ndAiKonteksPPTK())">✨ AI</button>
-          </div>
+          <label class="form-label">Tujuan Pengadaan</label>
           <textarea class="form-input" id="ndpTujuan" rows="3" style="resize:vertical" placeholder="Tujuan Pengadaan..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Sasaran</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndpSasaran" onclick="ndAiAssist('ndpSasaran','Sasaran',ndAiKonteksPPTK())">✨ AI</button>
-          </div>
+          <label class="form-label">Sasaran</label>
           <textarea class="form-input" id="ndpSasaran" rows="3" style="resize:vertical" placeholder="Sasaran..."></textarea>
         </div>
       </div>
@@ -27199,89 +27145,41 @@ window.addEventListener('resize', function() {
         </div>
       </div>
 
-      <!-- Spesifikasi teknis dengan AI assist -->
-      <div style="margin-bottom:10px">
-        <button id="ndAiSemuaBtnppk" class="btn btn-blue" style="width:100%;background:linear-gradient(135deg,#6366f1,#8b5cf6);font-size:13px;padding:9px"
-          onclick="ndAiIseSemua('ppk')">✨ Isi Semua Spesifikasi Teknis dengan AI Sekaligus</button>
-        <p style="font-size:11px;color:var(--c-text-muted);margin-top:4px;text-align:center">Pastikan Nota PPTK dasar dan nilai pengadaan sudah dipilih/diisi</p>
-      </div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px">
-          <span style="font-size:12px;font-weight:700;color:var(--c-text)">📝 Spesifikasi Teknis / KAK</span>
-          <button id="ndAiSemuaBtnppk" class="btn btn-sm"
-            style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:5px 14px;border-radius:8px"
-            onclick="ndAiIseSemua('ppk')">✨ Isi Semua dengan AI</button>
-        </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Uraian Pekerjaan</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkUraianPekerjaan" onclick="ndAiAssist('ndkUraianPekerjaan','Uraian Pekerjaan',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Uraian Pekerjaan</label>
           <textarea class="form-input" id="ndkUraianPekerjaan" rows="2" style="resize:vertical" placeholder="Uraian Pekerjaan..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Latar Belakang</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkLatarBelakang" onclick="ndAiAssist('ndkLatarBelakang','Latar Belakang',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Latar Belakang</label>
           <textarea class="form-input" id="ndkLatarBelakang" rows="2" style="resize:vertical" placeholder="Latar Belakang..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Ruang Lingkup</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkRuangLingkup" onclick="ndAiAssist('ndkRuangLingkup','Ruang Lingkup',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Ruang Lingkup</label>
           <textarea class="form-input" id="ndkRuangLingkup" rows="2" style="resize:vertical" placeholder="Ruang Lingkup..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Maksud dan Tujuan</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkMaksudTujuan" onclick="ndAiAssist('ndkMaksudTujuan','Maksud dan Tujuan',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Maksud dan Tujuan</label>
           <textarea class="form-input" id="ndkMaksudTujuan" rows="2" style="resize:vertical" placeholder="Maksud dan Tujuan..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Keluaran (Output)</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkKeluaran" onclick="ndAiAssist('ndkKeluaran','Keluaran (Output)',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Keluaran (Output)</label>
           <textarea class="form-input" id="ndkKeluaran" rows="2" style="resize:vertical" placeholder="Keluaran (Output)..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Manfaat</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkManfaat" onclick="ndAiAssist('ndkManfaat','Manfaat',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Manfaat</label>
           <textarea class="form-input" id="ndkManfaat" rows="2" style="resize:vertical" placeholder="Manfaat..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Fungsi</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkFungsi" onclick="ndAiAssist('ndkFungsi','Fungsi',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Fungsi</label>
           <textarea class="form-input" id="ndkFungsi" rows="2" style="resize:vertical" placeholder="Fungsi..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Syarat Penyedia</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkSyaratPenyedia" onclick="ndAiAssist('ndkSyaratPenyedia','Syarat Penyedia',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Syarat Penyedia</label>
           <textarea class="form-input" id="ndkSyaratPenyedia" rows="2" style="resize:vertical" placeholder="Syarat Penyedia..."></textarea>
         </div>
         <div class="form-group">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label class="form-label" style="margin:0">Waktu Pelaksanaan</label>
-            <button class="btn btn-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;padding:3px 10px"
-              data-ai-for="ndkWaktuPelaksanaan" onclick="ndAiAssist('ndkWaktuPelaksanaan','Waktu Pelaksanaan',ndAiKonteksPPK())">✨ AI</button>
-          </div>
+          <label class="form-label">Waktu Pelaksanaan</label>
           <textarea class="form-input" id="ndkWaktuPelaksanaan" rows="2" style="resize:vertical" placeholder="Waktu Pelaksanaan..."></textarea>
         </div>
       </div>
@@ -28154,190 +28052,7 @@ function hapusNotaPPK(id) {
   showPage('notaPPK');
 }
 
-// ============================================================
-// AI ASSIST
-// ============================================================
-// Panduan isi per jenis field
-function ndAiPanduanField(labelText) {
-  const map = {
-    'Uraian / Paragraf Pembuka':
-      'Tulis paragraf pembuka nota dinas yang menjelaskan maksud pengajuan pengadaan. Awali dengan frasa seperti "Dalam rangka..." atau "Sehubungan dengan...". 2-3 kalimat.',
-    'Latar Belakang':
-      'Jelaskan mengapa pengadaan ini diperlukan, kaitkan dengan kebutuhan kegiatan/program. 2-3 kalimat singkat dan padat.',
-    'Uraian Pekerjaan':
-      'Jelaskan secara singkat lingkup pekerjaan yang akan dilaksanakan. Sebut nama barang/jasa yang diadakan. 2-3 kalimat.',
-    'Ruang Lingkup':
-      'Sebutkan cakupan pekerjaan: apa yang harus disediakan/dilakukan oleh penyedia. 2-3 poin singkat.',
-    'Maksud dan Tujuan':
-      'Jelaskan maksud (alasan pengadaan) dan tujuan (hasil yang diharapkan) secara terpisah dalam 1 kalimat masing-masing.',
-    'Keluaran (Output)':
-      'Sebutkan hasil/output konkret yang akan diterima setelah pengadaan selesai. 1-2 kalimat.',
-    'Manfaat':
-      'Jelaskan manfaat pengadaan bagi pelaksanaan kegiatan/program pemerintah daerah. 2 kalimat.',
-    'Fungsi':
-      'Jelaskan fungsi/kegunaan barang atau jasa yang diadakan dalam mendukung kegiatan. 1-2 kalimat.',
-    'Tujuan Pengadaan':
-      'Tulis tujuan spesifik pengadaan, kaitkan dengan sub kegiatan yang bersangkutan. 2 kalimat.',
-    'Sasaran':
-      'Sebutkan sasaran/target yang ingin dicapai dari pengadaan ini. 1-2 kalimat.',
-    'Syarat Penyedia':
-      'Tulis syarat umum penyedia pada katalog elektronik: memiliki NPWP aktif, terdaftar di LKPP, produk sesuai spesifikasi, garansi produk (jika barang). 2-3 poin.',
-    'Waktu Pelaksanaan':
-      'Tulis estimasi waktu pelaksanaan yang wajar untuk jenis belanja ini. Contoh: "Pelaksanaan pekerjaan diselesaikan dalam jangka waktu 7 (tujuh) hari kalender sejak tanggal penandatanganan kontrak."',
-  };
-  return map[labelText] || 'Tulis teks formal, baku, 2-3 kalimat, sesuai konteks pengadaan.';
-}
 
-// Isi SATU field dengan AI
-async function ndAiAssist(fieldId, labelText, konteks) {
-  const el = document.getElementById(fieldId);
-  if (!el) return;
-  const btn = document.querySelector(`[data-ai-for="${fieldId}"]`);
-  if (btn) { btn.disabled=true; btn.textContent='⏳...'; }
-
-  const panduan = ndAiPanduanField(labelText);
-  const prompt = `Kamu adalah asisten penyusunan nota dinas pengadaan barang/jasa pemerintah daerah Indonesia.
-
-Konteks pengadaan:
-${konteks}
-
-Tugas: Tulis isi untuk kolom "${labelText}".
-Panduan khusus kolom ini: ${panduan}
-
-Instruksi wajib:
-- Gunakan bahasa Indonesia yang baku, formal, dan benar sesuai PUEBI
-- Kalimat singkat, padat, langsung ke isi — tidak bertele-tele
-- WAJIB menyebut nama jenis belanja/pekerjaan yang ada di konteks
-- Jangan tulis heading, label, nomor, atau penjelasan tambahan
-- Langsung tulis teksnya saja (plain text)`;
-
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:300,
-        messages:[{role:'user',content:prompt}] })
-    });
-    const data = await resp.json();
-    const text = (data.content&&data.content[0]) ? data.content[0].text.trim() : '';
-    if (text) { el.value = text; showToast('✨ "'+labelText+'" berhasil diisi AI'); }
-    else showToast('AI tidak memberikan respons','error');
-  } catch(e) {
-    showToast('Gagal: '+e.message,'error');
-  } finally {
-    if (btn) { btn.disabled=false; btn.textContent='✨ AI'; }
-  }
-}
-
-// Isi SEMUA field sekaligus dengan AI — tombol "✨ Isi Semua dengan AI"
-async function ndAiIseSemua(tipe) {
-  const konteks = tipe==='pptk' ? ndAiKonteksPPTK() : ndAiKonteksPPK();
-  const fields = tipe==='pptk'
-    ? [
-        {id:'ndpUraian',       label:'Uraian / Paragraf Pembuka'},
-        {id:'ndpLatarBelakang',label:'Latar Belakang'},
-        {id:'ndpTujuan',       label:'Tujuan Pengadaan'},
-        {id:'ndpSasaran',      label:'Sasaran'},
-      ]
-    : [
-        {id:'ndkUraianPekerjaan',label:'Uraian Pekerjaan'},
-        {id:'ndkLatarBelakang',  label:'Latar Belakang'},
-        {id:'ndkRuangLingkup',   label:'Ruang Lingkup'},
-        {id:'ndkMaksudTujuan',   label:'Maksud dan Tujuan'},
-        {id:'ndkKeluaran',       label:'Keluaran (Output)'},
-        {id:'ndkManfaat',        label:'Manfaat'},
-        {id:'ndkFungsi',         label:'Fungsi'},
-        {id:'ndkSyaratPenyedia', label:'Syarat Penyedia'},
-        {id:'ndkWaktuPelaksanaan',label:'Waktu Pelaksanaan'},
-      ];
-
-  const btn = document.getElementById('ndAiSemuaBtn'+tipe);
-  if (btn) { btn.disabled=true; btn.textContent='⏳ AI sedang mengisi...'; }
-
-  const fieldList = fields.map(f=>'- '+f.label).join('\n');
-  const fieldJsonTemplate = fields.map(f=>`  "${f.id}": "teks untuk ${f.label}"`).join(',\n');
-  const prompt = `Kamu adalah asisten penyusunan nota dinas pengadaan barang/jasa pemerintah daerah Indonesia.
-
-Konteks pengadaan:
-${konteks}
-
-Tugas: Isi SEMUA kolom berikut. Setiap isi WAJIB menyebut secara eksplisit nama jenis belanja/pekerjaan dari konteks di atas.
-Kolom:
-${fieldList}
-
-PANDUAN KHUSUS:
-- Latar Belakang: mengapa pengadaan ini diperlukan, kaitkan dengan kegiatan/program
-- Uraian Pekerjaan: lingkup singkat apa yang diadakan, sebut nama barang/jasa
-- Ruang Lingkup: cakupan pekerjaan yang harus dilakukan/disediakan penyedia
-- Maksud dan Tujuan: maksud=alasan pengadaan, tujuan=hasil yang diharapkan
-- Keluaran (Output): hasil konkret yang diterima setelah pengadaan selesai
-- Manfaat: manfaat bagi pelaksanaan kegiatan pemerintah daerah
-- Fungsi: fungsi/kegunaan barang atau jasa yang diadakan
-- Tujuan Pengadaan: tujuan spesifik, kaitkan dengan sub kegiatan
-- Sasaran: target/sasaran yang ingin dicapai
-- Syarat Penyedia: NPWP aktif, terdaftar LKPP, produk sesuai spesifikasi teknis, garansi purna jual
-- Waktu Pelaksanaan: estimasi hari kalender yang wajar untuk jenis belanja ini
-
-Format WAJIB JSON tanpa markdown atau penjelasan apapun di luar JSON:
-{
-${fieldJsonTemplate}
-}
-
-Wajib: bahasa Indonesia baku (PUEBI), 2-3 kalimat per kolom, sebut nama belanja secara eksplisit di tiap kolom.`;
-
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:2000,
-        messages:[{role:'user',content:prompt}] })
-    });
-    const data = await resp.json();
-    let raw = (data.content&&data.content[0]) ? data.content[0].text.trim() : '';
-    // Strip markdown fences jika ada
-    raw = raw.replace(/^(```json|```)/,'').replace(/(```\s*)$/,'').trim();
-    const parsed = JSON.parse(raw);
-    let filled = 0;
-    fields.forEach(f => {
-      const el = document.getElementById(f.id);
-      if (el && parsed[f.id]) { el.value = parsed[f.id]; filled++; }
-    });
-    showToast('✨ AI berhasil mengisi '+filled+' kolom sekaligus!');
-  } catch(e) {
-    showToast('Gagal isi semua: '+e.message+' — coba per kolom','error');
-  } finally {
-    if (btn) { btn.disabled=false; btn.textContent='✨ Isi Semua dengan AI'; }
-  }
-}
-
-function ndAiKonteksPPTK() {
-  const kode = document.getElementById('ndpRekening').value;
-  const a = kode ? STATE.anggaran.find(x=>x.kode_rekening===kode) : null;
-  return [
-    'Program: ' + (a ? a.program : '—'),
-    'Kegiatan: ' + (a ? a.kegiatan : '—'),
-    'Sub Kegiatan: ' + (a ? a.sub_kegiatan : '—'),
-    'Jenis Belanja: ' + (a ? a.nama_belanja||a.belanja : '—'),
-    'Pagu Anggaran: ' + (a ? ndFmt(parseFloat(a.pagu)||0) : '—'),
-    'Sumber Dana: ' + (a ? a.sumber_dana : '—'),
-    'Perihal: ' + (document.getElementById('ndpHal').value||'—'),
-    'Barang/Jasa yang diadakan: ' + (ndpItems.map(i=>i.uraian).filter(Boolean).join(', ')||'—'),
-  ].join('\n');
-}
-
-function ndAiKonteksPPK() {
-  const id = document.getElementById('ndkNotaPPTK').value;
-  const n = id ? STATE.notaDinas.pptk.find(x=>x.id===id) : null;
-  return [
-    'Program: ' + (n ? n.program : '—'),
-    'Kegiatan: ' + (n ? n.kegiatan : '—'),
-    'Sub Kegiatan: ' + (n ? n.sub_kegiatan : '—'),
-    'Jenis Belanja: ' + (n ? n.nama_belanja||n.belanja : '—'),
-    'Nilai Pengadaan: ' + ndFmt(parseFloat(document.getElementById('ndkNilaiPengadaan').value)||0),
-    'Perihal: ' + (document.getElementById('ndkHal').value||'—'),
-    'Barang/Jasa: ' + (n && n.items ? n.items.map(i=>i.uraian).filter(Boolean).join(', ') : '—'),
-  ].join('\n');
-}
 
 // ============================================================
 // CETAK / PREVIEW NOTA DINAS PPTK
