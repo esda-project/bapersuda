@@ -25086,6 +25086,7 @@ async function runAIAnalysis() {
       ? `Realisasi masih di bawah target proporsional bulan ke-${bulanBerjalan} (${targetBulan}%) — perlu percepatan penyerapan anggaran.`
       : `Realisasi sudah memenuhi atau melampaui target proporsional bulan ke-${bulanBerjalan} (${targetBulan}%).`}
   </div>`;
+  ${STATE.kasAnggaran && Object.keys(STATE.kasAnggaran).length > 0 ? buildKasTWSection() : ''}
 }
 
 // ========================================
