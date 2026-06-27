@@ -25753,6 +25753,80 @@ function cetakLRA() {
 
 
 // ========================================
+// ANGGARAN KAS
+// ========================================
+const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+function renderKas() {
+  const kasData = getFilteredAnggaranForKas();
+  if (kasData.length === 0) return `<div class="empty-state" style="margin-top:60px"><div class="empty-icon">💰</div><p>${isUserPPTK() ? 'Tidak ada data anggaran yang ditugaskan untuk PPTK: '+getPPTKNama() : 'Input data anggaran terlebih dahulu sebelum mengisi anggaran kas.'}</p></div>`;
+  const rows = kasData.map((a,i) => {
+    const kas = STATE.kasAnggaran[a.kode_rekening] || {};
+    const pagu = getPagu(a);
+    const totalKas = BULAN.reduce((s,_,m)=>s+(kas[m]||0),0);
+    const sisa = pagu - totalKas;
+    const bCells = BULAN.map((_,m)=>`<td><input class="kas-input" type="number" min="0" value="${kas[m]||''}" onchange="updateKas('${a.kode_rekening}',${m},this.value)" placeholder="0"></td>`).join('');
+    return `<tr>
+      <td class="mono" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.kode_rekening}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${a.nama_belanja}">${a.nama_belanja}</td>
+      <td class="right mono" style="font-size:12px">${fmt(pagu)}</td>
+      ${bCells}
+      <td class="right mono" style="font-size:12px;font-weight:700">${fmt(totalKas)}</td>
+      <td class="right mono" style="font-size:12px;color:${sisa<0?'var(--c-danger)':'var(--c-success)'}">${fmt(sisa)}</td>
+    </tr>`;
+  }).join('');
+  const totalBulan = BULAN.map((_,m) => kasData.reduce((s,a)=>{
+    const kas = STATE.kasAnggaran[a.kode_rekening]||{};
+    return s+(kas[m]||0);
+  },0));
+  const totalTotalKas = totalBulan.reduce((s,v)=>s+v,0);
+  const totalPagu = kasData.reduce((s,a)=>s+getPagu(a),0);
+  return `
+<div class="page-header">
+  <h2>💰 Anggaran Kas</h2>
+  <button class="btn btn-blue" onclick="simpanKas()">💾 Simpan Semua</button>
+</div>
+${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bottom:12px;background:var(--c-primary-light);border-color:var(--c-primary)"><div style="font-size:12px;color:var(--c-primary)">🔒 Menampilkan anggaran kas untuk PPTK: <b>${getPPTKNama()}</b></div></div>` : ''}
+<div class="section-card" style="padding:10px 14px;margin-bottom:12px">
+  <div style="font-size:13px;color:var(--c-text-muted)">⚠️ Isi rencana penyerapan per bulan untuk setiap rekening. Total anggaran kas harus ≤ pagu yang tersedia.</div>
+</div>
+<div class="table-wrap">
+  <div class="table-scroll" style="max-height:600px">
+    <table class="kas-table">
+      <thead><tr>
+        <th>Kode Rekening</th>
+        <th>Nama Belanja</th>
+        <th class="right">Pagu</th>
+        ${BULAN.map(b=>`<th class="center">${b}</th>`).join('')}
+        <th class="right">Total Kas</th>
+        <th class="right">Sisa</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700;background:var(--c-primary-light)">
+        <td colspan="2">TOTAL</td>
+        <td class="right mono">${fmt(totalPagu)}</td>
+        ${totalBulan.map(v=>`<td class="right mono" style="font-size:12px">${v>0?fmt(v):'-'}</td>`).join('')}
+        <td class="right mono">${fmt(totalTotalKas)}</td>
+        <td class="right mono" style="color:${totalPagu-totalTotalKas<0?'var(--c-danger)':'var(--c-success)'}">${fmt(totalPagu-totalTotalKas)}</td>
+      </tr></tfoot>
+    </table>
+  </div>
+</div>`;
+}
+function updateKas(kodeRek, bulan, val) {
+  if (!STATE.kasAnggaran[kodeRek]) STATE.kasAnggaran[kodeRek] = {};
+  STATE.kasAnggaran[kodeRek][bulan] = parseFloat(val)||0;
+}
+async function simpanKas() {
+  saveState();
+  if (sbClient) {
+    await saveKasToSupabase();
+  } else {
+    showToast('Anggaran kas disimpan (lokal)');
+  }
+}
+
+
+// ========================================
 // ANGGARAN KAS TRIWULAN — Dashboard Widget
 // ========================================
 function buildKasTWSection() {
