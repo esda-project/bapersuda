@@ -25751,83 +25751,187 @@ function cetakLRA() {
 
 
 // ========================================
-// ANGGARAN KAS
+// ANGGARAN KAS TRIWULAN — Dashboard Widget
 // ========================================
-const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+function buildKasTWSection() {
+  const nowMonth = new Date().getMonth(); // 0-based
+  const currentTW = nowMonth < 3 ? 1 : nowMonth < 6 ? 2 : nowMonth < 9 ? 3 : 4;
+  window._currentKasTW = currentTW;
+  return renderKasTWCard(currentTW);
+}
 
-function renderKas() {
+function renderKasTWCard(tw) {
+  const twBulanRange = [
+    [0,1,2],
+    [0,1,2,3,4,5],
+    [0,1,2,3,4,5,6,7,8],
+    [0,1,2,3,4,5,6,7,8,9,10,11]
+  ];
+  const twLabel  = ['TW I (Jan–Mar)','TW II (Apr–Jun)','TW III (Jul–Sep)','TW IV (Okt–Des)'];
+  const twBulan  = ['Jan–Mar','Jan–Jun','Jan–Sep','Jan–Des'];
+  const targetPct = [25, 50, 75, 100];
+  const currentTW = window._currentKasTW || tw;
+
+  // Gunakan sumber data yang sama persis dengan renderKas()
   const kasData = getFilteredAnggaranForKas();
-  if (kasData.length === 0) return `<div class="empty-state" style="margin-top:60px"><div class="empty-icon">💰</div><p>${isUserPPTK() ? 'Tidak ada data anggaran yang ditugaskan untuk PPTK: '+getPPTKNama() : 'Input data anggaran terlebih dahulu sebelum mengisi anggaran kas.'}</p></div>`;
+  const bulanList = twBulanRange[tw - 1];
 
-  const rows = kasData.map((a,i) => {
+  // Pagu kas akumulatif s/d TW ini — sama seperti kolom per-bulan di tabel kas
+  const pagu = kasData.reduce((sum, a) => {
     const kas = STATE.kasAnggaran[a.kode_rekening] || {};
-    const pagu = getPagu(a);
-    const totalKas = BULAN.reduce((s,_,m)=>s+(kas[m]||0),0);
-    const sisa = pagu - totalKas;
-    const bCells = BULAN.map((_,m)=>`<td><input class="kas-input" type="number" min="0" value="${kas[m]||''}" onchange="updateKas('${a.kode_rekening}',${m},this.value)" placeholder="0"></td>`).join('');
-    return `<tr>
-      <td class="mono" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.kode_rekening}</td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${a.nama_belanja}">${a.nama_belanja}</td>
-      <td class="right mono" style="font-size:12px">${fmt(pagu)}</td>
-      ${bCells}
-      <td class="right mono" style="font-size:12px;font-weight:700">${fmt(totalKas)}</td>
-      <td class="right mono" style="font-size:12px;color:${sisa<0?'var(--c-danger)':'var(--c-success)'}">${fmt(sisa)}</td>
-    </tr>`;
+    return sum + bulanList.reduce((s, m) => s + (kas[m] || 0), 0);
+  }, 0);
+
+  // Realisasi SP2D akumulatif s/d akhir bulan terakhir TW ini
+  const bulanAkhir = bulanList[bulanList.length - 1]; // 0-based max bulan
+  const real = (STATE.realisasi || []).filter(r => {
+    if (!r.tanggal_sp2d) return false;
+    return new Date(r.tanggal_sp2d).getMonth() <= bulanAkhir;
+  }).reduce((s, r) => s + (parseFloat(r.nominal) || 0), 0);
+
+  const sisa  = pagu - real;
+  const pct   = pagu > 0 ? (real / pagu * 100) : 0;
+  const target = targetPct[tw - 1];
+  const pctFill = Math.min(pct, 100).toFixed(1);
+
+  // Warna progress bar & alert berdasarkan capaian vs target
+  const barColor = pct >= target * 0.9 ? '#3B6D11' : pct >= target * 0.7 ? '#BA7517' : '#A32D2D';
+
+  const alertType = (real === 0 && pagu > 0) ? 'info'
+    : pct >= target * 0.9 ? 'ok'
+    : pct >= target * 0.7 ? 'warn' : 'danger';
+  const alertStyle = {
+    info  : 'background:#E6F1FB;border-color:#185FA5;color:#042C53',
+    ok    : 'background:#EAF3DE;border-color:#639922;color:#173404',
+    warn  : 'background:#FAEEDA;border-color:#BA7517;color:#412402',
+    danger: 'background:#FCEBEB;border-color:#E24B4A;color:#501313'
+  }[alertType];
+  const alertMsg = {
+    info  : `<b>Anggaran kas ${twLabel[tw-1]} belum ada realisasi.</b> Pagu kas yang wajib dilaksanakan s/d ${twBulan[tw-1]}: <b>${fmt(pagu)}</b>.`,
+    ok    : `<b>Realisasi memenuhi target kas ${twLabel[tw-1]}.</b> Capaian <b>${fmtPct(pct)}</b> — target ${target}% terpenuhi.`,
+    warn  : `<b>Realisasi di bawah target kas ${twLabel[tw-1]}.</b> Pagu kas: ${fmt(pagu)} — baru terealisasi <b>${fmtPct(pct)}</b>. Percepatan penyerapan diperlukan.`,
+    danger: `<b>⚠ PERINGATAN: Realisasi jauh di bawah target ${twLabel[tw-1]}.</b> Target ${target}% — capaian hanya <b>${fmtPct(pct)}</b>. Tindak lanjut segera diperlukan.`
+  }[alertType];
+
+  // Realisasi per PPTK s/d akhir TW ini
+  const byPPTK = {};
+  (STATE.realisasi || []).filter(r => {
+    if (!r.tanggal_sp2d) return false;
+    return new Date(r.tanggal_sp2d).getMonth() <= bulanAkhir;
+  }).forEach(r => {
+    const key = r.pptk || '—';
+    if (!byPPTK[key]) byPPTK[key] = 0;
+    byPPTK[key] += parseFloat(r.nominal) || 0;
+  });
+
+  const pptkRows = Object.entries(byPPTK).length
+    ? Object.entries(byPPTK).map(([nama, r]) => {
+        const pp = pagu > 0 ? (r / pagu * 100) : 0;
+        const dotColor = pp >= target * 0.9 ? '#3B6D11' : pp >= target * 0.7 ? '#BA7517' : '#A32D2D';
+        const inits = nama.split(' ').filter(w => /^[A-Z]/.test(w)).slice(0,2).map(w=>w[0]).join('').toUpperCase() || nama.slice(0,2).toUpperCase();
+        return `<div class="kd-pptk-row">
+          <div class="kd-pptk-av">${inits}</div>
+          <div class="kd-pptk-info">
+            <div class="kd-pptk-nm">${nama.split(',')[0]}</div>
+            <div class="kd-pptk-dt">${fmtPct(pp)} dari pagu kas ${twLabel[tw-1]}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div class="kd-pptk-am">${fmt(r)}</div>
+            <div style="font-size:11px;color:${dotColor};font-weight:600">${fmtPct(pp)}</div>
+          </div>
+          <span class="kd-dot" style="background:${dotColor}"></span>
+        </div>`;
+      }).join('')
+    : '<div class="empty-state">Belum ada realisasi SP2D pada periode ini</div>';
+
+  // Tabs
+  const tabs = [1,2,3,4].map(t => {
+    const isCurrent = t === currentTW;
+    const isPast    = t < currentTW;
+    const tabStyle  = t === tw
+      ? 'font-weight:700;border-color:#185FA5;color:#185FA5;background:var(--c-primary-light,#E6F1FB)'
+      : isPast
+        ? 'background:#EAF3DE;color:#3B6D11;border-color:#97C459'
+        : isCurrent
+          ? 'background:#FAEEDA;color:#633806;border-color:#EF9F27'
+          : 'opacity:.55';
+    return `<button style="padding:5px 13px;border-radius:6px;border:1px solid var(--c-border);font-size:12px;font-weight:600;cursor:pointer;${tabStyle}" onclick="switchKasTW(${t})">${twLabel[t-1]}</button>`;
   }).join('');
 
-  const totalBulan = BULAN.map((_,m) => kasData.reduce((s,a)=>{
-    const kas = STATE.kasAnggaran[a.kode_rekening]||{};
-    return s+(kas[m]||0);
-  },0));
-
-  const totalTotalKas = totalBulan.reduce((s,v)=>s+v,0);
-  const totalPagu = kasData.reduce((s,a)=>s+getPagu(a),0);
-
   return `
-<div class="page-header">
-  <h2>💰 Anggaran Kas</h2>
-  <button class="btn btn-blue" onclick="simpanKas()">💾 Simpan Semua</button>
-</div>
-${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bottom:12px;background:var(--c-primary-light);border-color:var(--c-primary)"><div style="font-size:12px;color:var(--c-primary)">🔒 Menampilkan anggaran kas untuk PPTK: <b>${getPPTKNama()}</b></div></div>` : ''}
-<div class="section-card" style="padding:10px 14px;margin-bottom:12px">
-  <div style="font-size:13px;color:var(--c-text-muted)">⚠️ Isi rencana penyerapan per bulan untuk setiap rekening. Total anggaran kas harus ≤ pagu yang tersedia.</div>
-</div>
-<div class="table-wrap">
-  <div class="table-scroll" style="max-height:600px">
-    <table class="kas-table">
-      <thead><tr>
-        <th>Kode Rekening</th>
-        <th>Nama Belanja</th>
-        <th class="right">Pagu</th>
-        ${BULAN.map(b=>`<th class="center">${b}</th>`).join('')}
-        <th class="right">Total Kas</th>
-        <th class="right">Sisa</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr style="font-weight:700;background:var(--c-primary-light)">
-        <td colspan="2">TOTAL</td>
-        <td class="right mono">${fmt(totalPagu)}</td>
-        ${totalBulan.map(v=>`<td class="right mono" style="font-size:12px">${v>0?fmt(v):'-'}</td>`).join('')}
-        <td class="right mono">${fmt(totalTotalKas)}</td>
-        <td class="right mono" style="color:${totalPagu-totalTotalKas<0?'var(--c-danger)':'var(--c-success)'}">${fmt(totalPagu-totalTotalKas)}</td>
-      </tr></tfoot>
-    </table>
+<div class="section-card" id="kasTWWidget">
+<style>
+#kasTWWidget .kd-kas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+#kasTWWidget .kd-kas-card{border-radius:10px;border:1px solid var(--c-border);padding:14px 15px;background:var(--c-card,var(--c-surface));position:relative;overflow:hidden}
+#kasTWWidget .kd-kas-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:3px 3px 0 0}
+#kasTWWidget .kd-kas-card.blue::before{background:#185FA5}
+#kasTWWidget .kd-kas-card.green::before{background:#3B6D11}
+#kasTWWidget .kd-kas-card.red::before{background:#A32D2D}
+#kasTWWidget .kd-kas-card.amber::before{background:#854F0B}
+#kasTWWidget .kd-lbl{font-size:11px;color:var(--c-text-muted);margin-bottom:5px}
+#kasTWWidget .kd-val{font-size:17px;font-weight:700;color:var(--c-text);line-height:1.2;margin-bottom:3px}
+#kasTWWidget .kd-sub{font-size:11px;color:var(--c-text-muted)}
+#kasTWWidget .kd-prog{height:4px;border-radius:2px;background:var(--c-border);margin-top:8px;overflow:hidden}
+#kasTWWidget .kd-prog-fill{height:100%;border-radius:2px;transition:width .3s}
+#kasTWWidget .kd-pptk-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--c-bg);border-radius:8px;margin-bottom:6px;border:1px solid var(--c-border)}
+#kasTWWidget .kd-pptk-av{width:28px;height:28px;border-radius:50%;background:#E6F1FB;color:#0C447C;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+#kasTWWidget .kd-pptk-info{flex:1;min-width:0}
+#kasTWWidget .kd-pptk-nm{font-size:12px;font-weight:600;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#kasTWWidget .kd-pptk-dt{font-size:11px;color:var(--c-text-muted)}
+#kasTWWidget .kd-pptk-am{font-size:12px;font-weight:600;color:var(--c-text)}
+#kasTWWidget .kd-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+</style>
+
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <div style="font-size:22px">📆</div>
+    <div>
+      <h4 style="margin:0;font-size:15px">Monitoring Anggaran Kas Triwulan — ${STATE.tahun}</h4>
+      <div style="font-size:11px;color:var(--c-text-muted)">Pagu &amp; realisasi dihitung akumulatif s/d akhir triwulan yang dipilih · Sumber: data Anggaran Kas</div>
+    </div>
   </div>
+
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${tabs}</div>
+
+  <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:8px;border-left:4px solid;margin-bottom:14px;font-size:12px;line-height:1.6;${alertStyle}">
+    <span style="font-size:16px;flex-shrink:0">${alertType==='ok'?'✅':alertType==='warn'?'⚠️':alertType==='danger'?'🚨':'ℹ️'}</span>
+    <div>${alertMsg}</div>
+  </div>
+
+  <div class="kd-kas-grid">
+    <div class="kd-kas-card blue">
+      <div class="kd-lbl">📋 Pagu Kas (akumulatif)</div>
+      <div class="kd-val">${fmt(pagu)}</div>
+      <div class="kd-sub">Wajib dilaksanakan s/d ${twBulan[tw-1]}</div>
+    </div>
+    <div class="kd-kas-card green">
+      <div class="kd-lbl">✅ Realisasi Kas</div>
+      <div class="kd-val">${fmt(real)}</div>
+      <div class="kd-sub">${fmtPct(pct)} dari pagu kas ${twLabel[tw-1]}</div>
+      <div class="kd-prog"><div class="kd-prog-fill" style="width:${pctFill}%;background:${barColor}"></div></div>
+    </div>
+    <div class="kd-kas-card red">
+      <div class="kd-lbl">⏳ Kas Tersedia</div>
+      <div class="kd-val">${fmt(sisa)}</div>
+      <div class="kd-sub">${fmtPct(Math.max(0, 100-pct))} belum terealisasi</div>
+    </div>
+    <div class="kd-kas-card amber">
+      <div class="kd-lbl">📊 Capaian Kas</div>
+      <div class="kd-val">${fmtPct(pct)}</div>
+      <div class="kd-sub">Target proporsional TW ini: ${target}%</div>
+      <div class="kd-prog"><div class="kd-prog-fill" style="width:${pctFill}%;background:${barColor}"></div></div>
+    </div>
+  </div>
+
+  <div style="font-size:12px;font-weight:600;color:var(--c-text-muted);margin:10px 0 8px;display:flex;align-items:center;gap:5px">
+    👤 Realisasi per PPTK s/d ${twBulan[tw-1]}
+  </div>
+  <div id="kasTWPPTK">${pptkRows}</div>
 </div>`;
 }
 
-function updateKas(kodeRek, bulan, val) {
-  if (!STATE.kasAnggaran[kodeRek]) STATE.kasAnggaran[kodeRek] = {};
-  STATE.kasAnggaran[kodeRek][bulan] = parseFloat(val)||0;
-}
-
-async function simpanKas() {
-  saveState();
-  if (sbClient) {
-    await saveKasToSupabase();
-  } else {
-    showToast('Anggaran kas disimpan (lokal)');
-  }
+function switchKasTW(tw) {
+  const widget = document.getElementById('kasTWWidget');
+  if (widget) widget.outerHTML = renderKasTWCard(tw);
 }
 
 // ========================================
