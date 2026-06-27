@@ -25057,7 +25057,9 @@ function renderDashboard() {
         <div class="bar-val">${realBulan[i]>0?fmt(realBulan[i]):'-'}</div>
       </div>`).join('')}
   </div>
-</div>`;
+</div>
+
+${STATE.kasAnggaran && Object.keys(STATE.kasAnggaran).length > 0 ? buildKasTWSection() : ''}`;
 }
 
 function initDashboardCharts() {
@@ -25086,7 +25088,6 @@ async function runAIAnalysis() {
       ? `Realisasi masih di bawah target proporsional bulan ke-${bulanBerjalan} (${targetBulan}%) — perlu percepatan penyerapan anggaran.`
       : `Realisasi sudah memenuhi atau melampaui target proporsional bulan ke-${bulanBerjalan} (${targetBulan}%).`}
   </div>`;
-  ${STATE.kasAnggaran && Object.keys(STATE.kasAnggaran).length > 0 ? buildKasTWSection() : ''}
 }
 
 // ========================================
