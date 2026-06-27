@@ -24194,7 +24194,9 @@ const STATE = {
   // Data stores
   anggaran: [], // [{id,kode_program,program,kode_kegiatan,kegiatan,kode_sub_kegiatan,sub_kegiatan,kode_belanja,nama_belanja,kode_rekening,pagu_murni,pagu_pergeseran,pagu_perubahan,sumber_dana,pptk}]
   realisasi: [], // [{id,tanggal,tanggal_sp2d,uraian,kode_sub_kegiatan,kode_belanja,kode_rekening,nominal,pptk}]
-  kasAnggaran: {}, // {kode_rekening: {jan,feb,...,des}}
+  kasAnggaran: {}, // {kode_rekening: {0..11: nominal}} — Murni
+  kasAnggaranPergeseran: {}, // kas tahapan pergeseran
+  kasAnggaranPerubahan: {},  // kas tahapan perubahan
   pengguna: [
     {id:1,nama:'Administrator',username:'admin',password:'admin123',role:'admin',jabatan:'Admin Sistem'},
     {id:2,nama:'TENGKO WOLOK, S.T.',username:'tengko',password:'pptk123',role:'input',jabatan:'PPTK'},
@@ -24300,8 +24302,9 @@ CREATE TABLE IF NOT EXISTS kas_anggaran (
   id TEXT PRIMARY KEY,
   tahun TEXT NOT NULL,
   kode_rekening TEXT NOT NULL,
+  tahapan TEXT NOT NULL DEFAULT 'Murni',
   data JSONB DEFAULT '{}',
-  UNIQUE(tahun, kode_rekening)
+  UNIQUE(tahun, kode_rekening, tahapan)
 );
 
 -- Tabel app settings
@@ -24335,6 +24338,10 @@ BEGIN
   -- Patch tabel anggaran
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='sumber_dana') THEN
     ALTER TABLE anggaran ADD COLUMN sumber_dana TEXT;
+  END IF;
+  -- Patch tabel kas_anggaran: tambah kolom tahapan jika belum ada
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kas_anggaran' AND column_name='tahapan') THEN
+    ALTER TABLE kas_anggaran ADD COLUMN tahapan TEXT NOT NULL DEFAULT 'Murni';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='pagu_pergeseran') THEN
     ALTER TABLE anggaran ADD COLUMN pagu_pergeseran NUMERIC;
@@ -24510,10 +24517,19 @@ async function loadDataFromSupabase() {
     STATE.anggaran = angRes.data || [];
     STATE.realisasi = realRes.data || [];
 
-    // Reconstruct kasAnggaran from rows
+    // Reconstruct kasAnggaran dari rows (support multi-tahapan)
     STATE.kasAnggaran = {};
+    STATE.kasAnggaranPergeseran = {};
+    STATE.kasAnggaranPerubahan  = {};
     (kasRes.data || []).forEach(row => {
-      STATE.kasAnggaran[row.kode_rekening] = row.data || {};
+      const tahapan = row.tahapan || 'Murni';
+      if (tahapan === 'Murni' || !row.tahapan) {
+        STATE.kasAnggaran[row.kode_rekening] = row.data || {};
+      } else if (tahapan.startsWith('Pergeseran')) {
+        STATE.kasAnggaranPergeseran[row.kode_rekening] = row.data || {};
+      } else if (tahapan === 'Perubahan') {
+        STATE.kasAnggaranPerubahan[row.kode_rekening] = row.data || {};
+      }
     });
 
     if ((pengRes.data || []).length > 0) STATE.pengguna = pengRes.data;
@@ -24564,14 +24580,21 @@ async function deleteRealisasiFromSupabase(id) {
 async function saveKasToSupabase() {
   if (!sbClient) return;
   setSyncIndicator('syncing', 'Menyimpan kas...');
-  const rows = Object.entries(STATE.kasAnggaran).map(([kode_rekening, data]) => ({
-    id: STATE.tahun + '_' + kode_rekening,
-    tahun: STATE.tahun,
-    kode_rekening,
-    data,
-  }));
-  if (rows.length === 0) { setSyncIndicator('hidden'); return; }
-  const { error } = await sbClient.from('kas_anggaran').upsert(rows, {onConflict: 'id'});
+  const allRows = [];
+  const buildRows = (store, tahapan) => {
+    return Object.entries(store || {}).map(([kode_rekening, data]) => ({
+      id: STATE.tahun + '_' + kode_rekening + '_' + tahapan.replace(/\s/g,''),
+      tahun: STATE.tahun,
+      kode_rekening,
+      tahapan,
+      data,
+    }));
+  };
+  allRows.push(...buildRows(STATE.kasAnggaran, 'Murni'));
+  allRows.push(...buildRows(STATE.kasAnggaranPergeseran || {}, 'Pergeseran'));
+  allRows.push(...buildRows(STATE.kasAnggaranPerubahan  || {}, 'Perubahan'));
+  if (allRows.length === 0) { setSyncIndicator('hidden'); return; }
+  const { error } = await sbClient.from('kas_anggaran').upsert(allRows, {onConflict: 'id'});
   if (error) { setSyncIndicator('error', '⚠️ ' + error.message); return; }
   setSyncIndicator('synced', '✅ Kas disimpan');
 }
@@ -24700,6 +24723,8 @@ function exportJSON() {
     anggaran: STATE.anggaran,
     realisasi: STATE.realisasi,
     kasAnggaran: STATE.kasAnggaran,
+    kasAnggaranPergeseran: STATE.kasAnggaranPergeseran || {},
+    kasAnggaranPerubahan:  STATE.kasAnggaranPerubahan  || {},
     pengguna: STATE.pengguna.map(u=>({...u, password: '***'})), // mask passwords
   };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
@@ -24729,6 +24754,8 @@ function importJSON(input) {
       if (d.anggaran) STATE.anggaran = d.anggaran;
       if (d.realisasi) STATE.realisasi = d.realisasi;
       if (d.kasAnggaran) STATE.kasAnggaran = d.kasAnggaran;
+      if (d.kasAnggaranPergeseran) STATE.kasAnggaranPergeseran = d.kasAnggaranPergeseran;
+      if (d.kasAnggaranPerubahan)  STATE.kasAnggaranPerubahan  = d.kasAnggaranPerubahan;
       // Pengguna hanya di-import jika tidak ada masking password
       if (d.pengguna && d.pengguna.every(u=>u.password !== '***')) {
         STATE.pengguna = d.pengguna;
@@ -25753,76 +25780,425 @@ function cetakLRA() {
 
 
 // ========================================
-// ANGGARAN KAS
+// ANGGARAN KAS — Input per Triwulan & Tahapan
 // ========================================
 const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const KAS_TW_BULAN = [[0,1,2],[3,4,5],[6,7,8],[9,10,11]]; // 0-indexed per TW
+const KAS_TW_LABEL = ['TW I (Jan–Mar)','TW II (Apr–Jun)','TW III (Jul–Sep)','TW IV (Okt–Des)'];
+const KAS_TW_SHORT = ['TW I','TW II','TW III','TW IV'];
+
+// STATE tambahan untuk UI kas — tidak disimpan ke Supabase
+if (!window._kasUI) window._kasUI = { tw: 1, rekIdx: 0, tahapan: null };
+
+function getKasTahapan() {
+  return window._kasUI.tahapan || STATE.tahapan || 'Murni';
+}
+
+// Ambil kunci penyimpanan kas sesuai tahapan
+// Murni      → STATE.kasAnggaran (key lama, tetap kompatibel)
+// Pergeseran → STATE.kasAnggaranPergeseran
+// Perubahan  → STATE.kasAnggaranPerubahan
+function getKasStore(tahapan) {
+  const t = tahapan || getKasTahapan();
+  if (t === 'Murni') return STATE.kasAnggaran;
+  if (t.startsWith('Pergeseran')) {
+    if (!STATE.kasAnggaranPergeseran) STATE.kasAnggaranPergeseran = {};
+    return STATE.kasAnggaranPergeseran;
+  }
+  if (!STATE.kasAnggaranPerubahan) STATE.kasAnggaranPerubahan = {};
+  return STATE.kasAnggaranPerubahan;
+}
+
+// Ambil total kas satu rekening per triwulan dari store tertentu
+function getKasTW(store, kodeRek, tw) {
+  const kas = (store[kodeRek] || {});
+  return KAS_TW_BULAN[tw-1].reduce((s, m) => s + (kas[m] || 0), 0);
+}
+
+// Total kas satu rekening (semua TW) dari store tertentu
+function getTotalKasRek(store, kodeRek) {
+  const kas = (store[kodeRek] || {});
+  return BULAN.reduce((s, _, m) => s + (kas[m] || 0), 0);
+}
+
 function renderKas() {
   const kasData = getFilteredAnggaranForKas();
-  if (kasData.length === 0) return `<div class="empty-state" style="margin-top:60px"><div class="empty-icon">💰</div><p>${isUserPPTK() ? 'Tidak ada data anggaran yang ditugaskan untuk PPTK: '+getPPTKNama() : 'Input data anggaran terlebih dahulu sebelum mengisi anggaran kas.'}</p></div>`;
-  const rows = kasData.map((a,i) => {
-    const kas = STATE.kasAnggaran[a.kode_rekening] || {};
-    const pagu = getPagu(a);
-    const totalKas = BULAN.reduce((s,_,m)=>s+(kas[m]||0),0);
-    const sisa = pagu - totalKas;
-    const bCells = BULAN.map((_,m)=>`<td><input class="kas-input" type="number" min="0" value="${kas[m]||''}" onchange="updateKas('${a.kode_rekening}',${m},this.value)" placeholder="0"></td>`).join('');
-    return `<tr>
-      <td class="mono" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.kode_rekening}</td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${a.nama_belanja}">${a.nama_belanja}</td>
-      <td class="right mono" style="font-size:12px">${fmt(pagu)}</td>
-      ${bCells}
-      <td class="right mono" style="font-size:12px;font-weight:700">${fmt(totalKas)}</td>
-      <td class="right mono" style="font-size:12px;color:${sisa<0?'var(--c-danger)':'var(--c-success)'}">${fmt(sisa)}</td>
-    </tr>`;
+  if (kasData.length === 0) return `<div class="empty-state" style="margin-top:60px">
+    <div class="empty-icon">💰</div>
+    <p>${isUserPPTK() ? 'Tidak ada data anggaran untuk PPTK: '+getPPTKNama() : 'Input data anggaran terlebih dahulu sebelum mengisi anggaran kas.'}</p>
+  </div>`;
+
+  const tahapan = getKasTahapan();
+  const store   = getKasStore(tahapan);
+  const tw      = window._kasUI.tw || 1;
+  const rekIdx  = Math.min(window._kasUI.rekIdx || 0, kasData.length - 1);
+  const rek     = kasData[rekIdx];
+  const pagu    = getPagu(rek);
+
+  // Hitung total kas semua TW yang sudah diisi untuk rekening ini
+  const kasRek  = store[rek.kode_rekening] || {};
+  const twTotals = [1,2,3,4].map(t => getKasTW(store, rek.kode_rekening, t));
+  const totalKasDiisi = twTotals.reduce((s,v) => s+v, 0);
+  const totalTWLainnya = twTotals.reduce((s,v,i) => i+1 !== tw ? s+v : s, 0);
+  const twNominal = getKasTW(store, rek.kode_rekening, tw);
+  const sisaPagu  = pagu - totalKasDiisi;
+  const pct = pagu > 0 ? Math.min(totalKasDiisi / pagu * 100, 100) : 0;
+  const pctColor = pct >= 90 ? 'var(--c-success)' : pct >= 50 ? '#BA7517' : 'var(--c-danger)';
+
+  // Deskripsi & aturan per tahapan
+  const tahapanInfo = {
+    'Murni':      { color:'var(--c-success)', icon:'📋', desc:'Anggaran awal tahun. Pagu tidak berubah.' },
+    'Pergeseran': { color:'#185FA5',          icon:'🔄', desc:'Penyesuaian dalam sub kegiatan yang sama. Pagu total tidak berubah. Bisa dilakukan beberapa kali.' },
+    'Perubahan':  { color:'#854F0B',          icon:'📝', desc:'Dapat menambah/mengurangi pagu, belanja, atau sub kegiatan baru.' },
+  }[tahapan.startsWith('Pergeseran') ? 'Pergeseran' : tahapan] || { color:'#555', icon:'📋', desc:'' };
+
+  // Pilihan tahapan — tampilkan juga pergeseran & perubahan jika ada datanya
+  const tahapanOpts = ['Murni','Pergeseran','Perubahan'].map(t => {
+    const isActive = (tahapan === t) || (tahapan.startsWith('Pergeseran') && t === 'Pergeseran');
+    const s = getKasStore(t);
+    const adaData = s && Object.keys(s).length > 0;
+    return `<button class="btn${isActive?' btn-blue':''}" style="font-size:12px;padding:5px 12px" onclick="kasSetTahapan('${t}')">
+      ${t==='Murni'?'📋':t==='Pergeseran'?'🔄':'📝'} ${t}${adaData&&!isActive?' ✓':''}
+    </button>`;
   }).join('');
-  const totalBulan = BULAN.map((_,m) => kasData.reduce((s,a)=>{
-    const kas = STATE.kasAnggaran[a.kode_rekening]||{};
-    return s+(kas[m]||0);
-  },0));
-  const totalTotalKas = totalBulan.reduce((s,v)=>s+v,0);
-  const totalPagu = kasData.reduce((s,a)=>s+getPagu(a),0);
+
+  // Daftar rekening di sidebar kiri
+  const rekList = kasData.map((a, i) => {
+    const s = getKasStore(tahapan);
+    const tot = getTotalKasRek(s, a.kode_rekening);
+    const p   = getPagu(a);
+    const pctR = p > 0 ? Math.min(tot/p*100,100) : 0;
+    const isActive = i === rekIdx;
+    const statusColor = pctR >= 90 ? 'var(--c-success)' : pctR > 0 ? '#BA7517' : 'var(--c-text-muted)';
+    return `<div onclick="kasSetRek(${i})" style="
+      padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;
+      background:${isActive?'var(--c-primary-light)':'transparent'};
+      border:1px solid ${isActive?'var(--c-primary)':'transparent'};
+      transition:all .15s
+    ">
+      <div style="font-size:11px;font-weight:600;color:${isActive?'var(--c-primary)':'var(--c-text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${a.nama_belanja}">${a.nama_belanja.split('-')[0]}</div>
+      <div style="font-size:10px;color:var(--c-text-muted);margin-top:2px">${fmt(p)}</div>
+      <div style="height:3px;border-radius:2px;background:var(--c-border);margin-top:5px;overflow:hidden">
+        <div style="height:100%;width:${pctR}%;background:${statusColor};border-radius:2px"></div>
+      </div>
+      <div style="font-size:10px;margin-top:2px;color:${statusColor}">${tot>0?fmt(tot)+' ('+Math.round(pctR)+'%)':'Belum diisi'}</div>
+    </div>`;
+  }).join('');
+
+  // Grid TW selector
+  const twCards = [1,2,3,4].map(t => {
+    const nom = getKasTW(store, rek.kode_rekening, t);
+    const isActive = t === tw;
+    return `<div onclick="kasSetTW(${t})" style="
+      padding:10px 6px;border-radius:8px;text-align:center;cursor:pointer;
+      border:${isActive?'1.5px solid var(--c-primary)':'1px solid var(--c-border)'};
+      background:${isActive?'var(--c-primary-light)':'var(--c-surface)'};
+      transition:all .15s
+    ">
+      <div style="font-size:11px;font-weight:600;color:${isActive?'var(--c-primary)':'var(--c-text-muted)'}">${KAS_TW_SHORT[t-1]}</div>
+      <div style="font-size:10px;color:var(--c-text-muted);margin:2px 0">${['Jan–Mar','Apr–Jun','Jul–Sep','Okt–Des'][t-1]}</div>
+      <div style="font-size:12px;font-weight:700;color:${nom>0?(isActive?'var(--c-primary)':'var(--c-success)'):'var(--c-text-muted)'};margin-top:4px">${nom>0?fmt(nom):'—'}</div>
+    </div>`;
+  }).join('');
+
+  // Input per bulan dalam TW aktif
+  const bulanInputs = KAS_TW_BULAN[tw-1].map(m => {
+    const val = kasRek[m] || 0;
+    const maxW = twNominal > 0 ? Math.min(val/twNominal*100, 100) : 0;
+    return `<div style="display:grid;grid-template-columns:36px 1fr 120px;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--c-border)">
+      <div style="font-size:12px;font-weight:600;color:var(--c-text-muted)">${BULAN[m]}</div>
+      <div style="height:4px;border-radius:2px;background:var(--c-border);overflow:hidden">
+        <div id="kasBar_${m}" style="height:100%;width:${maxW}%;background:var(--c-primary);border-radius:2px;transition:width .2s"></div>
+      </div>
+      <input class="kas-input" type="number" min="0" step="1000"
+        value="${val||''}" placeholder="0"
+        style="width:100%;padding:5px 8px;border:1px solid var(--c-border);border-radius:5px;
+               background:var(--c-surface);color:var(--c-text);font-family:var(--font-mono);
+               font-size:12px;text-align:right"
+        oninput="kasUpdateBulan(${m},this.value)"
+        onkeydown="if(event.key==='Enter'){document.querySelectorAll('.kas-input')[${KAS_TW_BULAN[tw-1].indexOf(m)+1}]?.focus()}"
+      >
+    </div>`;
+  }).join('');
+
+  // Riwayat tahapan
+  const riwayat = ['Murni','Pergeseran','Perubahan'].map(t => {
+    const s = getKasStore(t);
+    if (!s || !s[rek.kode_rekening]) return '';
+    const tot = getTotalKasRek(s, rek.kode_rekening);
+    if (tot === 0) return '';
+    const twInfo = [1,2,3,4].map(tw => {
+      const n = getKasTW(s, rek.kode_rekening, tw);
+      return n > 0 ? `${KAS_TW_SHORT[tw-1]}: ${fmt(n)}` : '';
+    }).filter(Boolean).join(' · ');
+    const isActive = (tahapan === t) || (tahapan.startsWith('Pergeseran') && t === 'Pergeseran');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--c-border);font-size:12px">
+      <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;
+        background:${t==='Murni'?'#EAF3DE':t==='Pergeseran'?'#E6F1FB':'#FAEEDA'};
+        color:${t==='Murni'?'#3B6D11':t==='Pergeseran'?'#0C447C':'#633806'}">${t}</span>
+      <span style="flex:1;color:var(--c-text-muted)">${twInfo}</span>
+      <span style="color:var(--c-text);font-weight:600;font-family:var(--font-mono)">${fmt(tot)}</span>
+      ${isActive?'<span style="font-size:10px;color:var(--c-primary)">● aktif</span>':''}
+    </div>`;
+  }).filter(Boolean).join('');
+
   return `
 <div class="page-header">
   <h2>💰 Anggaran Kas</h2>
-  <button class="btn btn-blue" onclick="simpanKas()">💾 Simpan Semua</button>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-outline" onclick="kasExportRekap()">📊 Rekap Semua</button>
+    <button class="btn btn-blue" onclick="kasSimPanAll()">💾 Simpan Semua</button>
+  </div>
 </div>
-${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bottom:12px;background:var(--c-primary-light);border-color:var(--c-primary)"><div style="font-size:12px;color:var(--c-primary)">🔒 Menampilkan anggaran kas untuk PPTK: <b>${getPPTKNama()}</b></div></div>` : ''}
+
+${isUserPPTK()?`<div class="section-card" style="padding:8px 14px;margin-bottom:10px;background:var(--c-primary-light);border-color:var(--c-primary)">
+  <div style="font-size:12px;color:var(--c-primary)">🔒 Mode PPTK — <b>${getPPTKNama()}</b></div>
+</div>`:''}
+
 <div class="section-card" style="padding:10px 14px;margin-bottom:12px">
-  <div style="font-size:13px;color:var(--c-text-muted)">⚠️ Isi rencana penyerapan per bulan untuk setiap rekening. Total anggaran kas harus ≤ pagu yang tersedia.</div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--c-text-muted)">Tahapan aktif:</span>
+    ${tahapanOpts}
+    <div style="margin-left:auto;padding:4px 10px;border-radius:6px;font-size:12px;
+      background:${tahapanInfo.color}1a;color:${tahapanInfo.color};border:1px solid ${tahapanInfo.color}44">
+      ${tahapanInfo.icon} ${tahapanInfo.desc}
+    </div>
+  </div>
 </div>
-<div class="table-wrap">
-  <div class="table-scroll" style="max-height:600px">
-    <table class="kas-table">
-      <thead><tr>
-        <th>Kode Rekening</th>
-        <th>Nama Belanja</th>
-        <th class="right">Pagu</th>
-        ${BULAN.map(b=>`<th class="center">${b}</th>`).join('')}
-        <th class="right">Total Kas</th>
-        <th class="right">Sisa</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr style="font-weight:700;background:var(--c-primary-light)">
-        <td colspan="2">TOTAL</td>
-        <td class="right mono">${fmt(totalPagu)}</td>
-        ${totalBulan.map(v=>`<td class="right mono" style="font-size:12px">${v>0?fmt(v):'-'}</td>`).join('')}
-        <td class="right mono">${fmt(totalTotalKas)}</td>
-        <td class="right mono" style="color:${totalPagu-totalTotalKas<0?'var(--c-danger)':'var(--c-success)'}">${fmt(totalPagu-totalTotalKas)}</td>
-      </tr></tfoot>
-    </table>
+
+<div style="display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start">
+
+  <!-- Sidebar daftar rekening -->
+  <div class="section-card" style="padding:10px;max-height:75vh;overflow-y:auto">
+    <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);margin-bottom:8px;padding:0 2px">
+      ${kasData.length} REKENING BELANJA
+    </div>
+    ${rekList}
+  </div>
+
+  <!-- Panel utama -->
+  <div>
+    <!-- Header rekening -->
+    <div class="section-card" style="padding:12px 16px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:2px">${rek.kode_rekening}</div>
+          <div style="font-size:14px;font-weight:700;color:var(--c-text)">${rek.nama_belanja}</div>
+          <div style="font-size:11px;color:var(--c-text-muted);margin-top:2px">${rek.sumber_dana||''} · ${rek.pptk||''}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--c-text-muted)">Pagu (${tahapan})</div>
+          <div style="font-size:18px;font-weight:700;color:var(--c-text);font-family:var(--font-mono)">${fmt(pagu)}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--c-text-muted);margin-bottom:4px">
+          <span>Total kas diisi: <b style="color:var(--c-text)">${fmt(totalKasDiisi)}</b></span>
+          <span style="color:${sisaPagu<0?'var(--c-danger)':sisaPagu===0?'var(--c-success)':'var(--c-text-muted)'}">
+            Sisa: <b>${fmt(sisaPagu)}</b>
+          </span>
+        </div>
+        <div style="height:5px;border-radius:3px;background:var(--c-border);overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${pctColor};border-radius:3px;transition:width .3s"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selector TW -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+      ${twCards}
+    </div>
+
+    <!-- Input bulan -->
+    <div class="section-card" style="padding:12px 16px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--c-text)">${KAS_TW_LABEL[tw-1]} — Rincian per Bulan</div>
+        <button class="btn btn-sm btn-outline" onclick="kasKosongkanTW(${tw})" style="font-size:11px;padding:3px 8px">Kosongkan TW ini</button>
+      </div>
+      ${bulanInputs}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:2px solid var(--c-border)">
+        <div style="font-size:12px;color:var(--c-text-muted)">Total ${KAS_TW_SHORT[tw-1]}</div>
+        <div id="kasTWTotal" style="font-size:15px;font-weight:700;font-family:var(--font-mono);
+          color:${totalTWLainnya+twNominal>pagu?'var(--c-danger)':twNominal>0?'var(--c-success)':'var(--c-text-muted)'}">
+          ${fmt(twNominal)}
+        </div>
+      </div>
+      <div id="kasValidasiMsg" style="margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px;border-left:3px solid;
+        ${totalKasDiisi>pagu
+          ?'background:#FCEBEB;border-color:#E24B4A;color:#501313'
+          :totalKasDiisi===pagu&&pagu>0
+            ?'background:#EAF3DE;border-color:#639922;color:#173404'
+            :'background:#E6F1FB;border-color:#185FA5;color:#042C53'}">
+        ${totalKasDiisi>pagu
+          ?'⚠️ Total kas ('+fmt(totalKasDiisi)+') melebihi pagu '+fmt(pagu)+'. Kurangi '+fmt(totalKasDiisi-pagu)+'.'
+          :totalKasDiisi===pagu&&pagu>0
+            ?'✅ Total kas sudah sesuai pagu ('+fmt(pagu)+').'
+            :'ℹ️ Sisa pagu yang belum dialokasikan: '+fmt(sisaPagu)+'. Bisa dibagi ke TW lain.'}
+      </div>
+    </div>
+
+    <!-- Riwayat tahapan -->
+    ${riwayat?`<div class="section-card" style="padding:12px 16px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:600;color:var(--c-text-muted);margin-bottom:8px">📜 Riwayat kas rekening ini</div>
+      ${riwayat}
+    </div>`:''}
+
+    <!-- Tombol navigasi & simpan -->
+    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:6px">
+        ${rekIdx>0?`<button class="btn btn-outline" onclick="kasSetRek(${rekIdx-1})" style="font-size:12px">← Rekening sebelumnya</button>`:''}
+        ${rekIdx<kasData.length-1?`<button class="btn btn-outline" onclick="kasSetRek(${rekIdx+1})" style="font-size:12px">Rekening berikutnya →</button>`:''}
+      </div>
+      <button class="btn btn-blue" onclick="kasSimPan()" style="font-size:13px;padding:7px 18px">
+        💾 Simpan kas rekening ini
+      </button>
+    </div>
   </div>
 </div>`;
 }
+
+// ── Fungsi kontrol UI kas ──
+function kasSetTahapan(t) {
+  window._kasUI.tahapan = t;
+  window._kasUI.tw = 1;
+  showPage('kas');
+}
+function kasSetRek(i) {
+  window._kasUI.rekIdx = i;
+  window._kasUI.tw = 1;
+  showPage('kas');
+}
+function kasSetTW(t) {
+  window._kasUI.tw = t;
+  showPage('kas');
+}
+function kasKosongkanTW(tw) {
+  if (!confirm('Kosongkan semua nominal ' + KAS_TW_LABEL[tw-1] + ' untuk rekening ini?')) return;
+  const rek = getFilteredAnggaranForKas()[window._kasUI.rekIdx || 0];
+  if (!rek) return;
+  const store = getKasStore(getKasTahapan());
+  if (!store[rek.kode_rekening]) store[rek.kode_rekening] = {};
+  KAS_TW_BULAN[tw-1].forEach(m => { store[rek.kode_rekening][m] = 0; });
+  showPage('kas');
+}
+function kasUpdateBulan(bulan, val) {
+  const kasData = getFilteredAnggaranForKas();
+  const rek = kasData[window._kasUI.rekIdx || 0];
+  if (!rek) return;
+  const store = getKasStore(getKasTahapan());
+  if (!store[rek.kode_rekening]) store[rek.kode_rekening] = {};
+  store[rek.kode_rekening][bulan] = parseFloat(val) || 0;
+  // Update tampilan live tanpa re-render penuh
+  kasUpdateLiveUI(rek, store);
+}
+function kasUpdateLiveUI(rek, store) {
+  const tw = window._kasUI.tw || 1;
+  const pagu = getPagu(rek);
+  const twTotals = [1,2,3,4].map(t => getKasTW(store, rek.kode_rekening, t));
+  const totalKas = twTotals.reduce((s,v)=>s+v,0);
+  const twNom = twTotals[tw-1];
+  const sisa = pagu - totalKas;
+  // Update total TW
+  const twTotalEl = document.getElementById('kasTWTotal');
+  if (twTotalEl) {
+    twTotalEl.textContent = fmt(twNom);
+    twTotalEl.style.color = totalKas>pagu?'var(--c-danger)':twNom>0?'var(--c-success)':'var(--c-text-muted)';
+  }
+  // Update bar progress bulan
+  KAS_TW_BULAN[tw-1].forEach(m => {
+    const bar = document.getElementById('kasBar_'+m);
+    if (bar && twNom > 0) bar.style.width = Math.min((store[rek.kode_rekening]?.[m]||0)/twNom*100,100)+'%';
+  });
+  // Update pesan validasi
+  const msgEl = document.getElementById('kasValidasiMsg');
+  if (msgEl) {
+    if (totalKas > pagu) {
+      msgEl.style.cssText = 'margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px;border-left:3px solid;background:#FCEBEB;border-color:#E24B4A;color:#501313';
+      msgEl.textContent = '⚠️ Total kas ('+fmt(totalKas)+') melebihi pagu '+fmt(pagu)+'. Kurangi '+fmt(totalKas-pagu)+'.';
+    } else if (totalKas === pagu && pagu > 0) {
+      msgEl.style.cssText = 'margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px;border-left:3px solid;background:#EAF3DE;border-color:#639922;color:#173404';
+      msgEl.textContent = '✅ Total kas sudah sesuai pagu ('+fmt(pagu)+').';
+    } else {
+      msgEl.style.cssText = 'margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px;border-left:3px solid;background:#E6F1FB;border-color:#185FA5;color:#042C53';
+      msgEl.textContent = 'ℹ️ Sisa pagu belum dialokasikan: '+fmt(sisa)+'.';
+    }
+  }
+}
+async function kasSimPan() {
+  const kasData = getFilteredAnggaranForKas();
+  const rek = kasData[window._kasUI.rekIdx || 0];
+  if (!rek) return;
+  const store = getKasStore(getKasTahapan());
+  const pagu = getPagu(rek);
+  const total = getTotalKasRek(store, rek.kode_rekening);
+  if (total > pagu) {
+    showToast('Total kas ('+fmt(total)+') melebihi pagu '+fmt(pagu)+'. Perbaiki dulu.','error');
+    return;
+  }
+  // Sync ke STATE.kasAnggaran (untuk kompatibilitas dashboard & Supabase lama)
+  STATE.kasAnggaran[rek.kode_rekening] = store[rek.kode_rekening] || {};
+  saveState();
+  if (sbClient) await saveKasToSupabase();
+  showToast('Kas '+rek.nama_belanja.split('-')[0]+' disimpan');
+}
+async function kasSimPanAll() {
+  const kasData = getFilteredAnggaranForKas();
+  const store = getKasStore(getKasTahapan());
+  let ada_error = false;
+  kasData.forEach(a => {
+    const pagu = getPagu(a);
+    const total = getTotalKasRek(store, a.kode_rekening);
+    if (total > pagu) { ada_error = true; }
+    STATE.kasAnggaran[a.kode_rekening] = store[a.kode_rekening] || {};
+  });
+  if (ada_error) {
+    showToast('Ada rekening yang melebihi pagu. Periksa sebelum menyimpan.','error');
+    return;
+  }
+  saveState();
+  if (sbClient) await saveKasToSupabase();
+  showToast('Semua anggaran kas disimpan');
+}
+function kasExportRekap() {
+  const kasData = getFilteredAnggaranForKas();
+  const tahapan = getKasTahapan();
+  const store = getKasStore(tahapan);
+  let html = `<div style="font-family:sans-serif;font-size:12px">
+    <h3 style="margin-bottom:8px">Rekap Anggaran Kas — ${tahapan} — TA ${STATE.tahun}</h3>
+    <table border="1" cellpadding="5" cellspacing="0" style="border-collapse:collapse;width:100%">
+      <thead><tr style="background:#E6F1FB">
+        <th>Nama Belanja</th>
+        <th>Pagu</th>
+        ${KAS_TW_SHORT.map(t=>`<th>${t}</th>`).join('')}
+        <th>Total Kas</th>
+        <th>Sisa</th>
+      </tr></thead><tbody>`;
+  kasData.forEach(a => {
+    const p = getPagu(a);
+    const tots = [1,2,3,4].map(t => getKasTW(store, a.kode_rekening, t));
+    const tot = tots.reduce((s,v)=>s+v,0);
+    const sisa = p - tot;
+    html += `<tr>
+      <td>${a.nama_belanja}</td>
+      <td align="right">${fmt(p)}</td>
+      ${tots.map(v=>`<td align="right">${v>0?fmt(v):'-'}</td>`).join('')}
+      <td align="right"><b>${fmt(tot)}</b></td>
+      <td align="right" style="color:${sisa<0?'red':'green'}">${fmt(sisa)}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  openPrintWindow(html, `Rekap Kas ${tahapan} TA ${STATE.tahun}`);
+}
+
+// Fungsi lama — tetap ada untuk kompatibilitas
 function updateKas(kodeRek, bulan, val) {
   if (!STATE.kasAnggaran[kodeRek]) STATE.kasAnggaran[kodeRek] = {};
   STATE.kasAnggaran[kodeRek][bulan] = parseFloat(val)||0;
 }
 async function simpanKas() {
   saveState();
-  if (sbClient) {
-    await saveKasToSupabase();
-  } else {
-    showToast('Anggaran kas disimpan (lokal)');
-  }
+  if (sbClient) await saveKasToSupabase();
+  else showToast('Anggaran kas disimpan (lokal)');
 }
 
 
