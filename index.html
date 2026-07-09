@@ -28455,6 +28455,23 @@ function ndKodeInisialSubKegBelanja(subKegiatanNama, namaBelanjaNama) {
   return [sk, bel].filter(Boolean).join('-');
 }
 
+// Format nama penandatangan sesuai Tata Naskah Dinas terbaru:
+// huruf besar hanya pada gelar (depan/belakang) dan awalan tiap kata nama,
+// contoh: "TENGKO WOLOK" / "Tengko wolok" -> "Tengko Wolok".
+// Kata yang mengandung tanda titik (mis. "S.T.", "M.M.", "Ir.", "Dr.") dianggap
+// gelar dan dibiarkan apa adanya karena penulisannya sudah baku.
+function ndFormatNamaTTD(nama) {
+  if (!nama) return '';
+  return String(nama).trim().split(/\s+/).map(function(w){
+    if (!w) return w;
+    if (w.indexOf('.') !== -1) return w; // gelar, biarkan apa adanya
+    return w.split('-').map(function(part){
+      if (!part) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    }).join('-');
+  }).join(' ');
+}
+
 // Ambil user KPA (role kpa) pertama
 function ndGetKPA() {
   return STATE.pengguna.find(u => u.role === 'kpa') || null;
@@ -29206,7 +29223,7 @@ function ndStyleCetak() {
     /* Tanda tangan */
     .ttd-wrap{margin-top:28px}
     .ttd-box{text-align:center;display:inline-block;min-width:220px}
-    .ttd-nama{font-weight:bold;text-decoration:underline;margin-top:64px;font-size:11pt}
+    .ttd-nama{font-weight:normal;text-decoration:none;margin-top:64px;font-size:11pt}
     .ttd-jab{font-size:11pt;margin-top:2px}
     .ttd-nip{font-size:11pt}
     /* Tabel data */
@@ -29252,6 +29269,7 @@ function cetakNotaPPTK(id) {
   const nomorNota = `027/${n.nomor_urut}/PPTK-NODIN/${kodeInisialPPTK}/35.79.121/${STATE.tahun}`;
   const namaKota  = 'Batu';
   const tglCetak  = ndTanggalPanjang(n.tanggal);
+  const namaPPTKTtd = ndFormatNamaTTD(n.pptk_nama||pptk.nama||'...');
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
 <title>Nota Dinas PPTK ${n.nomor_urut||''}</title>
@@ -29284,7 +29302,7 @@ ${ndStyleCetak()}
   <div class="ttd-wrap" style="text-align:right">
     <div class="ttd-box">
       <p class="isi" style="text-align:center">Pejabat Pelaksana Teknis Kegiatan<br>Bagian Perekonomian dan Sumber Daya Alam<br>Sekretariat Daerah Kota Batu</p>
-      <div class="ttd-nama">${n.pptk_nama||pptk.nama||'...'}</div>
+      <div class="ttd-nama">${namaPPTKTtd}</div>
       <div class="ttd-nip">NIP. ${pptk.nip||'...'}</div>
     </div>
   </div>
@@ -29415,7 +29433,7 @@ ${ndStyleCetak()}
   <div class="ttd-wrap" style="text-align:right">
     <div class="ttd-box">
       <p class="isi" style="text-align:center">Pejabat Pelaksana Teknis Kegiatan<br>Bagian Perekonomian dan Sumber Daya Alam<br>Sekretariat Daerah Kota Batu</p>
-      <div class="ttd-nama">${n.pptk_nama||pptk.nama||'...'}</div>
+      <div class="ttd-nama">${namaPPTKTtd}</div>
       <div class="ttd-nip">NIP. ${pptk.nip||'...'}</div>
     </div>
   </div>
@@ -29440,7 +29458,7 @@ function cetakNotaPPK(id) {
   const kodeInisialPPK = ndKodeInisialSubKegBelanja(n.sub_kegiatan||notaPPTK.sub_kegiatan, n.nama_belanja||n.belanja||notaPPTK.nama_belanja);
   const nomorNota  = `027/${n.nomor_urut}/PPK-NODIN/${kodeInisialPPK}/35.79.121/${STATE.tahun}`;
   const tglCetak   = ndTanggalPanjang(n.tanggal);
-  const namaKPA    = n.ppk_nama || kpa.nama || '...';
+  const namaKPA    = ndFormatNamaTTD(n.ppk_nama || kpa.nama || '...');
   const nipKPA     = n.ppk_nip || kpa.nip || '...';
   const jabKPA1    = 'Kuasa Pengguna Anggaran';
   const jabKPA2    = 'selaku Pejabat Pembuat Komitmen';
@@ -30153,7 +30171,7 @@ function ttdBlock(jabatan1, jabatan2, nama, nip, align) {
     para([tr(jabatan1, {bold:false})], {align:al, compact:true, lineHeight:1.4}),
     ...(jabatan2 ? [para([tr(jabatan2)], {align:al, compact:true, lineHeight:1.4})] : []),
     EMPTY(), EMPTY(), EMPTY(), EMPTY(),
-    para([tr(nama, {bold:true, underline:true})], {align:al, compact:true, lineHeight:1.4}),
+    para([tr(nama, {bold:false, underline:false})], {align:al, compact:true, lineHeight:1.4}),
     para([tr(`NIP. ${nip||'—'}`)], {align:al, compact:true, lineHeight:1.4}),
   ];
 }
@@ -30217,7 +30235,7 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
   const items = n.items || [];
   const links = n.links && n.links.length > 0 ? n.links : [{uraian: n.nama_belanja||'—', link:'https://katalog.inaproc.id/'}];
   const total = items.reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
-  const pptkNama = n.pptk_nama || pptk.nama || '—';
+  const pptkNama = ndFormatNamaTTD(n.pptk_nama || pptk.nama || '—');
   const pptkNip  = pptk.nip || '—';
   const pptkJab  = pptk.jabatan_resmi || 'Pejabat Pelaksana Teknis Kegiatan';
 
@@ -30406,7 +30424,7 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
   const items   = n.items || notaPPTK.items || [];
   const links   = n.links || notaPPTK.links || [{uraian: n.nama_belanja||notaPPTK.nama_belanja||'—', link:'https://katalog.inaproc.id/'}];
   const total   = items.reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
-  const kpaNama = n.ppk_nama || kpa.nama || '—';
+  const kpaNama = ndFormatNamaTTD(n.ppk_nama || kpa.nama || '—');
   const kpaNip  = n.ppk_nip || kpa.nip  || '—';
   const jabKPA  = 'Kuasa Pengguna Anggaran';
   const jabPPK  = 'selaku Pejabat Pembuat Komitmen';
