@@ -27742,6 +27742,21 @@ window.addEventListener('resize', function() {
         </div>
       </div>
 
+      <!-- PENANDATANGAN NOTA DINAS PPK -->
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label">Nama KPA Selaku PPK (Penandatangan) <span style="color:red">*</span></label>
+          <select class="form-select" id="ndkPenandatangan" onchange="ndkOnPenandatanganChange()">
+            <option value="">— Pilih dari daftar Pengguna (role KPA/PPK) —</option>
+          </select>
+          <span class="form-hint">Daftar diambil dari menu Pengguna dengan role KPA/PPK. Jika nama belum tersedia, tambahkan terlebih dahulu di menu Pengguna (akun Admin).</span>
+        </div>
+        <div class="form-group span2">
+          <label class="form-label">NIP Penandatangan</label>
+          <input class="form-input" id="ndkPenandatanganNip" placeholder="Terisi otomatis setelah memilih nama" readonly>
+        </div>
+      </div>
+
       <!-- TOMBOL WARISI DARI PPTK -->
       <div style="margin-bottom:14px;padding:12px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div style="font-size:12px;color:var(--c-text)">
@@ -28419,6 +28434,27 @@ function ndGenerateNomor(tipeNota, tanggal, existingNomor) {
   return base + '.' + String(maxSuffix + 1).padStart(2,'0');
 }
 
+// ============================================================
+// INISIAL SUB KEGIATAN-BELANJA UNTUK NOMOR NOTA DINAS
+// (menggantikan kode angka panjang, mis. "4.01.01.2.06.0002-5.1.02.01.001.00031"
+//  menjadi inisial huruf sesuai Nama Sub Kegiatan & Nama Belanja terpilih)
+// ============================================================
+function ndSingkatKata(teks) {
+  if (!teks) return '';
+  const stopword = ['dan','atau','pada','untuk','yang','dari','di','ke','ku','dengan',
+    'secara','oleh','para','serta','dalam','sebagai','akan','bagi','antara','atas','se'];
+  const bersih = String(teks).replace(/[\/,.()]/g, ' ').replace(/-/g, ' ').trim();
+  const kata = bersih.split(/\s+/).filter(w => w.length > 0 && !stopword.includes(w.toLowerCase()));
+  return kata.map(w => w.charAt(0).toUpperCase()).join('');
+}
+
+function ndKodeInisialSubKegBelanja(subKegiatanNama, namaBelanjaNama) {
+  const sk = ndSingkatKata(subKegiatanNama).slice(0, 10);
+  const belBersih = String(namaBelanjaNama || '').replace(/^Belanja\s+/i, '');
+  const bel = ndSingkatKata(belBersih).slice(0, 10);
+  return [sk, bel].filter(Boolean).join('-');
+}
+
 // Ambil user KPA (role kpa) pertama
 function ndGetKPA() {
   return STATE.pengguna.find(u => u.role === 'kpa') || null;
@@ -28893,12 +28929,13 @@ function openModalNotaPPK(editId, pptk_id_default) {
    'ndkUraianPekerjaan','ndkLatarBelakang','ndkRuangLingkup',
    'ndkMaksudTujuan','ndkKeluaran','ndkManfaat','ndkFungsi',
    'ndkAspekKualitas','ndkAspekPelayanan',
-   'ndkSyaratPenyedia','ndkWaktuPelaksanaan'].forEach(id=>{
+   'ndkSyaratPenyedia','ndkWaktuPelaksanaan','ndkPenandatanganNip'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
 
-  // Isi dropdown nota PPTK
+  // Isi dropdown nota PPTK & dropdown penandatangan (Nama KPA selaku PPK)
   ndkPopulateNotaPPTK();
+  ndkPopulatePenandatangan();
 
   if (editId) {
     const nota = STATE.notaDinas.ppk.find(n=>n.id===editId);
@@ -28920,6 +28957,8 @@ function openModalNotaPPK(editId, pptk_id_default) {
     document.getElementById('ndkAspekPelayanan').value = nota.aspek_pelayanan||'';
     document.getElementById('ndkSyaratPenyedia').value = nota.syarat_penyedia||'';
     document.getElementById('ndkWaktuPelaksanaan').value = nota.waktu_pelaksanaan||'';
+    document.getElementById('ndkPenandatangan').value = nota.ppk_user_id||'';
+    document.getElementById('ndkPenandatanganNip').value = nota.ppk_nip||'';
     setTimeout(()=>{
       document.getElementById('ndkNotaPPTK').value = nota.pptk_nota_id||'';
       ndkOnNotaPPTKChange();
@@ -28927,6 +28966,12 @@ function openModalNotaPPK(editId, pptk_id_default) {
   } else {
     document.getElementById('modalNotaPPKTitle').textContent = 'Buat Nota Dinas PPK';
     document.getElementById('ndkTanggal').value = ndToday();
+    // Default-kan penandatangan bila hanya ada 1 user KPA/PPK
+    const kpaList = (STATE.pengguna || []).filter(u => u.role === 'kpa');
+    if (kpaList.length === 1) {
+      document.getElementById('ndkPenandatangan').value = kpaList[0].id;
+      ndkOnPenandatanganChange();
+    }
     if (pptk_id_default) {
       setTimeout(()=>{
         document.getElementById('ndkNotaPPTK').value = pptk_id_default;
@@ -28945,6 +28990,26 @@ function ndkPopulateNotaPPTK() {
     list.map(n =>
       `<option value="${n.id}">${n.nomor_urut||'—'} | ${ndTanggalPanjang(n.tanggal)} | ${n.hal||''}</option>`
     ).join('');
+}
+
+// Isi dropdown penandatangan (Nama KPA selaku PPK) dari menu Pengguna, role = kpa
+function ndkPopulatePenandatangan() {
+  const sel = document.getElementById('ndkPenandatangan');
+  if (!sel) return;
+  const list = (STATE.pengguna || []).filter(u => u.role === 'kpa');
+  sel.innerHTML = '<option value="">— Pilih dari daftar Pengguna (role KPA/PPK) —</option>' +
+    list.map(u =>
+      `<option value="${u.id}">${u.nama}${u.nip ? ' — NIP ' + u.nip : ''}</option>`
+    ).join('');
+}
+
+function ndkOnPenandatanganChange() {
+  const id = document.getElementById('ndkPenandatangan').value;
+  const nipField = document.getElementById('ndkPenandatanganNip');
+  if (!nipField) return;
+  if (!id) { nipField.value = ''; return; }
+  const u = (STATE.pengguna || []).find(x => x.id === id);
+  nipField.value = (u && u.nip) || '';
 }
 
 function ndkOnNotaPPTKChange() {
@@ -28967,6 +29032,16 @@ function ndkOnNotaPPTKChange() {
   if (rup && !rup.value) rup.value = nota.kode_rup||'';
   const nilai = document.getElementById('ndkNilaiPengadaan');
   if (nilai && !nilai.value) nilai.value = nota.pagu||'';
+  // Tanggal Nota PPK = 1 hari setelah tanggal Nota PPTK (hanya saat membuat nota baru, bukan edit)
+  const isEdit = document.getElementById('ndkId').value;
+  if (!isEdit && nota.tanggal) {
+    const d = new Date(nota.tanggal);
+    if (!isNaN(d.getTime())) {
+      d.setDate(d.getDate() + 1);
+      const tglField = document.getElementById('ndkTanggal');
+      if (tglField) tglField.value = d.toISOString().split('T')[0];
+    }
+  }
 }
 
 function ndkClearInfo() {
@@ -29009,6 +29084,11 @@ async function saveNotaPPK() {
   const hal = document.getElementById('ndkHal').value.trim();
   if (!hal) { showToast('Perihal / Hal wajib diisi','error'); return; }
 
+  const ppkUserId = document.getElementById('ndkPenandatangan').value;
+  if (!ppkUserId) { showToast('Pilih Nama KPA Selaku PPK (Penandatangan) terlebih dahulu','error'); return; }
+  const ppkUser = STATE.pengguna.find(u=>u.id===ppkUserId) || {};
+  const ppkNip = document.getElementById('ndkPenandatanganNip').value.trim();
+
   const nota = {
     id: editId || genId(),
     nomor_urut: nomor,
@@ -29037,6 +29117,9 @@ async function saveNotaPPK() {
     syarat_penyedia: document.getElementById('ndkSyaratPenyedia').value.trim(),
     waktu_pelaksanaan: document.getElementById('ndkWaktuPelaksanaan').value.trim(),
     pptk_nama: notaPPTK.pptk_nama,
+    ppk_user_id: ppkUserId,
+    ppk_nama: ppkUser.nama || '',
+    ppk_nip: ppkNip || ppkUser.nip || '',
     items: notaPPTK.items || [],
     links: notaPPTK.links || [],
     created_by: STATE.user.username,
@@ -29165,7 +29248,8 @@ function cetakNotaPPTK(id) {
   const kpa  = ndGetKPA() || {};
   const pptk = ndGetPPTK(n.pptk_nama) || {};
   const totalHarga = (n.items||[]).reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
-  const nomorNota = `027/${n.nomor_urut}/PPTK-NODIN/${n.kode_sub_kegiatan||''}${n.kode_sub_kegiatan&&n.kode_belanja?'-':''}${n.kode_belanja||''}/35.79.121/${STATE.tahun}`;
+  const kodeInisialPPTK = ndKodeInisialSubKegBelanja(n.sub_kegiatan, n.nama_belanja||n.belanja);
+  const nomorNota = `027/${n.nomor_urut}/PPTK-NODIN/${kodeInisialPPTK}/35.79.121/${STATE.tahun}`;
   const namaKota  = 'Batu';
   const tglCetak  = ndTanggalPanjang(n.tanggal);
 
@@ -29353,10 +29437,11 @@ function cetakNotaPPK(id) {
   const notaPPTK = (STATE.notaDinas.pptk||[]).find(p=>p.id===n.pptk_nota_id)||{};
   const items = n.items || notaPPTK.items || [];
   const totalHarga = items.reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
-  const nomorNota  = `027/${n.nomor_urut}/PPK-NODIN/${n.kode_sub_kegiatan||notaPPTK.kode_sub_kegiatan||''}${(n.kode_sub_kegiatan||notaPPTK.kode_sub_kegiatan)&&(n.kode_belanja||notaPPTK.kode_belanja)?'-':''}${n.kode_belanja||notaPPTK.kode_belanja||''}/35.79.121/${STATE.tahun}`;
+  const kodeInisialPPK = ndKodeInisialSubKegBelanja(n.sub_kegiatan||notaPPTK.sub_kegiatan, n.nama_belanja||n.belanja||notaPPTK.nama_belanja);
+  const nomorNota  = `027/${n.nomor_urut}/PPK-NODIN/${kodeInisialPPK}/35.79.121/${STATE.tahun}`;
   const tglCetak   = ndTanggalPanjang(n.tanggal);
-  const namaKPA    = kpa.nama||'...';
-  const nipKPA     = kpa.nip||'...';
+  const namaKPA    = n.ppk_nama || kpa.nama || '...';
+  const nipKPA     = n.ppk_nip || kpa.nip || '...';
   const jabKPA1    = 'Kuasa Pengguna Anggaran';
   const jabKPA2    = 'selaku Pejabat Pembuat Komitmen';
 
@@ -30127,7 +30212,8 @@ function tblLinks(links) {
 // ============================================================
 function generateNotaPPTK(n, pptk, kpa, tahun) {
   const tgl = tglPanjang(n.tanggal);
-  const nomor = `027/${n.nomor_urut||''}/PPTK-NODIN/${n.kode_sub_kegiatan||''}${(n.kode_sub_kegiatan&&n.kode_belanja)?'-':''}${n.kode_belanja||''}/35.79.121/${tahun}`;
+  const kodeInisial = ndKodeInisialSubKegBelanja(n.sub_kegiatan, n.nama_belanja);
+  const nomor = `027/${n.nomor_urut||''}/PPTK-NODIN/${kodeInisial}/35.79.121/${tahun}`;
   const items = n.items || [];
   const links = n.links && n.links.length > 0 ? n.links : [{uraian: n.nama_belanja||'—', link:'https://katalog.inaproc.id/'}];
   const total = items.reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
@@ -30315,15 +30401,13 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
 // ============================================================
 function generateNotaPPK(n, notaPPTK, kpa, tahun) {
   const tgl    = tglPanjang(n.tanggal);
-  const kode_sk = n.kode_sub_kegiatan || notaPPTK.kode_sub_kegiatan || '';
-  const kode_b  = n.kode_belanja      || notaPPTK.kode_belanja      || '';
-  const sep     = kode_sk && kode_b ? '-' : '';
-  const nomor   = `027/${n.nomor_urut||''}/PPK-NODIN/${kode_sk}${sep}${kode_b}/35.79.121/${tahun}`;
+  const kodeInisial = ndKodeInisialSubKegBelanja(n.sub_kegiatan||notaPPTK.sub_kegiatan, n.nama_belanja||n.belanja||notaPPTK.nama_belanja);
+  const nomor   = `027/${n.nomor_urut||''}/PPK-NODIN/${kodeInisial}/35.79.121/${tahun}`;
   const items   = n.items || notaPPTK.items || [];
   const links   = n.links || notaPPTK.links || [{uraian: n.nama_belanja||notaPPTK.nama_belanja||'—', link:'https://katalog.inaproc.id/'}];
   const total   = items.reduce((s,it)=>s+(parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0),0);
-  const kpaNama = kpa.nama || '—';
-  const kpaNip  = kpa.nip  || '—';
+  const kpaNama = n.ppk_nama || kpa.nama || '—';
+  const kpaNip  = n.ppk_nip || kpa.nip  || '—';
   const jabKPA  = 'Kuasa Pengguna Anggaran';
   const jabPPK  = 'selaku Pejabat Pembuat Komitmen';
   const program    = n.program    || notaPPTK.program    || '—';
