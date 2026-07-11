@@ -24849,11 +24849,17 @@ function getPPTKNama() {
   return STATE.user ? STATE.user.nama : '';
 }
 
+// Normalisasi teks nama (trim + collapse spasi ganda + uppercase) agar pencocokan PPTK tidak gagal
+// hanya karena perbedaan spasi/kapitalisasi kecil antara nama user login dan field pptk di data anggaran.
+function normNama(s) {
+  return (s || '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
 // Filter anggaran: jika PPTK, hanya rekening miliknya
 function getFilteredAnggaran() {
   if (!isUserPPTK()) return STATE.anggaran;
-  const nama = getPPTKNama().trim().toUpperCase();
-  return STATE.anggaran.filter(a => (a.pptk || '').trim().toUpperCase() === nama);
+  const nama = normNama(getPPTKNama());
+  return STATE.anggaran.filter(a => normNama(a.pptk) === nama);
 }
 
 // Filter realisasi: jika PPTK, hanya transaksi miliknya
@@ -28328,7 +28334,7 @@ const ND_BELANJA_LOOKUP = [
     "syarat_penyedia": "Memiliki NIB dengan KBLI reparasi dan perawatan sepeda motor; NPWP; memiliki mekanik yang kompeten. KBLI: 45407. KBKI: Jasa pemeliharaan sepeda motor."
   },
   {
-    "nama_belanja": "Belanja Pemeliharaan Komputer – Personal Computer",
+    "nama_belanja": "Belanja Pemeliharaan Komputer-Komputer Unit-Personal Computer",
     "uraian": "Pengadaan belanja pemeliharaan komputer – personal computer untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja pemeliharaan komputer – personal computer secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -28342,7 +28348,7 @@ const ND_BELANJA_LOOKUP = [
     "syarat_penyedia": "Memiliki NIB dengan KBLI reparasi komputer dan perlengkapan komputer; NPWP; memiliki tenaga teknis yang kompeten. KBLI: 95110. KBKI: Jasa perbaikan dan pemeliharaan komputer."
   },
   {
-    "nama_belanja": "Belanja Pemeliharaan Peralatan Personal Computer",
+    "nama_belanja": "Belanja Pemeliharaan Komputer-Peralatan Komputer-Peralatan Personal Computer",
     "uraian": "Pengadaan belanja pemeliharaan peralatan personal computer untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja pemeliharaan peralatan personal computer secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -28789,7 +28795,19 @@ function ndpPopulateRekening() {
   const sel = document.getElementById('ndpRekening');
   if (!sel) return;
   const filtered = getFilteredAnggaran();
-  sel.innerHTML = '<option value="">— Pilih Rekening —</option>' +
+
+  if (filtered.length === 0) {
+    // Dropdown ini hanya menampilkan rekening yang SUDAH diinput dan punya pagu
+    // di menu Input Anggaran (bukan daftar master belanja). Jika kosong, jelaskan penyebabnya
+    // agar tidak dikira bug aplikasi.
+    const alasan = isUserPPTK()
+      ? `Belum ada rekening anggaran untuk PPTK "${getPPTKNama()}". Tambahkan dulu di menu Input Anggaran.`
+      : 'Belum ada data rekening anggaran. Tambahkan dulu di menu Input Anggaran.';
+    sel.innerHTML = `<option value="">— ${alasan} —</option>`;
+    return;
+  }
+
+  sel.innerHTML = '<option value="">— Pilih Rekening (' + filtered.length + ' tersedia) —</option>' +
     filtered.map(a =>
       `<option value="${a.kode_rekening}">${a.kode_rekening} — ${a.nama_belanja||a.belanja||''}</option>`
     ).join('');
