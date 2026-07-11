@@ -27538,9 +27538,16 @@ window.addEventListener('resize', function() {
       <div class="form-grid">
         <div class="form-group span2">
           <label class="form-label">Rekening Belanja <span style="color:red">*</span></label>
-          <select class="form-select" id="ndpRekening" onchange="ndpOnRekeningChange()">
-            <option value="">— Pilih Rekening —</option>
-          </select>
+          <div style="position:relative">
+            <input type="text" class="form-select" id="ndpRekeningSearch" placeholder="Ketik kode atau nama belanja untuk mencari... (mis. 'komputer')" autocomplete="off"
+              oninput="ndpFilterRekening(this.value)"
+              onfocus="ndpFilterRekening(this.value)"
+              onblur="setTimeout(()=>ndpHideRekeningList(),150)">
+            <select id="ndpRekening" style="display:none" onchange="ndpOnRekeningChange()">
+              <option value="">— Pilih Rekening —</option>
+            </select>
+            <div id="ndpRekeningList" style="display:none;position:absolute;z-index:60;top:calc(100% + 4px);left:0;right:0;max-height:260px;overflow-y:auto;background:var(--c-surface);border:1px solid var(--c-border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18)"></div>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Tanggal Nota <span style="color:red">*</span></label>
@@ -28727,6 +28734,7 @@ function openModalNotaPPTK(editId) {
   document.getElementById('ndpTanggal').value = ndToday();
   document.getElementById('ndpHal').value = '';
   document.getElementById('ndpRekening').value = '';
+  document.getElementById('ndpRekeningSearch').value = '';
   document.getElementById('ndpKodeRup').value = '';
   document.getElementById('ndpTanggalDpa').value = '';
   document.getElementById('ndpUraian').value = '';
@@ -28773,9 +28781,8 @@ function openModalNotaPPTK(editId) {
     document.getElementById('ndpSumberDana2').value = nota.sumber_dana_tambahan||'';
     // Pilih rekening
     setTimeout(()=>{
-      document.getElementById('ndpRekening').value = nota.kode_rekening||'';
+      ndpSetRekening(nota.kode_rekening||'');
       if (nota.jenis_dpa) document.getElementById('ndpJenisDpa').value = nota.jenis_dpa;
-      ndpOnRekeningChange();
       if (nota.items && nota.items.length > 0) nota.items.forEach(item => ndpAddItem(item));
       ndpLinks = [];
       if (nota.links && nota.links.length > 0) nota.links.forEach(lnk => ndpAddLink(lnk));
@@ -28793,8 +28800,10 @@ function openModalNotaPPTK(editId) {
 
 function ndpPopulateRekening() {
   const sel = document.getElementById('ndpRekening');
+  const searchEl = document.getElementById('ndpRekeningSearch');
   if (!sel) return;
   const filtered = getFilteredAnggaran();
+  ndpRekeningCache = filtered;
 
   if (filtered.length === 0) {
     // Dropdown ini hanya menampilkan rekening yang SUDAH diinput dan punya pagu
@@ -28804,6 +28813,7 @@ function ndpPopulateRekening() {
       ? `Belum ada rekening anggaran untuk PPTK "${getPPTKNama()}". Tambahkan dulu di menu Input Anggaran.`
       : 'Belum ada data rekening anggaran. Tambahkan dulu di menu Input Anggaran.';
     sel.innerHTML = `<option value="">— ${alasan} —</option>`;
+    if (searchEl) { searchEl.value = ''; searchEl.placeholder = alasan; }
     return;
   }
 
@@ -28811,6 +28821,62 @@ function ndpPopulateRekening() {
     filtered.map(a =>
       `<option value="${a.kode_rekening}">${a.kode_rekening} — ${a.nama_belanja||a.belanja||''}</option>`
     ).join('');
+  if (searchEl) searchEl.placeholder = `Ketik kode atau nama belanja untuk mencari... (${filtered.length} rekening tersedia)`;
+}
+
+// Daftar rekening yang sedang aktif untuk form Nota Dinas PPTK (dipakai oleh fitur pencarian)
+let ndpRekeningCache = [];
+
+// Dipanggil saat satu hasil pencarian diklik: set nilai select tersembunyi + sinkronkan info rekening
+function ndpSetRekening(kode) {
+  const sel = document.getElementById('ndpRekening');
+  if (!sel) return;
+  sel.value = kode || '';
+  ndpSyncRekeningDisplay();
+  ndpOnRekeningChange();
+  ndpHideRekeningList();
+}
+
+// Sinkronkan teks di kotak pencarian dengan rekening yang sedang tersimpan di <select> tersembunyi
+function ndpSyncRekeningDisplay() {
+  const sel = document.getElementById('ndpRekening');
+  const searchEl = document.getElementById('ndpRekeningSearch');
+  if (!sel || !searchEl) return;
+  const kode = sel.value;
+  if (!kode) { searchEl.value = ''; return; }
+  const a = ndpRekeningCache.find(x => x.kode_rekening === kode);
+  searchEl.value = a ? `${a.kode_rekening} — ${a.nama_belanja||a.belanja||''}` : kode;
+}
+
+// Filter daftar rekening cukup dengan SATU kata kunci yang mewakili kode rekening ATAU nama belanja
+function ndpFilterRekening(query) {
+  const list = document.getElementById('ndpRekeningList');
+  if (!list) return;
+
+  if (ndpRekeningCache.length === 0) { list.style.display = 'none'; return; }
+
+  const q = (query || '').trim().toLowerCase();
+  const items = !q ? ndpRekeningCache : ndpRekeningCache.filter(a =>
+    (a.kode_rekening || '').toLowerCase().includes(q) ||
+    (a.nama_belanja || a.belanja || '').toLowerCase().includes(q)
+  );
+
+  if (items.length === 0) {
+    list.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--c-text-muted)">Tidak ditemukan rekening yang cocok dengan &quot;' + escHtml(query) + '&quot;</div>';
+  } else {
+    list.innerHTML = items.map(a => {
+      const label = `${a.kode_rekening} — ${a.nama_belanja || a.belanja || ''}`;
+      return `<div style="padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--c-border)"
+        onmousedown="event.preventDefault();ndpSetRekening('${a.kode_rekening}')"
+        onmouseover="this.style.background='var(--c-surface2)'" onmouseout="this.style.background=''">${escHtml(label)}</div>`;
+    }).join('');
+  }
+  list.style.display = 'block';
+}
+
+function ndpHideRekeningList() {
+  const list = document.getElementById('ndpRekeningList');
+  if (list) list.style.display = 'none';
 }
 
 function ndpOnRekeningChange() {
