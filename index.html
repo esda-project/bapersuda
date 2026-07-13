@@ -25126,13 +25126,26 @@ async function runAIAnalysis() {
 // ========================================
 // INPUT ANGGARAN
 // ========================================
+let anggaranSortDir = 'desc'; // 'desc' = terbaru dulu, 'asc' = terlama dulu — bantu deteksi input ganda
+
+function toggleSortAnggaran() {
+  anggaranSortDir = anggaranSortDir === 'desc' ? 'asc' : 'desc';
+  showPage('anggaran');
+}
+
 function renderAnggaran() {
   const programs = unique(MASTER.programKegSubkeg,'kode_program');
-  const data = getFilteredAnggaran();
+  // Urutkan berdasarkan tanggal input (created_at) agar data terbaru mudah dibandingkan
+  // dengan data sebelumnya — membantu mencegah input ganda pada rekening yang sama.
+  const data = getFilteredAnggaran().slice().sort((a,b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return anggaranSortDir === 'desc' ? (tb - ta) : (ta - tb);
+  });
   const totalPagu = getTotalPagu(); // Denominator: total pagu seluruh anggaran
   let rows = '';
   if (data.length === 0) {
-    rows = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>Belum ada data anggaran. Klik Tambah untuk menginput.</p></div></td></tr>`;
+    rows = `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📋</div><p>Belum ada data anggaran. Klik Tambah untuk menginput.</p></div></td></tr>`;
   } else {
     rows = data.map((a,i)=>{
       const pagu = getPagu(a);
@@ -25141,9 +25154,12 @@ function renderAnggaran() {
       const pct = totalPagu>0?(real/totalPagu*100).toFixed(1):0;
       // Serapan lokal (per rekening) untuk info tambahan
       const serapan = pagu>0?(real/pagu*100).toFixed(1):0;
-      return `<tr>
+      const tglInput = a.created_at ? new Date(a.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
+      // Tandai kemungkinan duplikat: rekening lain dengan kode_rekening sama persis (harusnya tidak terjadi, tapi jaga-jaga data lama)
+      const kemungkinanGanda = data.filter(x=>x.kode_rekening===a.kode_rekening).length > 1;
+      return `<tr${kemungkinanGanda ? ' style="background:var(--c-danger-light,#fff1f0)" title="Terdeteksi kode rekening yang sama pada baris lain — periksa kemungkinan input ganda"' : ''}>
         <td class="center">${i+1}</td>
-        <td class="mono" style="font-size:11px">${a.kode_rekening||'-'}</td>
+        <td class="mono" style="font-size:11px">${a.kode_rekening||'-'}${kemungkinanGanda ? ' ⚠️' : ''}</td>
         <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.nama_belanja}">${a.nama_belanja||'-'}</td>
         <td style="font-size:11px;color:var(--c-text-muted)">${a.sub_kegiatan||''}</td>
         <td class="center"><span class="badge ${a.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${a.sumber_dana||'-'}</span></td>
@@ -25152,10 +25168,11 @@ function renderAnggaran() {
         <td class="center" title="Capaian thd total pagu: ${pct}% | Serapan rekening: ${serapan}%">
           <span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span>
         </td>
+        <td class="center" style="font-size:11px;white-space:nowrap;color:var(--c-text-muted)">${tglInput}</td>
         <td>
           <div class="action-btns">
-            <button class="btn btn-sm btn-outline" onclick="editAnggaran(${i})">✏️</button>
-            <button class="btn btn-sm btn-red" onclick="hapusAnggaran(${i})">🗑️</button>
+            <button class="btn btn-sm btn-outline" onclick="editAnggaran('${a.id}')">✏️</button>
+            <button class="btn btn-sm btn-red" onclick="hapusAnggaran('${a.id}')">🗑️</button>
           </div>
         </td>
       </tr>`;
@@ -25182,7 +25199,12 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
 <div class="table-wrap">
   <div class="table-toolbar">
     <h4>Daftar Rekening Belanja</h4>
-    <input class="search-input" placeholder="Cari rekening..." oninput="filterAnggaran(this.value)">
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-sm btn-outline" onclick="toggleSortAnggaran()" title="Urutkan berdasarkan tanggal input untuk membantu mengecek input ganda">
+        ⇅ Tanggal Input: ${anggaranSortDir==='desc' ? 'Terbaru' : 'Terlama'}
+      </button>
+      <input class="search-input" placeholder="Cari rekening..." oninput="filterAnggaran(this.value)">
+    </div>
   </div>
   <div class="table-scroll">
     <table id="tblAnggaran">
@@ -25195,6 +25217,7 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
         <th class="right">Pagu (${STATE.tahapan})</th>
         <th class="right">Realisasi</th>
         <th class="center" title="Capaian = Realisasi rekening ini / Total pagu seluruh anggaran">% Capaian *</th>
+        <th class="center">Tanggal Input</th>
         <th style="width:80px">Aksi</th>
       </tr></thead>
       <tbody id="tbodyAnggaran">${rows}</tbody>
@@ -25202,6 +25225,7 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
   </div>
   <div style="padding:8px 12px;font-size:11px;color:var(--c-text-muted);border-top:1px solid var(--c-border)">
     * % Capaian = Realisasi rekening / Total Pagu Seluruh Anggaran (Rp ${fmt(getTotalPagu())}). Arahkan kursor ke badge untuk melihat % serapan per rekening.
+    Baris dengan latar merah ⚠️ menandakan kode rekening yang sama muncul lebih dari sekali — periksa kemungkinan input ganda.
   </div>
 </div>`;
 }
@@ -25261,11 +25285,16 @@ function openModalAnggaran(idx) {
   document.getElementById('modalAnggaran').classList.add('open');
 }
 
-function editAnggaran(i) { openModalAnggaran(i); }
+function editAnggaran(id) {
+  const idx = STATE.anggaran.findIndex(a => a.id === id);
+  if (idx === -1) { showToast('Data tidak ditemukan (mungkin sudah dihapus)','error'); return; }
+  openModalAnggaran(idx);
+}
 
-async function hapusAnggaran(i) {
+async function hapusAnggaran(id) {
   if (!confirm('Hapus rekening belanja ini?')) return;
-  const id = STATE.anggaran[i].id;
+  const i = STATE.anggaran.findIndex(a => a.id === id);
+  if (i === -1) { showToast('Data tidak ditemukan (mungkin sudah dihapus)','error'); return; }
   STATE.anggaran.splice(i,1);
   saveState();
   if (sbClient) {
@@ -25341,6 +25370,9 @@ async function saveAnggaran() {
     pagu_perubahan: (() => { const v = document.getElementById('fPaguPerubahan').value; return v === '' || v === null ? null : (parseFloat(v)||0); })(),
     sumber_dana: sd,
     pptk: isUserPPTK() ? getPPTKNama() : document.getElementById('fPPTK').value,
+    // created_at dipakai untuk mengurutkan tabel berdasarkan tanggal input,
+    // sehingga input ganda pada rekening yang sama lebih mudah terdeteksi.
+    created_at: idx !== '' ? (STATE.anggaran[parseInt(idx)].created_at || new Date().toISOString()) : new Date().toISOString(),
   };
 
   if (idx !== '') {
