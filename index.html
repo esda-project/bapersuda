@@ -23451,6 +23451,11 @@ td.center{text-align:center}
 
 /* ===== REKAP ===== */
 .rekap-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.filter-pill-group{display:flex;flex-wrap:wrap;gap:6px}
+.filter-pill{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .15s ease;white-space:nowrap;user-select:none;background:var(--c-surface)}
+.filter-pill:hover{opacity:.8}
+.rekap-tw-group{margin-bottom:16px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--c-border)}
+.rekap-tw-group-head{padding:8px 12px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;border-left:4px solid transparent}
 
 /* ===== PENGGUNA ===== */
 .user-card{background:var(--c-surface2);border-radius:var(--radius);padding:14px;border:1px solid var(--c-border);display:flex;align-items:center;gap:12px}
@@ -26767,7 +26772,226 @@ function renderRekap() {
     </div>
   </div>
 </div>
-<div style="padding:6px 12px;font-size:11px;color:var(--c-text-muted)">* % Capaian = Realisasi / Total Pagu Seluruh Anggaran (Rp ${fmt(totalPagu)})</div>`;
+<div style="padding:6px 12px;font-size:11px;color:var(--c-text-muted)">* % Capaian = Realisasi / Total Pagu Seluruh Anggaran (Rp ${fmt(totalPagu)})</div>
+
+<div class="section-card" style="margin-top:16px">
+  <div class="page-header" style="margin-bottom:12px">
+    <h4 style="margin:0">📊 Realisasi per Sub Kegiatan (Triwulanan)</h4>
+    <button class="btn btn-outline" onclick="cetakRekapTWSubkeg()">🖨️ Cetak PDF</button>
+  </div>
+  <div id="rekapTWContainer">${buildRekapTWSection()}</div>
+</div>`;
+}
+
+// ========================================
+// REKAP REALISASI PER SUB KEGIATAN (TRIWULANAN) — dengan filter Sumber Dana & Program
+// ========================================
+const REKAP_TW = { sd: '', program: '' };
+
+const REKAP_PROGRAM_PALETTE = ['#1a56db','#0d9488','#d97706','#7c3aed','#db2777','#0891b2','#65a30d','#e11d48','#4f46e5','#0284c7','#ca8a04','#059669'];
+
+function getProgramColor(kodeProgram) {
+  if (!kodeProgram) return '#64748b';
+  let hash = 0;
+  for (let i=0;i<kodeProgram.length;i++) hash = (hash*31 + kodeProgram.charCodeAt(i)) & 0xffffffff;
+  return REKAP_PROGRAM_PALETTE[Math.abs(hash) % REKAP_PROGRAM_PALETTE.length];
+}
+
+function getRekapProgramList() {
+  const map = {};
+  STATE.anggaran.forEach(a => { if (a.kode_program && !map[a.kode_program]) map[a.kode_program] = {kode:a.kode_program, nama:a.program}; });
+  return Object.values(map).sort((a,b)=>(a.nama||'').localeCompare(b.nama||''));
+}
+
+// Lookup kode_sub_kegiatan -> {kode_program, program} — sama seperti pola pada getRealisasiFiltered()
+function getSubKegProgramLookup() {
+  const map = {};
+  MASTER.programKegSubkeg.forEach(m => { map[m.kode_sub_kegiatan] = {kode_program:m.kode_program, program:m.program}; });
+  STATE.anggaran.forEach(a => { if (a.kode_sub_kegiatan) map[a.kode_sub_kegiatan] = {kode_program:a.kode_program, program:a.program}; });
+  return map;
+}
+
+function setRekapTWFilter(kind, val) {
+  if (kind === 'sd') REKAP_TW.sd = (REKAP_TW.sd === val ? '' : val);
+  if (kind === 'program') REKAP_TW.program = (REKAP_TW.program === val ? '' : val);
+  const el = document.getElementById('rekapTWContainer');
+  if (el) el.innerHTML = buildRekapTWSection();
+}
+
+// Bangun data: kelompok per Program -> daftar Sub Kegiatan dengan pagu & realisasi TW I-IV
+// Realisasi dikelompokkan berdasarkan bulan tanggal_sp2d (konsisten dengan Rekap Triwulanan Keseluruhan di atas)
+function buildRekapTWData() {
+  const skLookup = getSubKegProgramLookup();
+  const twMonths = [[0,1,2],[3,4,5],[6,7,8],[9,10,11]];
+  const data = {}; // kode_sub_kegiatan -> {nama, kodeProgram, program, pagu, tw:[0,0,0,0]}
+
+  STATE.anggaran.forEach(a => {
+    if (REKAP_TW.sd && a.sumber_dana !== REKAP_TW.sd) return;
+    if (REKAP_TW.program && a.kode_program !== REKAP_TW.program) return;
+    const sk = a.kode_sub_kegiatan;
+    if (!data[sk]) data[sk] = {nama:a.sub_kegiatan||sk, kodeProgram:a.kode_program, program:a.program||'Tanpa Program', pagu:0, tw:[0,0,0,0]};
+    data[sk].pagu += getPagu(a);
+  });
+
+  STATE.realisasi.forEach(r => {
+    if (!r.tanggal_sp2d) return;
+    if (REKAP_TW.sd && r.sumber_dana !== REKAP_TW.sd) return;
+    const meta = skLookup[r.kode_sub_kegiatan] || {};
+    if (REKAP_TW.program && meta.kode_program !== REKAP_TW.program) return;
+    const sk = r.kode_sub_kegiatan;
+    if (!data[sk]) {
+      const anyAng = STATE.anggaran.find(a=>a.kode_sub_kegiatan===sk);
+      data[sk] = {nama: anyAng?.sub_kegiatan || sk, kodeProgram: meta.kode_program, program: meta.program||'Tanpa Program', pagu:0, tw:[0,0,0,0]};
+    }
+    const m = new Date(r.tanggal_sp2d).getMonth();
+    const twIdx = twMonths.findIndex(ms=>ms.includes(m));
+    if (twIdx>=0) data[sk].tw[twIdx] += r.nominal;
+  });
+
+  const groups = {};
+  Object.entries(data).forEach(([sk,v]) => {
+    const gk = v.kodeProgram || '-';
+    if (!groups[gk]) groups[gk] = {kodeProgram: gk, program: v.program, items: []};
+    groups[gk].items.push({sk, ...v});
+  });
+  return Object.values(groups).sort((a,b)=>(a.program||'').localeCompare(b.program||''));
+}
+
+function buildRekapTWSection() {
+  const groups = buildRekapTWData();
+  const programs = getRekapProgramList();
+  const twLabelShort = ['TW I','TW II','TW III','TW IV'];
+
+  const sdOptions = ['', 'PAD', 'DBH CHT'];
+  const sdPills = sdOptions.map(sd => {
+    const label = sd === '' ? 'Semua Sumber Dana' : sd;
+    const color = sd === 'DBH CHT' ? '#d97706' : sd === 'PAD' ? '#1a56db' : '#64748b';
+    const active = REKAP_TW.sd === sd;
+    const style = active ? `background:${color};border-color:${color};color:#fff` : `border-color:${color};color:${color}`;
+    return `<span class="filter-pill" style="${style}" onclick="setRekapTWFilter('sd','${sd}')">${label}</span>`;
+  }).join('');
+
+  const programPills = [{kode:'',nama:'Semua Program'}, ...programs].map(p => {
+    const color = p.kode === '' ? '#64748b' : getProgramColor(p.kode);
+    const active = REKAP_TW.program === p.kode;
+    const label = p.kode === '' ? p.nama : (p.nama || p.kode);
+    const style = active ? `background:${color};border-color:${color};color:#fff` : `border-color:${color};color:${color}`;
+    return `<span class="filter-pill" style="${style}" title="${p.nama||''}" onclick="setRekapTWFilter('program','${p.kode}')">${label}</span>`;
+  }).join('');
+
+  let totalPagu = 0, totalTW = [0,0,0,0];
+  const groupsHtml = groups.map(g => {
+    const color = getProgramColor(g.kodeProgram);
+    let gPagu = 0, gTW = [0,0,0,0];
+    const rows = g.items.slice().sort((a,b)=>(a.nama||'').localeCompare(b.nama||'')).map(it => {
+      const jumlah = it.tw.reduce((s,v)=>s+v,0);
+      const sisa = it.pagu - jumlah;
+      const pct = it.pagu>0 ? (jumlah/it.pagu*100).toFixed(1) : 0;
+      gPagu += it.pagu; it.tw.forEach((v,i)=>gTW[i]+=v);
+      return `<tr>
+        <td style="font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${it.nama}">${it.nama}</td>
+        <td class="right mono" style="font-size:12px">${fmt(it.pagu)}</td>
+        ${it.tw.map(v=>`<td class="right mono" style="font-size:12px">${fmt(v)}</td>`).join('')}
+        <td class="right mono" style="font-size:12px;font-weight:600">${fmt(jumlah)}</td>
+        <td class="right mono" style="font-size:12px;${sisa<0?'color:var(--c-danger)':''}">${fmt(sisa)}</td>
+        <td class="center"><span class="badge ${pct>=85?'badge-green':pct>=60?'badge-blue':pct>=30?'badge-orange':'badge-red'}">${pct}%</span></td>
+      </tr>`;
+    }).join('');
+    totalPagu += gPagu; gTW.forEach((v,i)=>totalTW[i]+=v);
+    const gJumlah = gTW.reduce((s,v)=>s+v,0);
+    const gPct = gPagu>0 ? (gJumlah/gPagu*100).toFixed(1) : 0;
+    return `
+    <div class="rekap-tw-group" style="border-color:${color}40">
+      <div class="rekap-tw-group-head" style="background:${color}1a;border-left-color:${color}">
+        <div style="font-weight:700;font-size:12.5px;color:${color}">${g.program}</div>
+        <div style="font-size:11px;color:var(--c-text-muted)">Pagu: <b class="mono">${fmt(gPagu)}</b> &nbsp;•&nbsp; Realisasi: <b class="mono">${fmt(gJumlah)}</b> &nbsp;•&nbsp; <span class="badge ${gPct>=85?'badge-green':gPct>=60?'badge-blue':gPct>=30?'badge-orange':'badge-red'}">${gPct}%</span></div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Sub Kegiatan</th><th class="right">Pagu</th>${twLabelShort.map(l=>`<th class="right">${l}</th>`).join('')}<th class="right">Jumlah</th><th class="right">Sisa</th><th class="center">%</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="8" class="empty-state">Belum ada data</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('') || `<div class="empty-state">Belum ada data untuk filter ini</div>`;
+
+  const totalJumlah = totalTW.reduce((s,v)=>s+v,0);
+  const totalPct = totalPagu>0 ? (totalJumlah/totalPagu*100).toFixed(1) : 0;
+
+  return `
+  <div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:14px">
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);margin-bottom:6px;letter-spacing:.3px">FILTER SUMBER DANA</div>
+      <div class="filter-pill-group">${sdPills}</div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);margin-bottom:6px;letter-spacing:.3px">FILTER PROGRAM</div>
+      <div class="filter-pill-group">${programPills}</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+    ${[['Pagu (filter)',totalPagu,'blue'],['Realisasi (filter)',totalJumlah,'green'],['Sisa (filter)',totalPagu-totalJumlah,'orange'],['Capaian (filter)',null,'purple']].map(([l,v,c])=>`
+      <div class="stat-card ${c}" style="padding:10px 14px">
+        <div class="stat-label">${l}</div>
+        <div class="stat-value" style="font-size:15px">${l.startsWith('Capaian')?totalPct+'%':fmt(v)}</div>
+      </div>`).join('')}
+  </div>
+  ${groupsHtml}`;
+}
+
+function cetakRekapTWSubkeg() {
+  const groups = buildRekapTWData();
+  const twLabelShort = ['TW I','TW II','TW III','TW IV'];
+  let totalPagu = 0, totalTW = [0,0,0,0];
+
+  const sections = groups.map(g => {
+    let gPagu = 0, gTW = [0,0,0,0];
+    const rows = g.items.slice().sort((a,b)=>(a.nama||'').localeCompare(b.nama||'')).map(it => {
+      const jumlah = it.tw.reduce((s,v)=>s+v,0);
+      const sisa = it.pagu - jumlah;
+      const pct = it.pagu>0 ? (jumlah/it.pagu*100).toFixed(1) : 0;
+      gPagu += it.pagu; it.tw.forEach((v,i)=>gTW[i]+=v);
+      return `<tr><td style="font-size:11px;max-width:260px">${it.nama}</td>
+        <td class="right mono">${fmt(it.pagu)}</td>
+        ${it.tw.map(v=>`<td class="right mono">${fmt(v)}</td>`).join('')}
+        <td class="right mono"><b>${fmt(jumlah)}</b></td>
+        <td class="right mono">${fmt(sisa)}</td>
+        <td class="center">${pct}%</td></tr>`;
+    }).join('');
+    totalPagu += gPagu; gTW.forEach((v,i)=>totalTW[i]+=v);
+    const gJumlah = gTW.reduce((s,v)=>s+v,0);
+    return `<div class="section-title">${g.program} — Pagu ${fmt(gPagu)} | Realisasi ${fmt(gJumlah)}</div>
+    <table>
+      <thead><tr><th>Sub Kegiatan</th><th class="right">Pagu</th>${twLabelShort.map(l=>`<th class="right">${l}</th>`).join('')}<th class="right">Jumlah</th><th class="right">Sisa</th><th class="center">%</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }).join('<div style="height:12px"></div>');
+
+  const totalJumlah = totalTW.reduce((s,v)=>s+v,0);
+  const totalPct = totalPagu>0 ? (totalJumlah/totalPagu*100).toFixed(1) : 0;
+  const progLabel = REKAP_TW.program ? (getRekapProgramList().find(p=>p.kode===REKAP_TW.program)?.nama || REKAP_TW.program) : 'Semua Program';
+  const filterLabel = `${REKAP_TW.sd || 'Semua Sumber Dana'} • ${progLabel}`;
+
+  const html = buildPrintHeader(
+    `REKAP REALISASI PER SUB KEGIATAN (TRIWULANAN) — TA ${STATE.tahun} (${STATE.tahapan})`,
+    `Filter: ${filterLabel} | Dicetak: ${new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'})}`
+  ) + `
+  <div class="stat-row">
+    <div class="stat-box"><div class="lbl">Pagu (filter)</div><div class="val">Rp ${fmt(totalPagu)}</div></div>
+    <div class="stat-box"><div class="lbl">Realisasi (filter)</div><div class="val">Rp ${fmt(totalJumlah)}</div></div>
+    <div class="stat-box"><div class="lbl">Sisa (filter)</div><div class="val">Rp ${fmt(totalPagu-totalJumlah)}</div></div>
+    <div class="stat-box"><div class="lbl">Capaian</div><div class="val">${totalPct}%</div></div>
+  </div>
+  ${sections || '<p>Tidak ada data untuk filter ini.</p>'}
+  <div class="sign-area">
+    <div class="sign-box">
+      <div class="sign-title">KPA,</div>
+      <div class="sign-name">${MASTER.kpa}</div>
+      <div class="sign-nip">NIP. 196901181990032001</div>
+    </div>
+  </div>`;
+
+  openPrintWindow(html, `Rekap Realisasi Triwulanan TA ${STATE.tahun}`);
 }
 
 // ========================================
