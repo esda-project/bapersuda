@@ -26512,8 +26512,24 @@ function switchKasTW(tw) {
 // ========================================
 // INPUT REALISASI
 // ========================================
+let realisasiSortDir = null; // null = tanpa urutan, 'asc' = terlama-terbaru, 'desc' = terbaru-terlama
+
+function sortRealisasi(dir) {
+  realisasiSortDir = (realisasiSortDir === dir) ? (dir === 'asc' ? 'desc' : 'asc') : dir;
+  showPage('realisasi');
+}
+
 function renderRealisasi() {
-  const filteredReal = getFilteredRealisasi();
+  let filteredReal = getFilteredRealisasi();
+  if (realisasiSortDir) {
+    filteredReal = [...filteredReal].sort((a, b) => {
+      const ta = a.tanggal || '';
+      const tb = b.tanggal || '';
+      if (ta < tb) return realisasiSortDir === 'asc' ? -1 : 1;
+      if (ta > tb) return realisasiSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
   const rows = filteredReal.length === 0
     ? `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📑</div><p>Belum ada transaksi realisasi.</p></div></td></tr>`
     : filteredReal.map((r,i)=>`<tr>
@@ -26552,7 +26568,7 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
     <table id="tblRealisasi">
       <thead><tr>
         <th style="width:40px">#</th>
-        <th>Tanggal</th>
+        <th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="sortRealisasi(${realisasiSortDir==='asc'?"'desc'":"'asc'"})" title="Klik untuk urutkan berdasarkan tanggal">Tanggal ${realisasiSortDir==='asc'?'▲':realisasiSortDir==='desc'?'▼':'⇅'}</th>
         <th>Uraian</th>
         <th>Kode Rekening</th>
         <th class="right">Nominal</th>
