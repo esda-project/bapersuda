@@ -23915,6 +23915,9 @@ td.center{text-align:center}
       <div class="nav-item" onclick="showPage('rekap')" id="nav-rekap" data-label="Rekap Realisasi">
         <span class="icon">📈</span> Rekap Realisasi
       </div>
+      <div class="nav-item" onclick="showPage('kinerja')" id="nav-kinerja" data-label="Laporan Kinerja">
+        <span class="icon">📈</span> Laporan Kinerja
+      </div>
       <div class="nav-item" onclick="showPage('lra')" id="nav-lra" data-label="Laporan LRA">
         <span class="icon">📄</span> Laporan LRA
       </div>
@@ -24898,6 +24901,7 @@ const PAGE_META = {
   realisasi: {title:'Input Realisasi',sub:'Catat transaksi realisasi belanja'},
   rekap: {title:'Rekap Realisasi',sub:'Rekapitulasi seluruh realisasi anggaran'},
   lra: {title:'Laporan LRA',sub:'Laporan Realisasi Anggaran resmi SKPD'},
+  kinerja: {title:'Laporan Kinerja',sub:'Analisis kinerja triwulanan/tahunan — slide PPT/PDF & infografis'},
   pengguna: {title:'Manajemen Pengguna',sub:'Kelola akun dan hak akses pengguna'},
   cari: {title:'Pencarian Data',sub:'Cari realisasi dan sisa anggaran berdasarkan kegiatan, sub kegiatan, atau belanja'},
   notaPPTK: {title:'Nota Dinas PPTK',sub:'Persiapan pengadaan barang/jasa — dari PPTK ke PPK'},
@@ -24935,6 +24939,7 @@ function showPage(page) {
     realisasi: renderRealisasi,
     rekap: renderRekap,
     lra: renderLRA,
+    kinerja: renderKinerja,
     pengguna: renderPengguna,
     cari: renderCari,
     notaPPTK: renderNotaPPTK,
@@ -27224,6 +27229,494 @@ function buildLRATable(upToDate) {
     <p style="color:var(--c-text-muted)">NIP. 196901181990032001</p>
   </div>
 </div>`;
+}
+
+// ========================================
+// LAPORAN KINERJA (Triwulanan & Tahunan)
+// ========================================
+const KINERJA_STATE = { periode: 'tahunan', tw: 1, pptk: '' };
+
+function getKinerjaPeriodRange(periode, tw, tahun) {
+  const y = tahun || STATE.tahun;
+  if (periode === 'tahunan') {
+    return { dari: `${y}-01-01`, sampai: `${y}-12-31`, label: `Tahunan ${y}`, target: 100 };
+  }
+  const ranges = {
+    1: [`${y}-01-01`, `${y}-03-31`],
+    2: [`${y}-04-01`, `${y}-06-30`],
+    3: [`${y}-07-01`, `${y}-09-30`],
+    4: [`${y}-10-01`, `${y}-12-31`],
+  };
+  const rn = ['I','II','III','IV'][tw-1];
+  const [dari, sampai] = ranges[tw];
+  return { dari, sampai, label: `Triwulan ${rn} ${y}`, target: tw*25 };
+}
+
+function trunc(s, n) { s = s || ''; return s.length > n ? s.slice(0, n-1)+'…' : s; }
+
+// Susun data laporan berjenjang: Program > Kegiatan > Sub Kegiatan > Belanja
+// beserta Pagu, Sumber Dana, Realisasi (khusus rentang periode via tanggal SP2D), Capaian %, dan Sisa.
+function buildKinerjaData(periode, tw, pptkFilter) {
+  const { dari, sampai, label, target } = getKinerjaPeriodRange(periode, tw);
+  const nama = normNama(pptkFilter);
+  const angSrc = STATE.anggaran.filter(a => !nama || normNama(a.pptk) === nama);
+
+  const realDalamPeriode = (kodeRek) => STATE.realisasi
+    .filter(r => r.kode_rekening === kodeRek && r.tanggal_sp2d && r.tanggal_sp2d >= dari && r.tanggal_sp2d <= sampai)
+    .reduce((s,r) => s+r.nominal, 0);
+
+  const programs = {};
+  const bySumberDana = {};
+  angSrc.forEach(a => {
+    const pk = a.kode_program || '-', kk = a.kode_kegiatan || '-', sk = a.kode_sub_kegiatan || '-';
+    const pagu = getPagu(a), real = realDalamPeriode(a.kode_rekening);
+
+    programs[pk] = programs[pk] || { kode: pk, nama: a.program||pk, pagu:0, real:0, kegiatan:{} };
+    programs[pk].pagu += pagu; programs[pk].real += real;
+    const P = programs[pk];
+
+    P.kegiatan[kk] = P.kegiatan[kk] || { kode: kk, nama: a.kegiatan||kk, pagu:0, real:0, subkeg:{} };
+    P.kegiatan[kk].pagu += pagu; P.kegiatan[kk].real += real;
+    const K = P.kegiatan[kk];
+
+    K.subkeg[sk] = K.subkeg[sk] || { kode: sk, nama: a.sub_kegiatan||sk, pagu:0, real:0, belanja:[] };
+    K.subkeg[sk].pagu += pagu; K.subkeg[sk].real += real;
+    K.subkeg[sk].belanja.push({
+      nama: a.nama_belanja||a.kode_belanja, kode_rekening: a.kode_rekening,
+      sumber_dana: a.sumber_dana, pagu, real, sisa: pagu-real,
+      capaian: pagu>0 ? (real/pagu*100) : 0,
+    });
+
+    const sd = a.sumber_dana || '-';
+    bySumberDana[sd] = bySumberDana[sd] || { pagu:0, real:0 };
+    bySumberDana[sd].pagu += pagu; bySumberDana[sd].real += real;
+  });
+
+  const totalPagu = angSrc.reduce((s,a)=>s+getPagu(a),0);
+  const totalReal = angSrc.reduce((s,a)=>s+realDalamPeriode(a.kode_rekening),0);
+
+  return { dari, sampai, label, target, programs, bySumberDana, totalPagu, totalReal, count: angSrc.length };
+}
+
+function buildKinerjaNarasi(data, pptkFilter) {
+  const pct = data.totalPagu>0 ? (data.totalReal/data.totalPagu*100) : 0;
+  const siapa = pptkFilter ? `atas nama PPTK <b>${pptkFilter}</b>` : 'pada seluruh program dan kegiatan SKPD';
+  const progList = Object.values(data.programs).map(p=>({nama:p.nama, pct: p.pagu>0?(p.real/p.pagu*100):0}));
+  progList.sort((a,b)=>b.pct-a.pct);
+
+  let t = `Pada periode <b>${data.label}</b> ${siapa}, realisasi anggaran mencapai <b>${fmtPct(pct)}</b> dari total pagu Rp ${fmt(data.totalPagu)} `;
+  t += `(terealisasi Rp ${fmt(data.totalReal)}, sisa anggaran Rp ${fmt(data.totalPagu-data.totalReal)}). `;
+  t += pct >= data.target
+    ? `Capaian ini <b>telah memenuhi</b> target proporsional periode berjalan (${data.target}%).`
+    : `Capaian ini <b>masih di bawah</b> target proporsional periode berjalan (${data.target}%), sehingga perlu percepatan penyerapan anggaran pada sisa waktu berjalan.`;
+  if (progList.length > 1) {
+    t += ` Capaian tertinggi pada program <b>${trunc(progList[0].nama,60)}</b> (${fmtPct(progList[0].pct)}), sedangkan capaian terendah pada program <b>${trunc(progList[progList.length-1].nama,60)}</b> (${fmtPct(progList[progList.length-1].pct)}).`;
+  }
+  return t;
+}
+
+function svgDonutKinerja(pct, size) {
+  size = size || 150;
+  const r = size/2 - 16, c = size/2, circ = 2*Math.PI*r;
+  const p = Math.max(0, Math.min(pct,100));
+  const offset = circ * (1 - p/100);
+  const color = p>=85?'#16a34a':p>=60?'#2563eb':p>=30?'#f59e0b':'#dc2626';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="16"/>
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="16"
+      stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"
+      transform="rotate(-90 ${c} ${c})"><title>Capaian realisasi ${fmtPct(p)}</title></circle>
+    <text x="${c}" y="${c+7}" text-anchor="middle" font-size="24" font-weight="700" fill="${color}" font-family="sans-serif">${fmtPct(p)}</text>
+  </svg>`;
+}
+
+function svgBarKinerja(items, opts) {
+  opts = opts || {};
+  const w = opts.w || 640, barH = 24, gap = 12, padL = opts.padL || 230, padR = 70;
+  const maxW = w - padL - padR;
+  const rows = items.map((it,i) => {
+    const y = i*(barH+gap);
+    const bw = Math.max(2, maxW * Math.min(it.pct,100)/100);
+    const color = it.pct>=85?'#16a34a':it.pct>=60?'#2563eb':it.pct>=30?'#f59e0b':'#dc2626';
+    const anchor = it.anchor ? ` style="cursor:pointer" onclick="document.getElementById('${it.anchor}')?.scrollIntoView({behavior:'smooth',block:'center'})"` : '';
+    return `<g${anchor}><title>${it.nama}: ${fmtPct(it.pct)}</title>
+      <text x="${padL-8}" y="${y+barH/2+4}" text-anchor="end" font-size="11" fill="#334155" font-family="sans-serif">${trunc(it.nama,32)}</text>
+      <rect x="${padL}" y="${y}" width="${maxW}" height="${barH}" rx="4" fill="#f1f5f9"/>
+      <rect x="${padL}" y="${y}" width="${bw}" height="${barH}" rx="4" fill="${color}"/>
+      <text x="${padL+bw+8}" y="${y+barH/2+4}" font-size="11" font-weight="600" fill="${color}" font-family="sans-serif">${fmtPct(it.pct)}</text>
+    </g>`;
+  }).join('');
+  const h = Math.max(1,items.length)*(barH+gap);
+  return `<svg width="${w}" height="${h+6}" viewBox="0 0 ${w} ${h+6}">${rows || '<text x="10" y="20" font-size="12" fill="#94a3b8">Tidak ada data</text>'}</svg>`;
+}
+
+function renderKinerja() {
+  const pptkOptions = MASTER.pptk.map(p=>`<option value="${p}" ${KINERJA_STATE.pptk===p?'selected':''}>${p}</option>`).join('');
+  return `
+<div class="page-header">
+  <h2>📈 Laporan Kinerja</h2>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-outline" onclick="cetakKinerja()">🖨️ Slide PDF</button>
+    <button class="btn btn-blue" onclick="unduhKinerjaPPTX()">⬇️ Unduh PPTX</button>
+  </div>
+</div>
+<div class="section-card" style="padding:14px 16px;margin-bottom:14px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;align-items:end">
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Jenis Periode</label>
+      <select class="form-input" style="width:100%" id="kinPeriode" onchange="onKinPeriodeChange()">
+        <option value="tahunan" ${KINERJA_STATE.periode==='tahunan'?'selected':''}>Tahunan</option>
+        <option value="triwulan" ${KINERJA_STATE.periode==='triwulan'?'selected':''}>Triwulan</option>
+      </select>
+    </div>
+    <div id="kinTWWrap" style="${KINERJA_STATE.periode==='triwulan'?'':'display:none'}">
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Triwulan</label>
+      <select class="form-input" style="width:100%" id="kinTW">
+        ${[1,2,3,4].map(n=>`<option value="${n}" ${KINERJA_STATE.tw===n?'selected':''}>Triwulan ${['I','II','III','IV'][n-1]}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">PPTK (Kinerja Pegawai)</label>
+      <select class="form-input" style="width:100%" id="kinPPTK">
+        <option value="">— Semua PPTK (Rekap SKPD) —</option>
+        ${pptkOptions}
+      </select>
+    </div>
+    <div>
+      <button class="btn btn-blue" style="width:100%" onclick="refreshKinerja()">🔄 Susun Laporan</button>
+    </div>
+  </div>
+</div>
+<div id="kinerjaContent">${buildKinerjaContent()}</div>`;
+}
+
+function onKinPeriodeChange() {
+  const v = document.getElementById('kinPeriode').value;
+  document.getElementById('kinTWWrap').style.display = v==='triwulan' ? '' : 'none';
+}
+
+function refreshKinerja() {
+  KINERJA_STATE.periode = document.getElementById('kinPeriode').value;
+  KINERJA_STATE.tw = parseInt(document.getElementById('kinTW').value) || 1;
+  KINERJA_STATE.pptk = document.getElementById('kinPPTK').value;
+  document.getElementById('kinerjaContent').innerHTML = buildKinerjaContent();
+}
+
+function buildKinerjaContent() {
+  const data = buildKinerjaData(KINERJA_STATE.periode, KINERJA_STATE.tw, KINERJA_STATE.pptk);
+  const pct = data.totalPagu>0 ? (data.totalReal/data.totalPagu*100) : 0;
+  const narasi = buildKinerjaNarasi(data, KINERJA_STATE.pptk);
+  const progArr = Object.values(data.programs);
+  const progBars = progArr.map(p=>({nama:p.nama, pct: p.pagu>0?(p.real/p.pagu*100):0, anchor:'kin-prog-'+p.kode}));
+  const sdArr = Object.entries(data.bySumberDana).map(([sd,v])=>({nama:sd, pct: v.pagu>0?(v.real/v.pagu*100):0}));
+
+  if (data.count === 0) {
+    return `<div class="empty-state"><div class="empty-icon">📈</div><p>Belum ada data anggaran untuk filter ini.</p></div>`;
+  }
+
+  const treeHtml = progArr.map(p => {
+    const pPct = p.pagu>0?(p.real/p.pagu*100):0;
+    const kegHtml = Object.values(p.kegiatan).map(k => {
+      const kPct = k.pagu>0?(k.real/k.pagu*100):0;
+      const subHtml = Object.values(k.subkeg).map(sk => {
+        const skPct = sk.pagu>0?(sk.real/sk.pagu*100):0;
+        const belHtml = sk.belanja.map(b => `<tr>
+            <td style="padding-left:54px;font-size:12px">${b.nama}</td>
+            <td class="center"><span class="badge ${b.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${b.sumber_dana||'-'}</span></td>
+            <td class="right mono" style="font-size:12px">${fmt(b.pagu)}</td>
+            <td class="right mono" style="font-size:12px">${fmt(b.real)}</td>
+            <td class="center"><span class="badge ${b.capaian>=85?'badge-green':b.capaian>=60?'badge-blue':b.capaian>=30?'badge-orange':'badge-red'}">${fmtPct(b.capaian)}</span></td>
+            <td class="right mono" style="font-size:12px;color:${b.sisa<0?'var(--c-danger)':''}">${fmt(b.sisa)}</td>
+          </tr>`).join('');
+        return `<tr><td colspan="6" style="padding-left:36px;background:#fafbfc;font-size:12px"><b>📄 Sub Kegiatan:</b> ${sk.nama} — Pagu Rp ${fmt(sk.pagu)} | Realisasi Rp ${fmt(sk.real)} (${fmtPct(skPct)})</td></tr>${belHtml}`;
+      }).join('');
+      return `<tr><td colspan="6" style="padding-left:20px;background:#f3f6fb;font-size:12px"><b>📂 Kegiatan:</b> ${k.nama} — Pagu Rp ${fmt(k.pagu)} | Realisasi Rp ${fmt(k.real)} (${fmtPct(kPct)})</td></tr>${subHtml}`;
+    }).join('');
+    return `<tr id="kin-prog-${p.kode}"><td colspan="6" style="background:#e8f0fe;font-size:13px"><b>📁 PROGRAM: ${p.nama}</b> — Pagu Rp ${fmt(p.pagu)} | Realisasi Rp ${fmt(p.real)} (${fmtPct(pPct)})</td></tr>${kegHtml}`;
+  }).join('');
+
+  return `
+<div class="section-card" style="padding:16px;margin-bottom:14px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--c-text-muted)">📝 RINGKASAN ANALISIS — ${data.label}</div>
+  <div style="line-height:1.8;font-size:13px">${narasi}</div>
+</div>
+<div style="display:grid;grid-template-columns:1.1fr 2fr;gap:14px;margin-bottom:14px">
+  <div class="section-card" style="padding:16px;text-align:center">
+    <div style="font-size:12px;font-weight:700;color:var(--c-text-muted);margin-bottom:8px">CAPAIAN REALISASI</div>
+    ${svgDonutKinerja(pct)}
+    <div style="font-size:11px;color:var(--c-text-muted);margin-top:8px">Pagu Rp ${fmt(data.totalPagu)}<br>Realisasi Rp ${fmt(data.totalReal)}<br>Sisa Rp ${fmt(data.totalPagu-data.totalReal)}</div>
+  </div>
+  <div class="section-card" style="padding:16px">
+    <div style="font-size:12px;font-weight:700;color:var(--c-text-muted);margin-bottom:8px">CAPAIAN PER PROGRAM (klik batang untuk lompat ke rincian)</div>
+    ${svgBarKinerja(progBars)}
+  </div>
+</div>
+<div class="section-card" style="padding:16px;margin-bottom:14px">
+  <div style="font-size:12px;font-weight:700;color:var(--c-text-muted);margin-bottom:8px">REALISASI PER SUMBER DANA</div>
+  ${svgBarKinerja(sdArr, {padL:140})}
+</div>
+<div class="table-wrap">
+  <div class="table-toolbar"><h4>Rincian Program → Kegiatan → Sub Kegiatan → Belanja</h4></div>
+  <div class="table-scroll" style="max-height:560px">
+    <table>
+      <thead><tr>
+        <th>Uraian</th><th class="center">Sumber Dana</th><th class="right">Pagu</th>
+        <th class="right">Realisasi</th><th class="center">Capaian</th><th class="right">Sisa</th>
+      </tr></thead>
+      <tbody>${treeHtml}</tbody>
+    </table>
+  </div>
+</div>`;
+}
+
+// --- Ekspor PDF gaya slide (cetak/simpan lewat dialog print browser) ---
+function getSlidePrintCSS() {
+  return `
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', Arial, sans-serif; background:#64748b; }
+    .slide { width: 1120px; min-height: 630px; background:#fff; margin: 0 auto 24px; padding: 56px 64px; position:relative; box-shadow:0 4px 20px rgba(0,0,0,.25); }
+    .slide .kop { font-size:12px; font-weight:700; color:#1a56db; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px }
+    .slide h1 { font-size:32px; font-weight:800; color:#0f172a; margin-bottom:10px }
+    .slide h2 { font-size:22px; font-weight:700; color:#1a56db; margin-bottom:18px }
+    .slide .sub { font-size:15px; color:#64748b; margin-bottom:24px }
+    .slide .foot { position:absolute; bottom:24px; left:64px; right:64px; display:flex; justify-content:space-between; font-size:11px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:10px }
+    .stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:22px }
+    .stat-card { border:1px solid #e2e8f0; border-radius:10px; padding:16px; background:#f8fafc }
+    .stat-card .lbl { font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px }
+    .stat-card .val { font-size:19px; font-weight:800; color:#0f172a; font-family:'DM Mono',monospace }
+    .narasi-box { font-size:15px; line-height:1.9; color:#1e293b; background:#f8fafc; border-left:4px solid #1a56db; padding:18px 22px; border-radius:6px }
+    table { width:100%; border-collapse:collapse; font-size:11px }
+    th,td { border:1px solid #e2e8f0; padding:6px 8px; text-align:left }
+    th { background:#eff4fb; font-weight:700 }
+    td.right,th.right{text-align:right} td.center,th.center{text-align:center}
+    .badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700}
+    .b-green{background:#e6faf8;color:#0d9488} .b-blue{background:#ebf2ff;color:#1a56db}
+    .b-orange{background:#fffbeb;color:#d97706} .b-red{background:#fef2f2;color:#dc2626}
+    @media print {
+      body{background:#fff}
+      .slide { box-shadow:none; margin:0; page-break-after: always; width:auto; min-height:0; }
+      @page { size: A4 landscape; margin: 10mm; }
+      .no-print{display:none !important}
+    }
+  `;
+}
+
+function badgeCapaian(pct) {
+  const cls = pct>=85?'b-green':pct>=60?'b-blue':pct>=30?'b-orange':'b-red';
+  return `<span class="badge ${cls}">${fmtPct(pct)}</span>`;
+}
+
+function cetakKinerja() {
+  const data = buildKinerjaData(KINERJA_STATE.periode, KINERJA_STATE.tw, KINERJA_STATE.pptk);
+  if (data.count === 0) { showToast('Belum ada data untuk filter ini','error'); return; }
+  const pct = data.totalPagu>0 ? (data.totalReal/data.totalPagu*100) : 0;
+  const narasi = buildKinerjaNarasi(data, KINERJA_STATE.pptk);
+  const progArr = Object.values(data.programs);
+  const progBars = progArr.map(p=>({nama:p.nama, pct: p.pagu>0?(p.real/p.pagu*100):0}));
+  const sdArr = Object.entries(data.bySumberDana).map(([sd,v])=>({nama:sd, pct: v.pagu>0?(v.real/v.pagu*100):0}));
+  const tglCetak = new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+  const pptkLabel = KINERJA_STATE.pptk || 'Seluruh PPTK (Rekap SKPD)';
+
+  // Flatten baris untuk tabel rincian (dipecah per program, satu slide per program)
+  const tableSlides = progArr.map(p => {
+    const rows = [];
+    Object.values(p.kegiatan).forEach(k => {
+      Object.values(k.subkeg).forEach(sk => {
+        sk.belanja.forEach(b => {
+          rows.push(`<tr>
+            <td style="font-size:10px">${trunc(k.nama,30)}</td>
+            <td style="font-size:10px">${trunc(sk.nama,34)}</td>
+            <td style="font-size:10px">${trunc(b.nama,34)}</td>
+            <td class="center">${b.sumber_dana||'-'}</td>
+            <td class="right mono">${fmt(b.pagu)}</td>
+            <td class="right mono">${fmt(b.real)}</td>
+            <td class="center">${badgeCapaian(b.capaian)}</td>
+            <td class="right mono">${fmt(b.sisa)}</td>
+          </tr>`);
+        });
+      });
+    });
+    return `<div class="slide">
+      <div class="kop">SIANGGARAN — LAPORAN KINERJA</div>
+      <h2>📁 ${p.nama}</h2>
+      <div class="sub">Pagu Rp ${fmt(p.pagu)} · Realisasi Rp ${fmt(p.real)} · Capaian ${fmtPct(p.pagu>0?p.real/p.pagu*100:0)}</div>
+      <table><thead><tr>
+        <th>Kegiatan</th><th>Sub Kegiatan</th><th>Belanja</th><th class="center">Sbr Dana</th>
+        <th class="right">Pagu</th><th class="right">Realisasi</th><th class="center">Capaian</th><th class="right">Sisa</th>
+      </tr></thead><tbody>${rows.join('')}</tbody></table>
+      <div class="foot"><span>Bagian Perekonomian dan Sumber Daya Alam — Sekretariat Daerah Kota Batu</span><span>Dicetak ${tglCetak}</span></div>
+    </div>`;
+  }).join('');
+
+  const html = `
+  <div class="slide" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <div class="kop">SIANGGARAN — SISTEM INFORMASI ANGGARAN SKPD</div>
+    <h1 style="font-size:38px">Laporan Kinerja ${KINERJA_STATE.periode==='tahunan'?'Tahunan':'Triwulanan'}</h1>
+    <div class="sub" style="font-size:18px">${data.label}</div>
+    <div class="sub">${pptkLabel}</div>
+    <div class="foot"><span>Bagian Perekonomian dan Sumber Daya Alam — Sekretariat Daerah Kota Batu</span><span>Dicetak ${tglCetak}</span></div>
+  </div>
+  <div class="slide">
+    <div class="kop">RINGKASAN ANALISIS</div>
+    <h2>📝 Capaian Kinerja ${data.label}</h2>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="lbl">Pagu Anggaran</div><div class="val">Rp ${fmt(data.totalPagu)}</div></div>
+      <div class="stat-card"><div class="lbl">Realisasi</div><div class="val">Rp ${fmt(data.totalReal)}</div></div>
+      <div class="stat-card"><div class="lbl">Capaian</div><div class="val">${fmtPct(pct)}</div></div>
+      <div class="stat-card"><div class="lbl">Sisa Anggaran</div><div class="val">Rp ${fmt(data.totalPagu-data.totalReal)}</div></div>
+    </div>
+    <div class="narasi-box">${narasi}</div>
+    <div class="foot"><span>Bagian Perekonomian dan Sumber Daya Alam — Sekretariat Daerah Kota Batu</span><span>Dicetak ${tglCetak}</span></div>
+  </div>
+  <div class="slide">
+    <div class="kop">INFOGRAFIS</div>
+    <h2>📊 Capaian per Program &amp; Sumber Dana</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:start">
+      <div><div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">CAPAIAN PER PROGRAM</div>${svgBarKinerja(progBars,{w:480,padL:190})}</div>
+      <div><div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">REALISASI PER SUMBER DANA</div>${svgBarKinerja(sdArr,{w:480,padL:110})}</div>
+    </div>
+    <div class="foot"><span>Bagian Perekonomian dan Sumber Daya Alam — Sekretariat Daerah Kota Batu</span><span>Dicetak ${tglCetak}</span></div>
+  </div>
+  ${tableSlides}`;
+
+  const w = window.open('', '_blank', 'width=1200,height=850,scrollbars=yes');
+  if (!w) { showToast('Popup diblokir browser. Izinkan popup untuk situs ini.', 'error'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Kinerja — ${data.label}</title>
+    <style>${getSlidePrintCSS()}</style></head><body>
+    ${html}
+    <div class="no-print" style="position:fixed;bottom:16px;right:16px;display:flex;gap:8px;z-index:999">
+      <button onclick="window.print()" style="padding:10px 22px;background:#1a56db;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer">🖨️ Cetak / Simpan PDF</button>
+      <button onclick="window.close()" style="padding:10px 16px;background:#e2e8f0;color:#1a202c;border:none;border-radius:7px;font-size:13px;cursor:pointer">✕ Tutup</button>
+    </div>
+  </body></html>`);
+  w.document.close();
+}
+
+// --- Ekspor PPTX (PowerPoint asli via PptxGenJS, dimuat dari CDN saat dibutuhkan) ---
+let _pptxgenLoading = null;
+function loadPptxGenJS() {
+  if (window.PptxGenJS) return Promise.resolve();
+  if (_pptxgenLoading) return _pptxgenLoading;
+  _pptxgenLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Gagal memuat pustaka PPTX dari CDN'));
+    document.head.appendChild(s);
+  });
+  return _pptxgenLoading;
+}
+
+async function unduhKinerjaPPTX() {
+  const data = buildKinerjaData(KINERJA_STATE.periode, KINERJA_STATE.tw, KINERJA_STATE.pptk);
+  if (data.count === 0) { showToast('Belum ada data untuk filter ini','error'); return; }
+  showToast('Menyiapkan file PPTX...','success');
+  try { await loadPptxGenJS(); } catch(e) { showToast(e.message,'error'); return; }
+
+  const pct = data.totalPagu>0 ? (data.totalReal/data.totalPagu*100) : 0;
+  const narasiTxt = buildKinerjaNarasi(data, KINERJA_STATE.pptk).replace(/<\/?b>/g,'');
+  const progArr = Object.values(data.programs);
+  const pptkLabel = KINERJA_STATE.pptk || 'Seluruh PPTK (Rekap SKPD)';
+  const C_BLUE = '1A56DB', C_DARK = '0F172A', C_MUTE = '64748B';
+
+  const pres = new window.PptxGenJS();
+  pres.defineLayout({ name: 'WIDE', width: 13.33, height: 7.5 });
+  pres.layout = 'WIDE';
+
+  // Slide 1: Cover
+  let s = pres.addSlide();
+  s.background = { color: 'FFFFFF' };
+  s.addText('SIANGGARAN — SISTEM INFORMASI ANGGARAN SKPD', { x:0.6, y:0.5, w:12, h:0.4, fontSize:12, bold:true, color:C_BLUE, charSpacing:1 });
+  s.addText(`Laporan Kinerja ${KINERJA_STATE.periode==='tahunan'?'Tahunan':'Triwulanan'}`, { x:0.6, y:2.6, w:12, h:1, fontSize:36, bold:true, color:C_DARK });
+  s.addText(data.label, { x:0.6, y:3.5, w:12, h:0.6, fontSize:18, color:C_MUTE });
+  s.addText(pptkLabel, { x:0.6, y:4.05, w:12, h:0.5, fontSize:14, color:C_MUTE });
+  s.addText('Bagian Perekonomian dan Sumber Daya Alam — Sekretariat Daerah Kota Batu', { x:0.6, y:6.9, w:12, h:0.4, fontSize:10, color:C_MUTE });
+
+  // Slide 2: Ringkasan Analisis
+  s = pres.addSlide();
+  s.addText('RINGKASAN ANALISIS', { x:0.6, y:0.4, w:12, h:0.4, fontSize:12, bold:true, color:C_BLUE });
+  s.addText(`Capaian Kinerja ${data.label}`, { x:0.6, y:0.8, w:12, h:0.6, fontSize:24, bold:true, color:C_DARK });
+  const statLbl = ['Pagu Anggaran','Realisasi','Capaian','Sisa Anggaran'];
+  const statVal = ['Rp '+fmt(data.totalPagu), 'Rp '+fmt(data.totalReal), fmtPct(pct), 'Rp '+fmt(data.totalPagu-data.totalReal)];
+  statLbl.forEach((lbl,i) => {
+    const x = 0.6 + i*3.05;
+    s.addShape('roundRect', { x, y:1.7, w:2.85, h:1.15, fill:{color:'F8FAFC'}, line:{color:'E2E8F0',width:1}, rectRadius:0.08 });
+    s.addText(lbl.toUpperCase(), { x:x+0.15, y:1.78, w:2.6, h:0.3, fontSize:9, color:C_MUTE, bold:true });
+    s.addText(statVal[i], { x:x+0.15, y:2.1, w:2.6, h:0.6, fontSize:18, bold:true, color:C_DARK });
+  });
+  s.addText(narasiTxt, { x:0.6, y:3.3, w:12.1, h:3.4, fontSize:15, color:'1E293B', lineSpacing:26, fill:{color:'F8FAFC'}, inset:0.25 });
+
+  // Slide 3: Infografis (chart native pptxgenjs)
+  s = pres.addSlide();
+  s.addText('INFOGRAFIS', { x:0.6, y:0.4, w:12, h:0.4, fontSize:12, bold:true, color:C_BLUE });
+  s.addText('Capaian per Program & Sumber Dana', { x:0.6, y:0.8, w:12, h:0.6, fontSize:22, bold:true, color:C_DARK });
+  const progChartData = [{
+    name: 'Capaian (%)',
+    labels: progArr.map(p=>trunc(p.nama,28)),
+    values: progArr.map(p=>Math.round((p.pagu>0?p.real/p.pagu*100:0)*10)/10),
+  }];
+  s.addChart(pres.ChartType.bar, progChartData, {
+    x:0.6, y:1.5, w:6.0, h:5.4, barDir:'bar', chartColors:[C_BLUE],
+    showValue:true, dataLabelPosition:'outEnd', valAxisMaxVal:100,
+    catAxisLabelFontSize:9, dataLabelFontSize:9, showLegend:false,
+  });
+  const sdArr2 = Object.entries(data.bySumberDana);
+  const sdChartData = [{
+    name: 'Realisasi',
+    labels: sdArr2.map(([sd])=>sd),
+    values: sdArr2.map(([,v])=>v.real),
+  },{
+    name: 'Pagu',
+    labels: sdArr2.map(([sd])=>sd),
+    values: sdArr2.map(([,v])=>v.pagu),
+  }];
+  s.addChart(pres.ChartType.bar, sdChartData, {
+    x:6.9, y:1.5, w:5.8, h:5.4, barDir:'col', chartColors:[C_BLUE,'CBD5E1'],
+    showValue:false, catAxisLabelFontSize:9, showLegend:true, legendPos:'b',
+  });
+
+  // Slide per Program: tabel rincian
+  progArr.forEach(p => {
+    const rows = [['Kegiatan','Sub Kegiatan','Belanja','Sbr Dana','Pagu','Realisasi','Capaian','Sisa'].map(h=>({text:h, options:{bold:true, fill:{color:'EFF4FB'}, fontSize:9}}))];
+    Object.values(p.kegiatan).forEach(k => {
+      Object.values(k.subkeg).forEach(sk => {
+        sk.belanja.forEach(b => {
+          rows.push([
+            {text: trunc(k.nama,22), options:{fontSize:8}},
+            {text: trunc(sk.nama,26), options:{fontSize:8}},
+            {text: trunc(b.nama,26), options:{fontSize:8}},
+            {text: b.sumber_dana||'-', options:{fontSize:8, align:'center'}},
+            {text: fmt(b.pagu), options:{fontSize:8, align:'right'}},
+            {text: fmt(b.real), options:{fontSize:8, align:'right'}},
+            {text: fmtPct(b.capaian), options:{fontSize:8, align:'center'}},
+            {text: fmt(b.sisa), options:{fontSize:8, align:'right'}},
+          ]);
+        });
+      });
+    });
+    // Batasi maksimal 16 baris data per slide agar tabel tidak meluber; sisanya dipotong dengan catatan.
+    const maxRows = 16;
+    const chunks = [];
+    const dataRows = rows.slice(1);
+    for (let i=0;i<dataRows.length;i+=maxRows) chunks.push(dataRows.slice(i,i+maxRows));
+    if (chunks.length === 0) chunks.push([]);
+    chunks.forEach((chunk, ci) => {
+      const sl = pres.addSlide();
+      const pPct = p.pagu>0 ? p.real/p.pagu*100 : 0;
+      sl.addText('📁 ' + trunc(p.nama,70) + (chunks.length>1?` (lanjutan ${ci+1}/${chunks.length})`:''), { x:0.5, y:0.35, w:12.3, h:0.5, fontSize:16, bold:true, color:C_DARK });
+      sl.addText(`Pagu Rp ${fmt(p.pagu)} · Realisasi Rp ${fmt(p.real)} · Capaian ${fmtPct(pPct)}`, { x:0.5, y:0.82, w:12.3, h:0.35, fontSize:11, color:C_MUTE });
+      sl.addTable([rows[0], ...chunk], { x:0.5, y:1.3, w:12.3, colW:[1.7,2.1,2.1,0.9,1.5,1.5,0.9,1.6], border:{type:'solid', color:'E2E8F0', pt:0.5}, autoPage:false });
+    });
+  });
+
+  const fname = `Laporan_Kinerja_${(KINERJA_STATE.periode==='tahunan'?'Tahunan':'TW'+KINERJA_STATE.tw)}_${STATE.tahun}${KINERJA_STATE.pptk ? '_'+KINERJA_STATE.pptk.replace(/[^a-zA-Z0-9]+/g,'_') : ''}.pptx`;
+  try {
+    await pres.writeFile({ fileName: fname });
+    showToast('File PPTX berhasil diunduh ✅');
+  } catch(e) {
+    showToast('Gagal membuat PPTX: '+e.message, 'error');
+  }
 }
 
 // ========================================
