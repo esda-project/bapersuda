@@ -26111,6 +26111,7 @@ function renderKas() {
 <div class="page-header">
   <h2>💰 Anggaran Kas</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-outline" onclick="kasCetakPerKegiatan()">🖨️ Cetak per Kegiatan</button>
     <button class="btn btn-outline" onclick="kasExportRekap()">📊 Rekap Semua</button>
     <button class="btn btn-blue" onclick="kasSimPanAll()">💾 Simpan Semua</button>
   </div>
@@ -26445,6 +26446,228 @@ function kasExportRekap() {
   });
   html += `</tbody></table></div>`;
   openPrintWindow(html, `Rekap Kas ${tahapan} TA ${STATE.tahun}`);
+}
+
+// ── Cetak Anggaran Kas per Kegiatan / Sub Kegiatan / Belanja (1 Tahun Anggaran) ──
+const BULAN_FULL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+// Nama level rekening (kelompok/jenis/objek) yang sudah standar & pasti (Bagan Akun Standar).
+// Level "rincian objek" (5 segmen) yang tidak terdaftar di sini akan diturunkan otomatis
+// dari kata-kata yang sama pada nama_belanja anak-anaknya di MASTER.belanja.
+const REKENING_HIERARCHY_NAMES = {
+  '5.1': 'BELANJA OPERASI',
+  '5.2': 'BELANJA MODAL',
+  '5.1.01': 'Belanja Pegawai',
+  '5.1.02': 'Belanja Barang dan Jasa',
+  '5.1.03': 'Belanja Bunga',
+  '5.1.04': 'Belanja Subsidi',
+  '5.1.05': 'Belanja Hibah',
+  '5.1.06': 'Belanja Bantuan Sosial',
+  '5.2.01': 'Belanja Modal Tanah',
+  '5.2.02': 'Belanja Modal Peralatan dan Mesin',
+  '5.2.03': 'Belanja Modal Gedung dan Bangunan',
+  '5.2.04': 'Belanja Modal Jalan, Jaringan, dan Irigasi',
+  '5.2.05': 'Belanja Modal Aset Tetap Lainnya',
+  '5.2.06': 'Belanja Modal Aset Lainnya',
+  '5.1.02.01': 'Belanja Barang',
+  '5.1.02.02': 'Belanja Jasa',
+  '5.1.02.03': 'Belanja Pemeliharaan',
+  '5.1.02.04': 'Belanja Perjalanan Dinas',
+  '5.1.02.05': 'Belanja Barang untuk Diserahkan kepada Masyarakat/Pihak Ketiga',
+  '5.1.02.01.001': 'Belanja Barang Pakai Habis',
+  '5.1.02.02.001': 'Belanja Jasa Kantor',
+};
+
+// Ambil kata-kata awal yang sama persis dari sekumpulan nama_belanja untuk dipakai
+// sebagai label baris subtotal rincian objek yang belum ada di REKENING_HIERARCHY_NAMES.
+function deriveGroupLabel(names) {
+  const uniq = [...new Set(names.filter(Boolean))];
+  if (uniq.length === 0) return '';
+  if (uniq.length === 1) return uniq[0].split('-')[0].trim();
+  const wordsArr = uniq.map(n => n.split(' '));
+  let i = 0;
+  cari: while (true) {
+    const w0 = wordsArr[0][i];
+    if (w0 === undefined) break;
+    for (const arr of wordsArr) { if (arr[i] !== w0) break cari; }
+    i++;
+  }
+  let prefix = wordsArr[0].slice(0, i).join(' ').trim();
+  if (prefix.includes('-')) prefix = prefix.split('-')[0].trim();
+  return prefix;
+}
+
+function buildKasRekeningLabelCache() {
+  if (window._kasRekLabelCache) return window._kasRekLabelCache;
+  const lvl5Names = {};
+  (MASTER.belanja || []).forEach(b => {
+    const segs = (b.kode_belanja || '').split('.');
+    if (segs.length < 5) return;
+    const key5 = segs.slice(0, 5).join('.');
+    (lvl5Names[key5] = lvl5Names[key5] || []).push(b.nama_belanja);
+  });
+  const lvl5Label = {};
+  Object.keys(lvl5Names).forEach(k => { lvl5Label[k] = deriveGroupLabel(lvl5Names[k]); });
+  window._kasRekLabelCache = { lvl5Label };
+  return window._kasRekLabelCache;
+}
+
+function kasHierLabel(prefix) {
+  if (REKENING_HIERARCHY_NAMES[prefix]) return REKENING_HIERARCHY_NAMES[prefix];
+  if (prefix.split('.').length === 5) {
+    const { lvl5Label } = buildKasRekeningLabelCache();
+    if (lvl5Label[prefix]) return lvl5Label[prefix];
+  }
+  return prefix;
+}
+
+// Bandingkan kode rekening/belanja segmen demi segmen secara numerik (bukan alfabetis)
+function compareKodeSegments(a, b) {
+  const pa = (a || '').split('.'), pb = (b || '').split('.');
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] !== undefined ? parseInt(pa[i], 10) : -1;
+    const nb = pb[i] !== undefined ? parseInt(pb[i], 10) : -1;
+    if (na !== nb) return na - nb;
+  }
+  return 0;
+}
+
+function kasCetakRowHTML(kode, uraian, pagu, totalRAK, monthly, isHeader, level) {
+  const boldStyle = isHeader ? 'font-weight:700;' : '';
+  const indent = (level - 2) * 14;
+  return `<tr>
+    <td class="mono" style="${boldStyle}white-space:nowrap">${escHtml(kode)}</td>
+    <td style="${boldStyle}padding-left:${indent}px">${escHtml(uraian)}</td>
+    <td class="right mono" style="${boldStyle}">${fmt(pagu)}</td>
+    <td class="right mono" style="${boldStyle}">${fmt(totalRAK)}</td>
+    ${monthly.map(v => `<td class="right mono" style="${boldStyle}">${fmt(v)}</td>`).join('')}
+  </tr>`;
+}
+
+function kasCetakTableHeadHTML() {
+  return `<tr>
+      <th rowspan="3">Kode Rekening</th><th rowspan="3">Uraian</th>
+      <th rowspan="3">Anggaran Tahun Ini</th><th rowspan="3">Total RAK</th>
+      <th colspan="6" class="center">Semester I</th><th colspan="6" class="center">Semester II</th>
+    </tr>
+    <tr>
+      <th colspan="3" class="center">Triwulan I</th><th colspan="3" class="center">Triwulan II</th>
+      <th colspan="3" class="center">Triwulan III</th><th colspan="3" class="center">Triwulan IV</th>
+    </tr>
+    <tr>
+      ${BULAN_FULL.map(b => `<th class="center">${b}</th>`).join('')}
+    </tr>`;
+}
+
+// Bangun satu blok laporan (Program/Kegiatan/Sub Kegiatan + tabel rincian) untuk satu Sub Kegiatan
+function kasBuildCetakSectionHTML(grp, store) {
+  const rows = grp.rows.slice().sort((a, b) => compareKodeSegments(a.kode_belanja, b.kode_belanja));
+
+  // Hitung nilai tiap baris & agregasi per level kode (2,3,4,5 segmen)
+  const levelAgg = { 2: {}, 3: {}, 4: {}, 5: {} };
+  const rowCalc = rows.map(a => {
+    const pagu = getPagu(a);
+    const monthly = BULAN.map((_, m) => (store[a.kode_rekening] || {})[m] || 0);
+    const totalRAK = monthly.reduce((s, v) => s + v, 0);
+    const segs = (a.kode_belanja || a.kode_rekening || '').split('.');
+    [2, 3, 4, 5].forEach(len => {
+      const key = segs.slice(0, len).join('.');
+      if (!levelAgg[len][key]) levelAgg[len][key] = { pagu: 0, totalRAK: 0, monthly: Array(12).fill(0) };
+      const agg = levelAgg[len][key];
+      agg.pagu += pagu; agg.totalRAK += totalRAK;
+      monthly.forEach((v, i) => { agg.monthly[i] += v; });
+    });
+    return { a, pagu, monthly, totalRAK, segs };
+  });
+
+  const nilaiAnggaran = rowCalc.reduce((s, r) => s + r.pagu, 0);
+
+  // Susun baris tabel: header subtotal per level (2→3→4→5) muncul begitu kode-nya berubah,
+  // baru diikuti baris rincian belanja (leaf) itu sendiri.
+  const lastKey = { 2: null, 3: null, 4: null, 5: null };
+  let bodyHtml = '';
+  rowCalc.forEach(r => {
+    [2, 3, 4, 5].forEach(len => {
+      const key = r.segs.slice(0, len).join('.');
+      if (key !== lastKey[len]) {
+        lastKey[len] = key;
+        const agg = levelAgg[len][key];
+        bodyHtml += kasCetakRowHTML(key, kasHierLabel(key), agg.pagu, agg.totalRAK, agg.monthly, true, len);
+      }
+    });
+    bodyHtml += kasCetakRowHTML(r.a.kode_belanja || r.a.kode_rekening, r.a.nama_belanja || '', r.pagu, r.totalRAK, r.monthly, false, 6);
+  });
+
+  // Baris jumlah alokasi kas (per bulan / per triwulan / per semester) untuk seluruh sub kegiatan ini
+  const grandMonthly = Array(12).fill(0);
+  rowCalc.forEach(r => r.monthly.forEach((v, i) => { grandMonthly[i] += v; }));
+  const grandTotalRAK = grandMonthly.reduce((s, v) => s + v, 0);
+
+  const footerHtml = `
+    <tr class="total-row"><td colspan="2">JUMLAH ALOKASI KAS YANG TERSEDIA DARI BELANJA PER BULAN</td>
+      <td class="right mono">${fmt(nilaiAnggaran)}</td><td class="right mono">${fmt(grandTotalRAK)}</td>
+      ${grandMonthly.map(v => `<td class="right mono">${fmt(v)}</td>`).join('')}
+    </tr>
+    <tr class="total-row"><td colspan="2">JUMLAH ALOKASI KAS YANG TERSEDIA DARI BELANJA PER TRIWULAN</td>
+      <td class="right mono">${fmt(nilaiAnggaran)}</td><td class="right mono">${fmt(grandTotalRAK)}</td>
+      ${[0, 1, 2, 3].map(t => {
+        const tot = KAS_TW_BULAN[t].reduce((s, m) => s + grandMonthly[m], 0);
+        return `<td colspan="3" class="right mono">${fmt(tot)}</td>`;
+      }).join('')}
+    </tr>
+    <tr class="total-row"><td colspan="2">JUMLAH ALOKASI KAS YANG TERSEDIA DARI BELANJA PER SEMESTER</td>
+      <td class="right mono">${fmt(nilaiAnggaran)}</td><td class="right mono">${fmt(grandTotalRAK)}</td>
+      ${[0, 1].map(s => {
+        const months = s === 0 ? [0,1,2,3,4,5] : [6,7,8,9,10,11];
+        const tot = months.reduce((sum, m) => sum + grandMonthly[m], 0);
+        return `<td colspan="6" class="right mono">${fmt(tot)}</td>`;
+      }).join('')}
+    </tr>`;
+
+  return `<div class="section" style="margin-bottom:24px">
+    <div style="font-size:11px;margin-bottom:10px;line-height:1.7">
+      <div><b>Program</b>&nbsp;&nbsp;: ${escHtml(grp.kode_program || '')} - ${escHtml(grp.program || '')}</div>
+      <div><b>Kegiatan</b>&nbsp;&nbsp;: ${escHtml(grp.kode_kegiatan || '')} - ${escHtml(grp.kegiatan || '')}</div>
+      <div><b>Sub Kegiatan</b>&nbsp;&nbsp;: ${escHtml(grp.kode_sub_kegiatan || '')} - ${escHtml(grp.sub_kegiatan || '')}</div>
+      <div><b>Nilai Anggaran</b>&nbsp;&nbsp;: Rp${fmt(nilaiAnggaran)}</div>
+    </div>
+    <table>
+      <thead>${kasCetakTableHeadHTML()}</thead>
+      <tbody>${bodyHtml}${footerHtml}</tbody>
+    </table>
+  </div>`;
+}
+
+// Cetak Anggaran Kas satu Tahun Anggaran penuh, dikelompokkan per Kegiatan > Sub Kegiatan > Belanja
+function kasCetakPerKegiatan() {
+  const allData = getFilteredAnggaranForKas();
+  if (!allData.length) { showToast('Tidak ada data anggaran untuk dicetak.', 'error'); return; }
+  const tahapan = getKasTahapan();
+  const store = getKasStore(tahapan);
+
+  const bySub = {};
+  allData.forEach(a => {
+    const k = a.kode_sub_kegiatan || '-';
+    if (!bySub[k]) bySub[k] = {
+      program: a.program, kode_program: a.kode_program,
+      kegiatan: a.kegiatan, kode_kegiatan: a.kode_kegiatan,
+      sub_kegiatan: a.sub_kegiatan, kode_sub_kegiatan: k, rows: []
+    };
+    bySub[k].rows.push(a);
+  });
+
+  const groups = Object.values(bySub).sort((x, y) => (x.kode_sub_kegiatan || '').localeCompare(y.kode_sub_kegiatan || ''));
+  const sectionsHtml = groups.map((grp, i) =>
+    kasBuildCetakSectionHTML(grp, store) + (i < groups.length - 1 ? '<div class="page-break"></div>' : '')
+  ).join('');
+
+  const html = buildPrintHeader(
+    `RENCANA ANGGARAN KAS — TA ${STATE.tahun} (${tahapan})`,
+    `Dicetak: ${new Date().toLocaleDateString('id-ID', {day:'2-digit',month:'long',year:'numeric'})}, ${new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}${isUserPPTK() ? ' · PPTK: ' + getPPTKNama() : ''}`
+  ) + sectionsHtml;
+
+  openPrintWindow(html, `Rencana Anggaran Kas TA ${STATE.tahun}`);
 }
 
 // Fungsi lama — tetap ada untuk kompatibilitas
