@@ -25916,7 +25916,7 @@ const KAS_TW_LABEL = ['TW I (Jan–Mar)','TW II (Apr–Jun)','TW III (Jul–Sep)
 const KAS_TW_SHORT = ['TW I','TW II','TW III','TW IV'];
 
 // STATE tambahan untuk UI kas — tidak disimpan ke Supabase
-if (!window._kasUI) window._kasUI = { tw: 1, rekIdx: 0, tahapan: null };
+if (!window._kasUI) window._kasUI = { tw: 1, rekIdx: 0, tahapan: null, sortBy: 'default', search: '' };
 
 function getKasTahapan() {
   return window._kasUI.tahapan || STATE.tahapan || 'Murni';
@@ -25949,29 +25949,146 @@ function getTotalKasRek(store, kodeRek) {
   return BULAN.reduce((s, _, m) => s + (kas[m] || 0), 0);
 }
 
+// ── Pencarian & pengurutan daftar rekening di menu Anggaran Kas ──
+function kasMatchSearch(a, q) {
+  if (!q) return true;
+  const hay = [a.kode_rekening, a.nama_belanja, a.kegiatan, a.sub_kegiatan, a.pptk, a.sumber_dana]
+    .filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(q.toLowerCase());
+}
+
+// Daftar rekening yang ditampilkan di sidebar & yang menjadi acuan indeks (rekIdx):
+// sudah difilter kata kunci pencarian dan diurutkan sesuai pilihan sort aktif.
+// (Simpan Semua / Rekap Semua tetap memakai getFilteredAnggaranForKas() — tidak
+// dibatasi oleh kata kunci pencarian — supaya tidak ada data yang terlewat.)
+function getKasDisplayList() {
+  const tahapan = getKasTahapan();
+  const store   = getKasStore(tahapan);
+  const tw      = window._kasUI.tw || 1;
+  const q       = (window._kasUI.search || '').trim();
+  const sortBy  = window._kasUI.sortBy || 'default';
+
+  let list = getFilteredAnggaranForKas().slice();
+  if (q) list = list.filter(a => kasMatchSearch(a, q));
+
+  if (sortBy === 'kegiatan') {
+    list.sort((a,b) =>
+      (a.kegiatan||'').localeCompare(b.kegiatan||'') ||
+      (a.sub_kegiatan||'').localeCompare(b.sub_kegiatan||'') ||
+      (a.nama_belanja||'').localeCompare(b.nama_belanja||''));
+  } else if (sortBy === 'subkegiatan') {
+    list.sort((a,b) =>
+      (a.sub_kegiatan||'').localeCompare(b.sub_kegiatan||'') ||
+      (a.nama_belanja||'').localeCompare(b.nama_belanja||''));
+  } else if (sortBy === 'triwulan') {
+    list.sort((a,b) =>
+      getKasTW(store, b.kode_rekening, tw) - getKasTW(store, a.kode_rekening, tw) ||
+      (a.nama_belanja||'').localeCompare(b.nama_belanja||''));
+  }
+  return list;
+}
+
+function kasSetSearch(val) {
+  window._kasUI.search = val;
+  window._kasUI.rekIdx = 0;
+  kasRefreshDisplay();
+}
+function kasSetSort(val) {
+  window._kasUI.sortBy = val;
+  window._kasUI.rekIdx = 0;
+  kasRefreshDisplay();
+}
+function kasClearSearch() {
+  window._kasUI.search = '';
+  window._kasUI.rekIdx = 0;
+  showPage('kas');
+}
+// Refresh hanya sidebar & panel utama (tanpa render ulang seluruh halaman),
+// supaya fokus/kursor pada kotak pencarian tidak hilang saat mengetik.
+function kasRefreshDisplay() {
+  const kasData  = getKasDisplayList();
+  const tahapan  = getKasTahapan();
+  const tw       = window._kasUI.tw || 1;
+  const rekIdx   = kasData.length ? Math.min(window._kasUI.rekIdx || 0, kasData.length - 1) : 0;
+  window._kasUI.rekIdx = rekIdx;
+
+  const countEl = document.getElementById('kasRekCount');
+  if (countEl) countEl.textContent = kasData.length + ' REKENING BELANJA' + (window._kasUI.search ? ' (hasil pencarian)' : '');
+
+  const listEl = document.getElementById('kasRekListInner');
+  if (listEl) listEl.innerHTML = kasData.length
+    ? kasBuildRekListHTML(kasData, tahapan, rekIdx)
+    : '<div style="padding:16px 4px;font-size:12px;color:var(--c-text-muted);text-align:center">Tidak ada hasil untuk pencarian ini.</div>';
+
+  const panelEl = document.getElementById('kasMainPanelBox');
+  if (panelEl) panelEl.innerHTML = kasData.length
+    ? kasBuildMainPanelHTML(kasData, rekIdx, tahapan, tw)
+    : kasEmptySearchPanel();
+}
+
+function kasEmptySearchPanel() {
+  return `<div class="empty-state" style="margin-top:20px">
+    <div class="empty-icon">🔍</div>
+    <p>Tidak ditemukan rekening yang cocok dengan pencarian "<b>${escHtml(window._kasUI.search||'')}</b>".</p>
+    <button class="btn btn-outline" style="margin-top:8px" onclick="kasClearSearch()">✕ Hapus pencarian</button>
+  </div>`;
+}
+
+// Bangun daftar rekening di sidebar — dipakai saat render penuh maupun refresh parsial
+function kasBuildRekListHTML(kasData, tahapan, rekIdx) {
+  const sortBy = window._kasUI.sortBy || 'default';
+  const tw     = window._kasUI.tw || 1;
+  const store  = getKasStore(tahapan);
+  let lastGroupKey = null;
+  let html = '';
+  kasData.forEach((a, i) => {
+    if (sortBy === 'kegiatan' || sortBy === 'subkegiatan') {
+      const groupKey = sortBy === 'kegiatan' ? (a.kegiatan || '(Tanpa Kegiatan)') : (a.sub_kegiatan || '(Tanpa Sub Kegiatan)');
+      if (groupKey !== lastGroupKey) {
+        lastGroupKey = groupKey;
+        html += `<div style="font-size:10px;font-weight:700;color:var(--c-primary);text-transform:uppercase;
+          padding:8px 2px 4px;margin-top:${i>0?'4px':'0'};${i>0?'border-top:1px solid var(--c-border)':''}">${escHtml(groupKey)}</div>`;
+      }
+    }
+    const tot = getTotalKasRek(store, a.kode_rekening);
+    const p   = getPagu(a);
+    const pctR = p > 0 ? Math.min(tot/p*100,100) : 0;
+    const isActive = i === rekIdx;
+    const statusColor = pctR >= 90 ? 'var(--c-success)' : pctR > 0 ? '#BA7517' : 'var(--c-text-muted)';
+    const twBadge = sortBy === 'triwulan'
+      ? `<div style="font-size:10px;color:var(--c-primary);margin-top:2px">${KAS_TW_SHORT[tw-1]}: ${fmt(getKasTW(store, a.kode_rekening, tw))}</div>`
+      : '';
+    html += `<div onclick="kasSetRek(${i})" style="
+      padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;
+      background:${isActive?'var(--c-primary-light)':'transparent'};
+      border:1px solid ${isActive?'var(--c-primary)':'transparent'};
+      transition:all .15s
+    ">
+      <div style="font-size:11px;font-weight:600;color:${isActive?'var(--c-primary)':'var(--c-text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escHtml(a.nama_belanja||'')}">${escHtml((a.nama_belanja||'').split('-')[0])}</div>
+      <div style="font-size:10px;color:var(--c-text-muted);margin-top:2px">${fmt(p)}</div>
+      <div style="height:3px;border-radius:2px;background:var(--c-border);margin-top:5px;overflow:hidden">
+        <div style="height:100%;width:${pctR}%;background:${statusColor};border-radius:2px"></div>
+      </div>
+      <div style="font-size:10px;margin-top:2px;color:${statusColor}">${tot>0?fmt(tot)+' ('+Math.round(pctR)+'%)':'Belum diisi'}</div>
+      ${twBadge}
+    </div>`;
+  });
+  return html;
+}
+
 function renderKas() {
-  const kasData = getFilteredAnggaranForKas();
-  if (kasData.length === 0) return `<div class="empty-state" style="margin-top:60px">
+  const baseData = getFilteredAnggaranForKas();
+  if (baseData.length === 0) return `<div class="empty-state" style="margin-top:60px">
     <div class="empty-icon">💰</div>
     <p>${isUserPPTK() ? 'Tidak ada data anggaran untuk PPTK: '+getPPTKNama() : 'Input data anggaran terlebih dahulu sebelum mengisi anggaran kas.'}</p>
   </div>`;
 
+  const kasData = getKasDisplayList();
   const tahapan = getKasTahapan();
-  const store   = getKasStore(tahapan);
   const tw      = window._kasUI.tw || 1;
-  const rekIdx  = Math.min(window._kasUI.rekIdx || 0, kasData.length - 1);
-  const rek     = kasData[rekIdx];
-  const pagu    = getPagu(rek);
-
-  // Hitung total kas semua TW yang sudah diisi untuk rekening ini
-  const kasRek  = store[rek.kode_rekening] || {};
-  const twTotals = [1,2,3,4].map(t => getKasTW(store, rek.kode_rekening, t));
-  const totalKasDiisi = twTotals.reduce((s,v) => s+v, 0);
-  const totalTWLainnya = twTotals.reduce((s,v,i) => i+1 !== tw ? s+v : s, 0);
-  const twNominal = getKasTW(store, rek.kode_rekening, tw);
-  const sisaPagu  = pagu - totalKasDiisi;
-  const pct = pagu > 0 ? Math.min(totalKasDiisi / pagu * 100, 100) : 0;
-  const pctColor = pct >= 90 ? 'var(--c-success)' : pct >= 50 ? '#BA7517' : 'var(--c-danger)';
+  const sortBy  = window._kasUI.sortBy || 'default';
+  const rekIdx  = kasData.length ? Math.min(window._kasUI.rekIdx || 0, kasData.length - 1) : 0;
+  window._kasUI.rekIdx = rekIdx;
 
   // Deskripsi & aturan per tahapan
   const tahapanInfo = {
@@ -25990,30 +26107,78 @@ function renderKas() {
     </button>`;
   }).join('');
 
-  // Daftar rekening di sidebar kiri
-  const rekList = kasData.map((a, i) => {
-    const s = getKasStore(tahapan);
-    const tot = getTotalKasRek(s, a.kode_rekening);
-    const p   = getPagu(a);
-    const pctR = p > 0 ? Math.min(tot/p*100,100) : 0;
-    const isActive = i === rekIdx;
-    const statusColor = pctR >= 90 ? 'var(--c-success)' : pctR > 0 ? '#BA7517' : 'var(--c-text-muted)';
-    return `<div onclick="kasSetRek(${i})" style="
-      padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;
-      background:${isActive?'var(--c-primary-light)':'transparent'};
-      border:1px solid ${isActive?'var(--c-primary)':'transparent'};
-      transition:all .15s
-    ">
-      <div style="font-size:11px;font-weight:600;color:${isActive?'var(--c-primary)':'var(--c-text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${a.nama_belanja}">${a.nama_belanja.split('-')[0]}</div>
-      <div style="font-size:10px;color:var(--c-text-muted);margin-top:2px">${fmt(p)}</div>
-      <div style="height:3px;border-radius:2px;background:var(--c-border);margin-top:5px;overflow:hidden">
-        <div style="height:100%;width:${pctR}%;background:${statusColor};border-radius:2px"></div>
-      </div>
-      <div style="font-size:10px;margin-top:2px;color:${statusColor}">${tot>0?fmt(tot)+' ('+Math.round(pctR)+'%)':'Belum diisi'}</div>
-    </div>`;
-  }).join('');
+  return `
+<div class="page-header">
+  <h2>💰 Anggaran Kas</h2>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-outline" onclick="kasExportRekap()">📊 Rekap Semua</button>
+    <button class="btn btn-blue" onclick="kasSimPanAll()">💾 Simpan Semua</button>
+  </div>
+</div>
 
-  // Grid TW selector
+${isUserPPTK()?`<div class="section-card" style="padding:8px 14px;margin-bottom:10px;background:var(--c-primary-light);border-color:var(--c-primary)">
+  <div style="font-size:12px;color:var(--c-primary)">🔒 Mode PPTK — <b>${getPPTKNama()}</b></div>
+</div>`:''}
+
+<div class="section-card" style="padding:10px 14px;margin-bottom:12px">
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--c-text-muted)">Tahapan aktif:</span>
+    ${tahapanOpts}
+    <div style="margin-left:auto;padding:4px 10px;border-radius:6px;font-size:12px;
+      background:${tahapanInfo.color}1a;color:${tahapanInfo.color};border:1px solid ${tahapanInfo.color}44">
+      ${tahapanInfo.icon} ${tahapanInfo.desc}
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start">
+
+  <!-- Sidebar daftar rekening -->
+  <div class="section-card" style="padding:10px;max-height:75vh;overflow-y:auto">
+    <div style="margin-bottom:8px">
+      <input type="text" id="kasSearchBox" class="search-input" style="width:100%;margin-bottom:6px;box-sizing:border-box"
+        placeholder="🔍 Cari kode/nama/kegiatan/sub kegiatan..."
+        value="${escHtml(window._kasUI.search||'')}"
+        oninput="kasSetSearch(this.value)">
+      <select class="form-input" style="width:100%;font-size:11px;box-sizing:border-box" onchange="kasSetSort(this.value)">
+        <option value="default" ${sortBy==='default'?'selected':''}>Urutan asli</option>
+        <option value="kegiatan" ${sortBy==='kegiatan'?'selected':''}>Urutkan per Kegiatan</option>
+        <option value="subkegiatan" ${sortBy==='subkegiatan'?'selected':''}>Urutkan per Sub Kegiatan</option>
+        <option value="triwulan" ${sortBy==='triwulan'?'selected':''}>Urutkan per Triwulan (TW aktif)</option>
+      </select>
+    </div>
+    <div id="kasRekCount" style="font-size:11px;font-weight:600;color:var(--c-text-muted);margin-bottom:8px;padding:0 2px">
+      ${kasData.length} REKENING BELANJA${window._kasUI.search?' (hasil pencarian)':''}
+    </div>
+    <div id="kasRekListInner">
+      ${kasData.length ? kasBuildRekListHTML(kasData, tahapan, rekIdx) : '<div style="padding:16px 4px;font-size:12px;color:var(--c-text-muted);text-align:center">Tidak ada hasil untuk pencarian ini.</div>'}
+    </div>
+  </div>
+
+  <!-- Panel utama -->
+  <div id="kasMainPanelBox">
+    ${kasData.length ? kasBuildMainPanelHTML(kasData, rekIdx, tahapan, tw) : kasEmptySearchPanel()}
+  </div>
+</div>`;
+}
+
+// Bangun panel utama (header rekening, selector TW, input bulan, riwayat, navigasi)
+// Dipisah dari renderKas() supaya bisa di-refresh sendiri saat pencarian/sort berubah
+// tanpa merender ulang seluruh halaman (fokus kotak pencarian tetap terjaga).
+function kasBuildMainPanelHTML(kasData, rekIdx, tahapan, tw) {
+  const store   = getKasStore(tahapan);
+  const rek     = kasData[rekIdx];
+  const pagu    = getPagu(rek);
+
+  const kasRek  = store[rek.kode_rekening] || {};
+  const twTotals = [1,2,3,4].map(t => getKasTW(store, rek.kode_rekening, t));
+  const totalKasDiisi = twTotals.reduce((s,v) => s+v, 0);
+  const totalTWLainnya = twTotals.reduce((s,v,i) => i+1 !== tw ? s+v : s, 0);
+  const twNominal = getKasTW(store, rek.kode_rekening, tw);
+  const sisaPagu  = pagu - totalKasDiisi;
+  const pct = pagu > 0 ? Math.min(totalKasDiisi / pagu * 100, 100) : 0;
+  const pctColor = pct >= 90 ? 'var(--c-success)' : pct >= 50 ? '#BA7517' : 'var(--c-danger)';
+
   const twCards = [1,2,3,4].map(t => {
     const nom = getKasTW(store, rek.kode_rekening, t);
     const isActive = t === tw;
@@ -26055,9 +26220,9 @@ function renderKas() {
     if (!s || !s[rek.kode_rekening]) return '';
     const tot = getTotalKasRek(s, rek.kode_rekening);
     if (tot === 0) return '';
-    const twInfo = [1,2,3,4].map(tw => {
-      const n = getKasTW(s, rek.kode_rekening, tw);
-      return n > 0 ? `${KAS_TW_SHORT[tw-1]}: ${fmt(n)}` : '';
+    const twInfo = [1,2,3,4].map(tw2 => {
+      const n = getKasTW(s, rek.kode_rekening, tw2);
+      return n > 0 ? `${KAS_TW_SHORT[tw2-1]}: ${fmt(n)}` : '';
     }).filter(Boolean).join(' · ');
     const isActive = (tahapan === t) || (tahapan.startsWith('Pergeseran') && t === 'Pergeseran');
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--c-border);font-size:12px">
@@ -26071,41 +26236,6 @@ function renderKas() {
   }).filter(Boolean).join('');
 
   return `
-<div class="page-header">
-  <h2>💰 Anggaran Kas</h2>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <button class="btn btn-outline" onclick="kasExportRekap()">📊 Rekap Semua</button>
-    <button class="btn btn-blue" onclick="kasSimPanAll()">💾 Simpan Semua</button>
-  </div>
-</div>
-
-${isUserPPTK()?`<div class="section-card" style="padding:8px 14px;margin-bottom:10px;background:var(--c-primary-light);border-color:var(--c-primary)">
-  <div style="font-size:12px;color:var(--c-primary)">🔒 Mode PPTK — <b>${getPPTKNama()}</b></div>
-</div>`:''}
-
-<div class="section-card" style="padding:10px 14px;margin-bottom:12px">
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-    <span style="font-size:12px;color:var(--c-text-muted)">Tahapan aktif:</span>
-    ${tahapanOpts}
-    <div style="margin-left:auto;padding:4px 10px;border-radius:6px;font-size:12px;
-      background:${tahapanInfo.color}1a;color:${tahapanInfo.color};border:1px solid ${tahapanInfo.color}44">
-      ${tahapanInfo.icon} ${tahapanInfo.desc}
-    </div>
-  </div>
-</div>
-
-<div style="display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start">
-
-  <!-- Sidebar daftar rekening -->
-  <div class="section-card" style="padding:10px;max-height:75vh;overflow-y:auto">
-    <div style="font-size:11px;font-weight:600;color:var(--c-text-muted);margin-bottom:8px;padding:0 2px">
-      ${kasData.length} REKENING BELANJA
-    </div>
-    ${rekList}
-  </div>
-
-  <!-- Panel utama -->
-  <div>
     <!-- Header rekening -->
     <div class="section-card" style="padding:12px 16px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
@@ -26113,6 +26243,7 @@ ${isUserPPTK()?`<div class="section-card" style="padding:8px 14px;margin-bottom:
           <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:2px">${rek.kode_rekening}</div>
           <div style="font-size:14px;font-weight:700;color:var(--c-text)">${rek.nama_belanja}</div>
           <div style="font-size:11px;color:var(--c-text-muted);margin-top:2px">${rek.sumber_dana||''} · ${rek.pptk||''}</div>
+          ${rek.kegiatan||rek.sub_kegiatan?`<div style="font-size:10px;color:var(--c-text-muted);margin-top:4px">${rek.kegiatan||''}${rek.kegiatan&&rek.sub_kegiatan?' › ':''}${rek.sub_kegiatan||''}</div>`:''}
         </div>
         <div style="text-align:right">
           <div style="font-size:11px;color:var(--c-text-muted)">Pagu (${tahapan})</div>
@@ -26180,9 +26311,7 @@ ${isUserPPTK()?`<div class="section-card" style="padding:8px 14px;margin-bottom:
       <button class="btn btn-blue" onclick="kasSimPan()" style="font-size:13px;padding:7px 18px">
         💾 Simpan kas rekening ini
       </button>
-    </div>
-  </div>
-</div>`;
+    </div>`;
 }
 
 // ── Fungsi kontrol UI kas ──
@@ -26202,7 +26331,7 @@ function kasSetTW(t) {
 }
 function kasKosongkanTW(tw) {
   if (!confirm('Kosongkan semua nominal ' + KAS_TW_LABEL[tw-1] + ' untuk rekening ini?')) return;
-  const rek = getFilteredAnggaranForKas()[window._kasUI.rekIdx || 0];
+  const rek = getKasDisplayList()[window._kasUI.rekIdx || 0];
   if (!rek) return;
   const store = getKasStore(getKasTahapan());
   if (!store[rek.kode_rekening]) store[rek.kode_rekening] = {};
@@ -26210,7 +26339,7 @@ function kasKosongkanTW(tw) {
   showPage('kas');
 }
 function kasUpdateBulan(bulan, val) {
-  const kasData = getFilteredAnggaranForKas();
+  const kasData = getKasDisplayList();
   const rek = kasData[window._kasUI.rekIdx || 0];
   if (!rek) return;
   const store = getKasStore(getKasTahapan());
@@ -26253,7 +26382,7 @@ function kasUpdateLiveUI(rek, store) {
   }
 }
 async function kasSimPan() {
-  const kasData = getFilteredAnggaranForKas();
+  const kasData = getKasDisplayList();
   const rek = kasData[window._kasUI.rekIdx || 0];
   if (!rek) return;
   const store = getKasStore(getKasTahapan());
