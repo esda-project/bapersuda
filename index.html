@@ -29837,26 +29837,54 @@ function ndTanggalPanjang(str) {
 // ============================================================
 // RENDER NOTA DINAS PPTK — HALAMAN DAFTAR
 // ============================================================
+// Label akun pembuat nota (nama lengkap + username) untuk ditampilkan di daftar/rekap
+function ndAkunLabel(username) {
+  if (!username) return 'Tidak diketahui';
+  const u = (STATE.pengguna || []).find(x => x.username === username);
+  return u ? (u.nama || username) + ' (' + username + ')' : username;
+}
+
+// Filter akun pembuat yang sedang aktif di halaman Nota Dinas PPTK/PPK — '' = semua akun (rekap)
+if (!window._ndFilter) window._ndFilter = { pptk: '', ppk: '' };
+function ndSetFilterAkun(jenis, username) {
+  window._ndFilter[jenis] = username;
+  showPage(jenis === 'pptk' ? 'notaPPTK' : 'notaPPK');
+}
+
 function renderNotaPPTK() {
-  const list = (STATE.notaDinas.pptk || [])
+  const isRestricted = STATE.user.role === 'input';
+  let list = (STATE.notaDinas.pptk || [])
     .filter(n => {
-      if (STATE.user.role === 'input') {
+      if (isRestricted) {
         const nama = STATE.user.nama.trim().toUpperCase();
         return (n.pptk_nama||'').trim().toUpperCase() === nama;
       }
       return true;
-    })
-    .sort((a,b) => (b.tanggal||'').localeCompare(a.tanggal||''));
+    });
+
+  // Rekap lintas akun: admin/KPA/viewer bisa memilih akun pembuat tertentu, default = semua akun
+  const akunList = !isRestricted
+    ? [...new Set((STATE.notaDinas.pptk||[]).map(n => n.created_by).filter(Boolean))].sort()
+    : [];
+  if (!isRestricted && window._ndFilter.pptk) {
+    list = list.filter(n => n.created_by === window._ndFilter.pptk);
+  }
+  list = list.sort((a,b) => (b.tanggal||'').localeCompare(a.tanggal||''));
 
   let html = '<div class="page-header">'
     + '<h2>📝 Nota Dinas PPTK</h2>'
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+    + (akunList.length > 1 ? '<select class="form-input" style="font-size:12px;padding:6px 8px" onchange="ndSetFilterAkun(&apos;pptk&apos;,this.value)">'
+        + '<option value="">👥 Semua Akun (Rekap)</option>'
+        + akunList.map(u => `<option value="${escHtml(u)}" ${window._ndFilter.pptk===u?'selected':''}>${escHtml(ndAkunLabel(u))}</option>`).join('')
+        + '</select>' : '')
     + '<button class="btn btn-outline" onclick="bukaModalCetakDokumen()">⚙️ Pengaturan Cetak</button>'
     + '<button class="btn btn-blue" onclick="openModalNotaPPTK()">➕ Buat Nota Baru</button>'
     + '</div>'
     + '</div>'
     + '<div style="margin-bottom:14px;padding:10px 14px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);font-size:12px">'
     + 'Nota Dinas PPTK merupakan dasar persiapan pengadaan barang/jasa melalui Katalog Inaproc. Satu Nota PPTK dapat digunakan sebagai dasar beberapa Nota Dinas PPK apabila pengadaan dilakukan lebih dari sekali.'
+    + (!isRestricted && akunList.length > 1 ? ' Halaman ini merekap nota dari seluruh akun (' + akunList.length + ' akun pembuat)' + (window._ndFilter.pptk ? ', sedang difilter: ' + escHtml(ndAkunLabel(window._ndFilter.pptk)) + '.' : '.') : '')
     + '</div>';
 
   if (list.length === 0) {
@@ -29873,7 +29901,7 @@ function renderNotaPPTK() {
         + '<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
         + '<div style="flex:1;min-width:200px">'
         + '<div style="font-size:13px;font-weight:700;margin-bottom:4px">📋 ' + escHtml(n.hal||'Persiapan Pengadaan') + '</div>'
-        + '<div style="font-size:11px;color:var(--c-text-muted);margin-bottom:6px">Nomor: ' + (n.nomor_urut||'—') + ' &nbsp;·&nbsp; ' + ndTanggalPanjang(n.tanggal) + '</div>'
+        + '<div style="font-size:11px;color:var(--c-text-muted);margin-bottom:6px">Nomor: ' + (n.nomor_urut||'—') + ' &nbsp;·&nbsp; ' + ndTanggalPanjang(n.tanggal) + (n.created_by ? ' &nbsp;·&nbsp; 👤 ' + escHtml(ndAkunLabel(n.created_by)) : '') + '</div>'
         + '<div style="font-size:12px;color:var(--c-text-muted)">' + escHtml(n.sub_kegiatan||'—') + ' &nbsp;·&nbsp; ' + escHtml(n.nama_belanja||n.belanja||'—') + '</div>'
         + '<div style="font-size:12px;margin-top:4px"><span style="color:var(--c-primary);font-weight:600">Pagu: ' + ndFmt(n.pagu) + '</span>'
         + ' &nbsp;·&nbsp; Sumber: ' + escHtml(n.sumber_dana||'—')
@@ -29898,18 +29926,32 @@ function renderNotaPPTK() {
 // ============================================================
 function renderNotaPPK() {
   const isKPA = STATE.user.role === 'kpa';
-  const list = (STATE.notaDinas.ppk || [])
-    .sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); });
+  const isRestricted = STATE.user.role === 'input';
+  let list = (STATE.notaDinas.ppk || []);
+
+  // Rekap lintas akun: admin/KPA/viewer bisa memilih akun pembuat tertentu, default = semua akun
+  const akunList = !isRestricted
+    ? [...new Set((STATE.notaDinas.ppk||[]).map(n => n.created_by).filter(Boolean))].sort()
+    : [];
+  if (!isRestricted && window._ndFilter.ppk) {
+    list = list.filter(n => n.created_by === window._ndFilter.ppk);
+  }
+  list = list.sort(function(a,b){ return (b.tanggal||'').localeCompare(a.tanggal||''); });
 
   let html = '<div class="page-header">'
     + '<h2>📋 Nota Dinas PPK</h2>'
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+    + (akunList.length > 1 ? '<select class="form-input" style="font-size:12px;padding:6px 8px" onchange="ndSetFilterAkun(&apos;ppk&apos;,this.value)">'
+        + '<option value="">👥 Semua Akun (Rekap)</option>'
+        + akunList.map(u => `<option value="${escHtml(u)}" ${window._ndFilter.ppk===u?'selected':''}>${escHtml(ndAkunLabel(u))}</option>`).join('')
+        + '</select>' : '')
     + '<button class="btn btn-outline" onclick="bukaModalCetakDokumen()">⚙️ Pengaturan Cetak</button>'
     + (!isKPA ? '<button class="btn btn-blue" onclick="showPage(&apos;notaPPTK&apos;)">← Lihat Nota PPTK</button>' : '')
     + '</div>'
     + '</div>'
     + '<div style="margin-bottom:14px;padding:10px 14px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);font-size:12px">'
     + 'Nota Dinas PPK merupakan instruksi dari KPA/PPK kepada Pejabat Pengadaan untuk melaksanakan pengadaan. Dibuat berdasarkan Nota Dinas PPTK yang telah disetujui.'
+    + (!isRestricted && akunList.length > 1 ? ' Halaman ini merekap nota dari seluruh akun (' + akunList.length + ' akun pembuat)' + (window._ndFilter.ppk ? ', sedang difilter: ' + escHtml(ndAkunLabel(window._ndFilter.ppk)) + '.' : '.') : '')
     + '</div>';
 
   if (list.length === 0) {
@@ -29926,7 +29968,7 @@ function renderNotaPPK() {
         + '<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
         + '<div style="flex:1;min-width:200px">'
         + '<div style="font-size:13px;font-weight:700;margin-bottom:4px">📋 ' + escHtml(n.hal||'Pelaksanaan Pengadaan') + '</div>'
-        + '<div style="font-size:11px;color:var(--c-text-muted);margin-bottom:6px">Nomor: ' + (n.nomor_urut||'—') + ' &nbsp;·&nbsp; ' + ndTanggalPanjang(n.tanggal) + '</div>'
+        + '<div style="font-size:11px;color:var(--c-text-muted);margin-bottom:6px">Nomor: ' + (n.nomor_urut||'—') + ' &nbsp;·&nbsp; ' + ndTanggalPanjang(n.tanggal) + (n.created_by ? ' &nbsp;·&nbsp; 👤 ' + escHtml(ndAkunLabel(n.created_by)) : '') + '</div>'
         + '<div style="font-size:12px;color:var(--c-text-muted)">' + escHtml(n.sub_kegiatan||'—') + ' &nbsp;·&nbsp; ' + escHtml(n.nama_belanja||n.belanja||'—') + '</div>'
         + '<div style="font-size:12px;margin-top:4px"><span style="color:var(--c-primary);font-weight:600">Nilai: ' + ndFmt(n.nilai_pengadaan) + '</span>'
         + ' &nbsp;·&nbsp; Kode RUP: ' + escHtml(n.kode_rup||'—') + '</div>'
