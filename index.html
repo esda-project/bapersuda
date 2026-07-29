@@ -25218,16 +25218,43 @@ async function runAIAnalysis() {
 // ========================================
 let anggaranSortDir = 'desc'; // 'desc' = terbaru dulu, 'asc' = terlama dulu — bantu deteksi input ganda
 
+// Filter pencarian Input Anggaran berdasarkan Kegiatan, Sub Kegiatan, Belanja, PPTK dan Sumber Dana
+let anggaranFilters = { kegiatan:'', subKegiatan:'', belanja:'', pptk:'', sumberDana:'' };
+
 function toggleSortAnggaran() {
   anggaranSortDir = anggaranSortDir === 'desc' ? 'asc' : 'desc';
   showPage('anggaran');
 }
 
+function setAnggaranFilter(field, value) {
+  anggaranFilters[field] = value;
+  // Reset Sub Kegiatan jika Kegiatan berubah supaya tidak ada kombinasi yang tidak konsisten
+  if (field === 'kegiatan') anggaranFilters.subKegiatan = '';
+  showPage('anggaran');
+}
+
+function resetAnggaranFilters() {
+  anggaranFilters = { kegiatan:'', subKegiatan:'', belanja:'', pptk:'', sumberDana:'' };
+  showPage('anggaran');
+}
+
+function applyAnggaranFilters(list) {
+  return list.filter(a => {
+    if (anggaranFilters.kegiatan && a.kode_kegiatan !== anggaranFilters.kegiatan) return false;
+    if (anggaranFilters.subKegiatan && a.kode_sub_kegiatan !== anggaranFilters.subKegiatan) return false;
+    if (anggaranFilters.belanja && a.kode_belanja !== anggaranFilters.belanja) return false;
+    if (anggaranFilters.pptk && normNama(a.pptk) !== normNama(anggaranFilters.pptk)) return false;
+    if (anggaranFilters.sumberDana && a.sumber_dana !== anggaranFilters.sumberDana) return false;
+    return true;
+  });
+}
+
 function renderAnggaran() {
   const programs = unique(MASTER.programKegSubkeg,'kode_program');
+  const baseData = getFilteredAnggaran(); // sudah memperhitungkan pembatasan akun PPTK
   // Urutkan berdasarkan tanggal input (created_at) agar data terbaru mudah dibandingkan
   // dengan data sebelumnya — membantu mencegah input ganda pada rekening yang sama.
-  const data = getFilteredAnggaran().slice().sort((a,b) => {
+  const data = applyAnggaranFilters(baseData).slice().sort((a,b) => {
     const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
     const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
     return anggaranSortDir === 'desc' ? (tb - ta) : (ta - tb);
@@ -25269,6 +25296,24 @@ function renderAnggaran() {
     }).join('');
   }
 
+  // Bangun opsi dropdown filter dari data dasar (sebelum filter diterapkan) agar pilihan tetap lengkap
+  const escAttr = s => String(s||'').replace(/"/g,'&quot;');
+  const kegiatanOpts = unique(baseData.filter(a=>a.kode_kegiatan),'kode_kegiatan')
+    .sort((a,b)=>(a.kegiatan||'').localeCompare(b.kegiatan||''))
+    .map(a=>`<option value="${escAttr(a.kode_kegiatan)}" ${anggaranFilters.kegiatan===a.kode_kegiatan?'selected':''}>${a.kegiatan||a.kode_kegiatan}</option>`).join('');
+  const subKegSource = anggaranFilters.kegiatan ? baseData.filter(a=>a.kode_kegiatan===anggaranFilters.kegiatan) : baseData;
+  const subKegOpts = unique(subKegSource.filter(a=>a.kode_sub_kegiatan),'kode_sub_kegiatan')
+    .sort((a,b)=>(a.sub_kegiatan||'').localeCompare(b.sub_kegiatan||''))
+    .map(a=>`<option value="${escAttr(a.kode_sub_kegiatan)}" ${anggaranFilters.subKegiatan===a.kode_sub_kegiatan?'selected':''}>${a.sub_kegiatan||a.kode_sub_kegiatan}</option>`).join('');
+  const belanjaOpts = unique(baseData.filter(a=>a.kode_belanja),'kode_belanja')
+    .sort((a,b)=>(a.nama_belanja||'').localeCompare(b.nama_belanja||''))
+    .map(a=>`<option value="${escAttr(a.kode_belanja)}" ${anggaranFilters.belanja===a.kode_belanja?'selected':''}>${a.nama_belanja||a.kode_belanja}</option>`).join('');
+  const pptkListUnik = [...new Set(baseData.filter(a=>a.pptk).map(a=>a.pptk))].sort((a,b)=>a.localeCompare(b));
+  const pptkOpts = pptkListUnik.map(p=>`<option value="${escAttr(p)}" ${normNama(anggaranFilters.pptk)===normNama(p)?'selected':''}>${p}</option>`).join('');
+  const sumberDanaListUnik = [...new Set(baseData.filter(a=>a.sumber_dana).map(a=>a.sumber_dana))].sort((a,b)=>a.localeCompare(b));
+  const sumberDanaOpts = sumberDanaListUnik.map(s=>`<option value="${escAttr(s)}" ${anggaranFilters.sumberDana===s?'selected':''}>${s}</option>`).join('');
+  const adaFilterAktif = Object.values(anggaranFilters).some(v=>v);
+
   return `
 <div class="page-header">
   <h2>📋 Input Anggaran</h2>
@@ -25287,7 +25332,7 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
   </div>
 </div>
 <div class="table-wrap">
-  <div class="table-toolbar">
+  <div class="table-toolbar" style="flex-wrap:wrap;gap:8px">
     <h4>Daftar Rekening Belanja</h4>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn btn-sm btn-outline" onclick="toggleSortAnggaran()" title="Urutkan berdasarkan tanggal input untuk membantu mengecek input ganda">
@@ -25295,6 +25340,44 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
       </button>
       <input class="search-input" placeholder="Cari rekening..." oninput="filterAnggaran(this.value)">
     </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;padding:0 14px 12px 14px;align-items:end">
+    <div>
+      <div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px;letter-spacing:.3px">KEGIATAN</div>
+      <select class="form-input" style="width:100%" onchange="setAnggaranFilter('kegiatan', this.value)">
+        <option value="">— Semua Kegiatan —</option>
+        ${kegiatanOpts}
+      </select>
+    </div>
+    <div>
+      <div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px;letter-spacing:.3px">SUB KEGIATAN</div>
+      <select class="form-input" style="width:100%" onchange="setAnggaranFilter('subKegiatan', this.value)">
+        <option value="">— Semua Sub Kegiatan —</option>
+        ${subKegOpts}
+      </select>
+    </div>
+    <div>
+      <div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px;letter-spacing:.3px">BELANJA</div>
+      <select class="form-input" style="width:100%" onchange="setAnggaranFilter('belanja', this.value)">
+        <option value="">— Semua Belanja —</option>
+        ${belanjaOpts}
+      </select>
+    </div>
+    ${!isUserPPTK() ? `<div>
+      <div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px;letter-spacing:.3px">PPTK</div>
+      <select class="form-input" style="width:100%" onchange="setAnggaranFilter('pptk', this.value)">
+        <option value="">— Semua PPTK —</option>
+        ${pptkOpts}
+      </select>
+    </div>` : ''}
+    <div>
+      <div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px;letter-spacing:.3px">SUMBER DANA</div>
+      <select class="form-input" style="width:100%" onchange="setAnggaranFilter('sumberDana', this.value)">
+        <option value="">— Semua Sumber Dana —</option>
+        ${sumberDanaOpts}
+      </select>
+    </div>
+    ${adaFilterAktif ? `<div><button class="btn btn-sm btn-outline" style="width:100%" onclick="resetAnggaranFilters()">✖ Reset Filter (${data.length} hasil)</button></div>` : ''}
   </div>
   <div class="table-scroll">
     <table id="tblAnggaran">
