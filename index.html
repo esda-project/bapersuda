@@ -26959,8 +26959,99 @@ function sortRealisasi(dir) {
   showPage('realisasi');
 }
 
-function renderRealisasi() {
-  let filteredReal = getFilteredRealisasi();
+// ============================================================
+// Filter Input Realisasi: Kegiatan, Sub Kegiatan, Belanja, Sumber Dana, PPTK
+// (pola sama seperti CARI_STATE pada menu Pencarian Data)
+// ============================================================
+const REAL_FILTER_STATE = {
+  kegiatan: '', subKegiatan: '', belanja: '', sumberDana: '', pptk: '',
+};
+
+function getRealFilterOptions() {
+  const ang = STATE.anggaran;
+
+  const kegiatans = [...new Map(ang.filter(a=>a.kode_kegiatan)
+    .map(a=>[a.kode_kegiatan,{kode:a.kode_kegiatan,nama:a.kegiatan||a.kode_kegiatan}])).values()];
+
+  const angByKeg = REAL_FILTER_STATE.kegiatan
+    ? ang.filter(a=>a.kode_kegiatan===REAL_FILTER_STATE.kegiatan) : ang;
+  const subKegiatans = [...new Map(angByKeg.filter(a=>a.kode_sub_kegiatan)
+    .map(a=>[a.kode_sub_kegiatan,{kode:a.kode_sub_kegiatan,nama:a.sub_kegiatan||a.kode_sub_kegiatan}])).values()];
+
+  const angBySub = REAL_FILTER_STATE.subKegiatan
+    ? angByKeg.filter(a=>a.kode_sub_kegiatan===REAL_FILTER_STATE.subKegiatan) : angByKeg;
+  const belanjas = [...new Map(angBySub.filter(a=>a.kode_belanja)
+    .map(a=>[a.kode_belanja,{kode:a.kode_belanja,nama:a.nama_belanja||a.kode_belanja}])).values()];
+
+  const sumberDanas = [...new Set(ang.filter(a=>a.sumber_dana).map(a=>a.sumber_dana))];
+  const pptks       = [...new Set(ang.filter(a=>a.pptk).map(a=>a.pptk))];
+
+  return {kegiatans, subKegiatans, belanjas, sumberDanas, pptks};
+}
+
+// Resolve kode_kegiatan dari kode_sub_kegiatan (untuk filter Kegiatan)
+function getRealFilterSubKegLookup() {
+  const lookup = {};
+  MASTER.programKegSubkeg.forEach(m => { lookup[m.kode_sub_kegiatan] = m.kode_kegiatan; });
+  STATE.anggaran.forEach(a => {
+    if (a.kode_sub_kegiatan && !lookup[a.kode_sub_kegiatan]) lookup[a.kode_sub_kegiatan] = a.kode_kegiatan;
+  });
+  return lookup;
+}
+
+function getRealisasiFilteredForDisplay() {
+  const base = getFilteredRealisasi(); // batasan role PPTK
+  const subKegLookup = getRealFilterSubKegLookup();
+
+  return base.filter(r => {
+    const kodeKeg = subKegLookup[r.kode_sub_kegiatan];
+    if (REAL_FILTER_STATE.kegiatan    && kodeKeg !== REAL_FILTER_STATE.kegiatan)                 return false;
+    if (REAL_FILTER_STATE.subKegiatan && r.kode_sub_kegiatan !== REAL_FILTER_STATE.subKegiatan)  return false;
+    if (REAL_FILTER_STATE.belanja     && r.kode_belanja !== REAL_FILTER_STATE.belanja)           return false;
+    if (REAL_FILTER_STATE.sumberDana  && r.sumber_dana !== REAL_FILTER_STATE.sumberDana)         return false;
+    if (REAL_FILTER_STATE.pptk) {
+      const rPptk = (r.pptk||'').toLowerCase();
+      const fPptk = REAL_FILTER_STATE.pptk.toLowerCase();
+      if (!rPptk.includes(fPptk) && !fPptk.includes(rPptk.split(',')[0].trim())) return false;
+    }
+    return true;
+  });
+}
+
+function realApply(key, val) {
+  REAL_FILTER_STATE[key] = val;
+
+  // Reset filter turunan jika filter di atasnya berubah
+  if (key === 'kegiatan')    { REAL_FILTER_STATE.subKegiatan = ''; REAL_FILTER_STATE.belanja = ''; }
+  if (key === 'subKegiatan') { REAL_FILTER_STATE.belanja = ''; }
+
+  // Rebuild dropdown Sub Kegiatan & Belanja secara DOM (tanpa full re-render)
+  const {subKegiatans, belanjas} = getRealFilterOptions();
+
+  const elSub = document.getElementById('realSubKegiatan');
+  const elBel = document.getElementById('realBelanja');
+
+  if (elSub) {
+    elSub.innerHTML = '<option value="">— Semua Sub Kegiatan —</option>' +
+      subKegiatans.map(o=>`<option value="${o.kode}" ${REAL_FILTER_STATE.subKegiatan===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('');
+  }
+  if (elBel) {
+    elBel.innerHTML = '<option value="">— Semua Belanja —</option>' +
+      belanjas.map(o=>`<option value="${o.kode}" ${REAL_FILTER_STATE.belanja===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('');
+  }
+
+  // Refresh hasil tabel
+  const el = document.getElementById('realisasiResult');
+  if (el) el.innerHTML = buildRealisasiTable();
+}
+
+function realResetFilter() {
+  Object.assign(REAL_FILTER_STATE, {kegiatan:'',subKegiatan:'',belanja:'',sumberDana:'',pptk:''});
+  showPage('realisasi');
+}
+
+function buildRealisasiTable() {
+  let filteredReal = getRealisasiFilteredForDisplay();
   if (realisasiSortDir) {
     filteredReal = [...filteredReal].sort((a, b) => {
       const ta = a.tanggal || '';
@@ -26989,14 +27080,6 @@ function renderRealisasi() {
       </tr>`).join('');
 
   return `
-<div class="page-header">
-  <h2>📑 Input Realisasi</h2>
-  <div style="display:flex;gap:8px">
-    <button class="btn btn-blue" onclick="openModalRealisasi()">➕ Tambah Transaksi</button>
-    <button class="btn btn-outline" onclick="cetakRealisasi()">🖨️ Cetak PDF</button>
-  </div>
-</div>
-${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bottom:12px;background:var(--c-primary-light);border-color:var(--c-primary)"><div style="font-size:12px;color:var(--c-primary)">🔒 Menampilkan transaksi untuk PPTK: <b>${getPPTKNama()}</b></div></div>` : ''}
 <div class="table-wrap">
   <div class="table-toolbar">
     <h4>Daftar Transaksi (${filteredReal.length} transaksi)</h4>
@@ -27022,6 +27105,75 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
     </table>
   </div>
 </div>`;
+}
+
+function renderRealisasi() {
+  const {kegiatans, subKegiatans, belanjas, sumberDanas, pptks} = getRealFilterOptions();
+
+  return `
+<div class="page-header">
+  <h2>📑 Input Realisasi</h2>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-blue" onclick="openModalRealisasi()">➕ Tambah Transaksi</button>
+    <button class="btn btn-outline" onclick="cetakRealisasi()">🖨️ Cetak PDF</button>
+  </div>
+</div>
+${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bottom:12px;background:var(--c-primary-light);border-color:var(--c-primary)"><div style="font-size:12px;color:var(--c-primary)">🔒 Menampilkan transaksi untuk PPTK: <b>${getPPTKNama()}</b></div></div>` : ''}
+
+<div class="section-card" style="padding:14px 16px;margin-bottom:12px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;align-items:end">
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Kegiatan</label>
+      <select class="form-input" style="width:100%" id="realKegiatan"
+        onchange="realApply('kegiatan',this.value)">
+        <option value="">— Semua Kegiatan —</option>
+        ${kegiatans.map(o=>`<option value="${o.kode}" ${REAL_FILTER_STATE.kegiatan===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Sub Kegiatan</label>
+      <select class="form-input" style="width:100%" id="realSubKegiatan"
+        onchange="realApply('subKegiatan',this.value)">
+        <option value="">— Semua Sub Kegiatan —</option>
+        ${subKegiatans.map(o=>`<option value="${o.kode}" ${REAL_FILTER_STATE.subKegiatan===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Belanja</label>
+      <select class="form-input" style="width:100%" id="realBelanja"
+        onchange="realApply('belanja',this.value)">
+        <option value="">— Semua Belanja —</option>
+        ${belanjas.map(o=>`<option value="${o.kode}" ${REAL_FILTER_STATE.belanja===o.kode?'selected':''}>${o.kode} — ${o.nama}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Sumber Dana</label>
+      <select class="form-input" style="width:100%" onchange="realApply('sumberDana',this.value)">
+        <option value="">— Semua Sumber Dana —</option>
+        ${sumberDanas.map(s=>`<option value="${s}" ${REAL_FILTER_STATE.sumberDana===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">PPTK</label>
+      <select class="form-input" style="width:100%" onchange="realApply('pptk',this.value)">
+        <option value="">— Semua PPTK —</option>
+        ${pptks.map(p=>`<option value="${p}" ${REAL_FILTER_STATE.pptk===p?'selected':''}>${p}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
+      <button class="btn btn-outline" style="width:100%" onclick="realResetFilter()">↺ Reset Filter</button>
+    </div>
+
+  </div>
+</div>
+
+<div id="realisasiResult">${buildRealisasiTable()}</div>`;
 }
 
 function filterRealisasi(q) {
