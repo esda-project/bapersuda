@@ -25323,11 +25323,23 @@ function renderAnggaran() {
   </div>
 </div>
 ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bottom:12px;background:var(--c-primary-light);border-color:var(--c-primary)"><div style="font-size:12px;color:var(--c-primary)">🔒 Menampilkan data anggaran untuk PPTK: <b>${getPPTKNama()}</b></div></div>` : ''}
+${(anggaranFilters.kegiatan || anggaranFilters.subKegiatan) ? (() => {
+    const namaTerpilih = anggaranFilters.subKegiatan
+      ? (baseData.find(a=>a.kode_sub_kegiatan===anggaranFilters.subKegiatan)?.sub_kegiatan || anggaranFilters.subKegiatan)
+      : (baseData.find(a=>a.kode_kegiatan===anggaranFilters.kegiatan)?.kegiatan || anggaranFilters.kegiatan);
+    const labelJenis = anggaranFilters.subKegiatan ? 'Sub Kegiatan' : 'Kegiatan';
+    const nominalTerpilih = data.reduce((s,a)=>s+getPagu(a),0);
+    return `<div class="section-card" style="padding:12px 14px;margin-bottom:12px;background:var(--c-primary-light);border-color:var(--c-primary)">
+      <div style="font-size:11px;font-weight:600;color:var(--c-primary);letter-spacing:.3px">NOMINAL ANGGARAN ${labelJenis.toUpperCase()} TERPILIH (${STATE.tahapan})</div>
+      <div style="font-size:14px;font-weight:600;margin-top:4px">${namaTerpilih}</div>
+      <div style="font-size:22px;font-weight:700;color:var(--c-primary);margin-top:4px">Rp ${fmt(nominalTerpilih)}</div>
+    </div>`;
+  })() : ''}
 <div class="section-card" style="padding:10px 14px;margin-bottom:12px">
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:13px">
-    <div><span style="color:var(--c-text-muted)">Total Pagu (${STATE.tahapan}):</span><br><b>${fmt(isUserPPTK() ? data.reduce((s,a)=>s+getPagu(a),0) : getTotalPagu())}</b></div>
-    <div><span style="color:var(--c-text-muted)">Total Realisasi:</span><br><b>${fmt(isUserPPTK() ? data.reduce((s,a)=>s+getRealisasiByRekening(a.kode_rekening),0) : getTotalRealisasi())}</b></div>
-    <div><span style="color:var(--c-text-muted)">Sisa Anggaran:</span><br><b>${fmt(isUserPPTK() ? data.reduce((s,a)=>s+(getPagu(a)-getRealisasiByRekening(a.kode_rekening)),0) : (getTotalPagu()-getTotalRealisasi()))}</b></div>
+    <div><span style="color:var(--c-text-muted)">Total Pagu${adaFilterAktif ? ' (Hasil Filter)' : ''} (${STATE.tahapan}):</span><br><b>${fmt(data.reduce((s,a)=>s+getPagu(a),0))}</b></div>
+    <div><span style="color:var(--c-text-muted)">Total Realisasi${adaFilterAktif ? ' (Hasil Filter)' : ''}:</span><br><b>${fmt(data.reduce((s,a)=>s+getRealisasiByRekening(a.kode_rekening),0))}</b></div>
+    <div><span style="color:var(--c-text-muted)">Sisa Anggaran${adaFilterAktif ? ' (Hasil Filter)' : ''}:</span><br><b>${fmt(data.reduce((s,a)=>s+(getPagu(a)-getRealisasiByRekening(a.kode_rekening)),0))}</b></div>
     <div><span style="color:var(--c-text-muted)">Jumlah Rekening:</span><br><b>${data.length}</b></div>
   </div>
 </div>
