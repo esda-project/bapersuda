@@ -29917,17 +29917,29 @@ function ndSave() {
 }
 
 async function ndSyncSupabase() {
-  // Upsert nota_dinas_pptk
-  const rows = STATE.notaDinas.pptk.map(n => ({
-    id: n.id, tahun: STATE.tahun, data: n
-  }));
-  if (rows.length > 0)
-    await sbClient.from('nota_dinas_pptk').upsert(rows, {onConflict:'id'}).catch(()=>{});
-  const rowsPPK = STATE.notaDinas.ppk.map(n => ({
-    id: n.id, tahun: STATE.tahun, data: n
-  }));
-  if (rowsPPK.length > 0)
-    await sbClient.from('nota_dinas_ppk').upsert(rowsPPK, {onConflict:'id'}).catch(()=>{});
+  // Upsert nota_dinas_pptk & nota_dinas_ppk ke Supabase.
+  // PENTING: error TIDAK boleh didiamkan (sebelumnya .catch(()=>{}) menelan error diam-diam,
+  // sehingga nota bisa gagal tersimpan ke server tanpa pemberitahuan apa pun ke pengguna —
+  // walau toast "tersimpan ✅" sudah terlanjur muncul saat data hanya sukses tersimpan lokal).
+  try {
+    const rows = STATE.notaDinas.pptk.map(n => ({
+      id: n.id, tahun: STATE.tahun, data: n
+    }));
+    if (rows.length > 0) {
+      const { error } = await sbClient.from('nota_dinas_pptk').upsert(rows, {onConflict:'id'});
+      if (error) throw error;
+    }
+    const rowsPPK = STATE.notaDinas.ppk.map(n => ({
+      id: n.id, tahun: STATE.tahun, data: n
+    }));
+    if (rowsPPK.length > 0) {
+      const { error } = await sbClient.from('nota_dinas_ppk').upsert(rowsPPK, {onConflict:'id'});
+      if (error) throw error;
+    }
+  } catch(e) {
+    console.error('ndSyncSupabase', e);
+    showToast('⚠️ Nota dinas tersimpan di perangkat ini tapi GAGAL sinkron ke server: ' + (e.message || 'periksa koneksi'), 'error');
+  }
 }
 
 async function ndLoadSupabase() {
@@ -30117,8 +30129,11 @@ function renderNotaPPTK() {
   let list = (STATE.notaDinas.pptk || [])
     .filter(n => {
       if (isRestricted) {
-        const nama = STATE.user.nama.trim().toUpperCase();
-        return (n.pptk_nama||'').trim().toUpperCase() === nama;
+        // Tampilkan nota berdasarkan akun pembuat (created_by), BUKAN kecocokan nama pptk_nama.
+        // pptk_nama diambil dari data master anggaran (kolom "pptk" pada rekening) yang bisa
+        // berbeda penulisan/ejaan dengan nama akun pengguna, sehingga nota "hilang" dari akun
+        // pembuatnya sendiri padahal datanya tetap tersimpan (terlihat di rekap Admin).
+        return n.created_by === STATE.user.username;
       }
       return true;
     });
@@ -30188,7 +30203,14 @@ function renderNotaPPTK() {
 function renderNotaPPK() {
   const isKPA = STATE.user.role === 'kpa';
   const isRestricted = STATE.user.role === 'input';
-  let list = (STATE.notaDinas.ppk || []);
+  let list = (STATE.notaDinas.ppk || [])
+    .filter(n => {
+      if (isRestricted) {
+        // Konsisten dengan renderNotaPPTK: akun 'input' hanya melihat nota yang dibuat dari akunnya sendiri.
+        return n.created_by === STATE.user.username;
+      }
+      return true;
+    });
 
   // Rekap lintas akun: admin/KPA/viewer bisa memilih akun pembuat tertentu, default = semua akun
   const akunList = !isRestricted
