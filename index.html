@@ -29949,14 +29949,95 @@ const DATA_KENDARAAN_DINAS = [
 ];
 
 // Filter data kendaraan sesuai jenis belanja pemeliharaan (Perorangan/Penumpang -> R.4, Beroda Dua -> R.2).
-// Mengembalikan [] bila nama belanja tidak berkaitan dengan pemeliharaan kendaraan.
+// Belanja Pembayaran Pajak, Bea, dan Perizinan -> seluruh kendaraan (pajak berlaku utk R.2 & R.4 sekaligus).
+// Mengembalikan [] bila nama belanja tidak berkaitan dengan pemeliharaan/pajak kendaraan.
 function ndKendaraanUntukBelanja(namaBelanja) {
   const nm = (namaBelanja||'').toLowerCase();
+  if (nm.includes('pajak') && nm.includes('bea') && nm.includes('perizinan')) {
+    return DATA_KENDARAAN_DINAS.slice();
+  }
   if (!nm.includes('kendaraan')) return [];
   if (!(nm.includes('pemelihara') || nm.includes('jasa') || nm.includes('sewa'))) return [];
   if (nm.includes('beroda dua')) return DATA_KENDARAAN_DINAS.filter(k=>k.jenis==='R. 2');
   if (nm.includes('perorangan') || nm.includes('penumpang')) return DATA_KENDARAAN_DINAS.filter(k=>k.jenis==='R. 4');
   return [];
+}
+
+// ============================================================
+// TABEL POINT 11 KHUSUS
+// Berlaku hanya untuk 3 belanja: Pemeliharaan Kendaraan Bermotor Beroda Dua,
+// Pemeliharaan Kendaraan Dinas Bermotor Perorangan, dan Pembayaran Pajak, Bea,
+// dan Perizinan. Untuk ketiganya: (1) seluruh data Register Kendaraan Bermotor
+// ditampilkan sebagai lampiran, dan (2) tabel kuantitas/harga yang biasanya
+// muncul setelah Point 11 pada "Data Umum" Nota Dinas diganti dengan format
+// No/Uraian/Jumlah/Satuan/Realisasi (Rp)/Sisa Pagu (Rp).
+// Dicocokkan lewat kode_belanja (stabil) dengan fallback nama_belanja.
+// ============================================================
+const KODE_BELANJA_POINT11_KHUSUS = [
+  '5.1.02.03.002.00035', // Belanja Pemeliharaan ... Kendaraan Dinas Bermotor Perorangan
+  '5.1.02.03.002.00038', // Belanja Pemeliharaan ... Kendaraan Bermotor Beroda Dua
+  '5.1.02.02.001.00067', // Belanja Pembayaran Pajak, Bea, dan Perizinan
+];
+function ndIsBelanjaPoint11Khusus(kodeBelanja, namaBelanja) {
+  if (kodeBelanja && KODE_BELANJA_POINT11_KHUSUS.includes(kodeBelanja)) return true;
+  const nm = (namaBelanja||'').toLowerCase();
+  if (nm.includes('pajak') && nm.includes('bea') && nm.includes('perizinan')) return true;
+  if (nm.includes('pemelihara') && nm.includes('kendaraan') && (nm.includes('beroda dua') || nm.includes('perorangan'))) return true;
+  return false;
+}
+
+// Realisasi & Sisa Pagu per kode rekening dihitung s/d tanggal Nota Dinas dibuat
+// (bukan realisasi total sepanjang tahun); Pagu mengikuti tahapan aktif — sama dengan menu Input Anggaran.
+function ndHitungRealisasiSisaPaguPerTanggal(kodeRekening, tanggal) {
+  const a = STATE.anggaran.find(x=>x.kode_rekening===kodeRekening);
+  const pagu = a ? getPagu(a) : 0;
+  const realisasi = getRealisasiByRekening(kodeRekening, tanggal);
+  return { pagu, realisasi, sisa: pagu - realisasi };
+}
+
+// Baris Tabel Point 11 (HTML): No, Uraian (nama belanja terpilih), Jumlah=12, Satuan=Bulan,
+// Realisasi (Rp) s/d tanggal nota, Sisa Pagu (Rp) = Pagu Anggaran (tahapan) - Realisasi.
+function htmlTabelPoint11Khusus(n) {
+  const namaBelanja = n.nama_belanja || n.belanja || '—';
+  const { realisasi, sisa } = ndHitungRealisasiSisaPaguPerTanggal(n.kode_rekening, n.tanggal);
+  return `
+          <tr style="background:#e8e8e8">
+            <th class="no">No</th><th>Uraian</th><th style="width:50px">Jumlah</th>
+            <th style="width:55px">Satuan</th><th style="width:105px">Realisasi (Rp)</th>
+            <th style="width:105px">Sisa Pagu (Rp)</th>
+          </tr>
+          <tr>
+            <td class="no">1</td><td>${namaBelanja}</td>
+            <td class="center">12</td><td class="center">Bulan</td>
+            <td class="rp">${ndFmt(realisasi)}</td>
+            <td class="rp">${ndFmt(sisa)}</td>
+          </tr>`;
+}
+
+// Register lengkap seluruh kendaraan bermotor (HTML) — dipakai pada lampiran Nota Dinas
+// PPTK/PPK khusus untuk 3 belanja di atas (data kendaraan keseluruhan, bukan hasil filter jenis).
+function htmlKendaraanRegisterLengkap() {
+  const rows = DATA_KENDARAAN_DINAS.map((k,i) => `
+    <tr>
+      <td class="no">${i+1}</td>
+      <td class="center">${k.jenis||'—'}</td>
+      <td>${k.merek_type||'—'}</td>
+      <td>${k.nomor_rangka||'—'}</td>
+      <td>${k.nomor_mesin||'—'}</td>
+      <td class="center">${k.tahun||'—'}</td>
+      <td class="center">${k.nomor_polisi||'—'}</td>
+      <td>${k.pemakai||'—'}</td>
+    </tr>`).join('');
+  return `
+  <p class="lamp-sub" style="margin-top:12px">Daftar/Register Kendaraan Bermotor (Keseluruhan)</p>
+  <table class="dt">
+    <tr style="background:#e8e8e8">
+      <th class="no">No</th><th style="width:45px">Jenis</th><th>Merek/Type</th>
+      <th>Nomor Rangka</th><th>Nomor Mesin</th><th style="width:40px">Th</th>
+      <th style="width:70px">Nomor Polisi</th><th>Pemakai Sesuai BAST</th>
+    </tr>
+    ${rows}
+  </table>`;
 }
 
 if (!STATE.notaDinas) STATE.notaDinas = { pptk: [], ppk: [] };
@@ -31109,6 +31190,8 @@ function cetakNotaPPTK(id) {
   const namaPPTKTtd = ndFormatNamaTTD(n.pptk_nama||pptk.nama||'...');
   const kendaraanND = ndKendaraanTerpilihUntukNota(n);
   const htmlKendaraan = htmlKendaraanRincianBlock(kendaraanND, n.items||[]);
+  const isPoint11Khusus = ndIsBelanjaPoint11Khusus(n.kode_belanja, n.nama_belanja||n.belanja);
+  const htmlRegisterKendaraan = isPoint11Khusus ? htmlKendaraanRegisterLengkap() : '';
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
 <title>Nota Dinas PPTK ${n.nomor_urut||''}</title>
@@ -31171,6 +31254,7 @@ ${ndStyleCetak()}
     <tr>
       <td class="no" colspan="4" style="padding:0">
         <table class="dt" style="margin:0;border:none">
+          ${isPoint11Khusus ? htmlTabelPoint11Khusus(n) : `
           <tr style="background:#e8e8e8">
             <th style="width:28px">No</th><th>Uraian</th><th style="width:50px">Jumlah</th>
             <th style="width:55px">Satuan</th><th style="width:105px">Harga Satuan (Rp)</th>
@@ -31188,7 +31272,7 @@ ${ndStyleCetak()}
           <tr>
             <td colspan="5" class="rp" style="font-weight:bold">Jumlah Harga (sudah termasuk pajak)</td>
             <td class="rp" style="font-weight:bold">${ndFmt(totalHarga)}</td>
-          </tr>
+          </tr>`}
         </table>
       </td>
     </tr>
@@ -31265,6 +31349,7 @@ ${ndStyleCetak()}
       <td class="link-ref">${lnk.link||'—'}</td>
     </tr>`).join('')}
   </table>
+  ${htmlRegisterKendaraan}
   ${htmlKendaraan}
 
   <p class="isi" style="margin-top:10px">Data umum dan daftar kebutuhan barang/jasa di atas dapat dijadikan dasar oleh Pejabat Pembuat Komitmen/Pejabat Pengadaan Barang/Jasa untuk proses pengadaan barang/jasa sehingga dapat segera dilaksanakan sesuai dengan aturan yang berlaku.</p>
@@ -31303,6 +31388,8 @@ function cetakNotaPPK(id) {
   const jabKPA2    = 'selaku Pejabat Pembuat Komitmen';
   const kendaraanND = ndKendaraanTerpilihUntukNota(n);
   const htmlKendaraan = htmlKendaraanRincianBlock(kendaraanND, items);
+  const isPoint11Khusus = ndIsBelanjaPoint11Khusus(n.kode_belanja||notaPPTK.kode_belanja, n.nama_belanja||n.belanja||notaPPTK.nama_belanja);
+  const htmlRegisterKendaraan = isPoint11Khusus ? htmlKendaraanRegisterLengkap() : '';
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
 <title>Nota Dinas PPK ${n.nomor_urut||''}</title>
@@ -31368,6 +31455,7 @@ ${ndStyleCetak()}
     <tr>
       <td class="no" colspan="4" style="padding:0">
         <table class="dt" style="margin:0;border:none">
+          ${isPoint11Khusus ? htmlTabelPoint11Khusus(n) : `
           <tr style="background:#e8e8e8">
             <th class="no">No</th><th>Uraian</th><th style="width:50px">Jumlah</th>
             <th style="width:55px">Satuan</th><th style="width:105px">Harga Satuan (Rp)</th>
@@ -31383,7 +31471,7 @@ ${ndStyleCetak()}
           <tr>
             <td colspan="5" class="rp" style="font-weight:bold">Jumlah Harga (sudah termasuk pajak)</td>
             <td class="rp" style="font-weight:bold">${ndFmt(n.nilai_pengadaan||totalHarga)}</td>
-          </tr>
+          </tr>`}
         </table>
       </td>
     </tr>
@@ -31447,6 +31535,7 @@ ${ndStyleCetak()}
     ${(n.links||notaPPTK.links||[{uraian:n.nama_belanja||notaPPTK.nama_belanja||'—',link:'https://katalog.inaproc.id/'}]).map((lnk,i)=>`
     <tr><td class="no">${i+1}</td><td>${lnk.uraian||'—'}</td><td class="link-ref">${lnk.link||'—'}</td></tr>`).join('')}
   </table>
+  ${htmlRegisterKendaraan}
   ${htmlKendaraan}
 
   <p class="lamp-sub" style="margin-top:10px">Syarat Penyedia</p>
@@ -32118,6 +32207,67 @@ function tblKendaraan(list) {
   });
 }
 
+// Tabel Point 11 khusus (DOCX): No, Uraian (nama belanja terpilih), Jumlah=12, Satuan=Bulan,
+// Realisasi (Rp) s/d tanggal nota, Sisa Pagu (Rp) = Pagu Anggaran (tahapan) - Realisasi.
+function tblPoint11Khusus(n) {
+  const namaBelanja = n.nama_belanja || n.belanja || '—';
+  const { realisasi, sisa } = ndHitungRealisasiSisaPaguPerTanggal(n.kode_rekening, n.tanggal);
+  const colW = [300, 4571, 1000, 1000, 1400, 1400];
+  return new Table({
+    width: { size: CW, type: WidthType.DXA },
+    columnWidths: colW,
+    rows: [
+      new TableRow({ cantSplit: true, tableHeader:true, children:[
+        cell('No',{w:colW[0],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Uraian',{w:colW[1],shade:true,bold:true}),
+        cell('Jumlah',{w:colW[2],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Satuan',{w:colW[3],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Realisasi (Rp)',{w:colW[4],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Sisa Pagu (Rp)',{w:colW[5],shade:true,bold:true,align:AlignmentType.CENTER}),
+      ]}),
+      new TableRow({ cantSplit: true, children:[
+        cell('1',{w:colW[0],align:AlignmentType.CENTER}),
+        cell(namaBelanja,{w:colW[1]}),
+        cell('12',{w:colW[2],align:AlignmentType.CENTER}),
+        cell('Bulan',{w:colW[3],align:AlignmentType.CENTER}),
+        cell(fmtRp(realisasi),{w:colW[4],align:AlignmentType.RIGHT}),
+        cell(fmtRp(sisa),{w:colW[5],align:AlignmentType.RIGHT}),
+      ]}),
+    ]
+  });
+}
+
+// Register lengkap seluruh kendaraan bermotor (DOCX) — 8 kolom sesuai Daftar/Register Kendaraan Bermotor.
+function tblKendaraanRegisterLengkap() {
+  const colW = [300, 700, 1800, 1800, 1600, 500, 1100, 1871];
+  return new Table({
+    width: { size: CW, type: WidthType.DXA },
+    columnWidths: colW,
+    rows: [
+      new TableRow({ cantSplit: true, tableHeader:true, children:[
+        cell('No',{w:colW[0],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Jenis',{w:colW[1],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Merek/Type',{w:colW[2],shade:true,bold:true}),
+        cell('Nomor Rangka',{w:colW[3],shade:true,bold:true}),
+        cell('Nomor Mesin',{w:colW[4],shade:true,bold:true}),
+        cell('Th',{w:colW[5],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Nomor Polisi',{w:colW[6],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Pemakai Sesuai BAST',{w:colW[7],shade:true,bold:true}),
+      ]}),
+      ...DATA_KENDARAAN_DINAS.map((k,i)=>new TableRow({ cantSplit: true,children:[
+        cell(String(i+1),{w:colW[0],align:AlignmentType.CENTER}),
+        cell(k.jenis||'',{w:colW[1],align:AlignmentType.CENTER}),
+        cell(k.merek_type||'',{w:colW[2]}),
+        cell(k.nomor_rangka||'',{w:colW[3]}),
+        cell(k.nomor_mesin||'',{w:colW[4]}),
+        cell(String(k.tahun||''),{w:colW[5],align:AlignmentType.CENTER}),
+        cell(k.nomor_polisi||'',{w:colW[6],align:AlignmentType.CENTER}),
+        cell(k.pemakai||'',{w:colW[7]}),
+      ]}))
+    ]
+  });
+}
+
 // Kendaraan yang berlaku untuk sebuah nota: pakai pilihan eksplisit (kendaraan_terpilih) jika ada,
 // fallback ke seluruh kendaraan sekategori (perilaku lama, untuk nota yang dibuat sebelum fitur ini ada).
 function ndKendaraanTerpilihUntukNota(n) {
@@ -32197,6 +32347,7 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
   const pptkNip  = pptk.nip || '—';
   const pptkJab  = pptk.jabatan_resmi || 'Pejabat Pelaksana Teknis Kegiatan';
   const kendaraanND = ndKendaraanTerpilihUntukNota(n);
+  const isPoint11Khusus = ndIsBelanjaPoint11Khusus(n.kode_belanja, n.nama_belanja||n.belanja);
 
   const pageProps = {
     size: { width: PAGE_W, height: PAGE_H, orientation: pgSettings.landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
@@ -32259,14 +32410,14 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
         cell(':',{w:200,align:AlignmentType.CENTER}),
         cell(val,{w:CW-3300}),
       ]})).concat([
-        // Row tabel kebutuhan
+        // Row tabel kebutuhan (diganti Tabel Point 11 khusus untuk 3 belanja kendaraan/pajak tertentu)
         new TableRow({ cantSplit: true, children:[
           new TableCell({
             borders: CELL_BORDERS,
             columnSpan: 4,
             width: {size:CW, type:WidthType.DXA},
             margins:{top:60,bottom:60,left:80,right:80},
-            children: [tblBarang(items, false)]
+            children: [isPoint11Khusus ? tblPoint11Khusus(n) : tblBarang(items, false)]
           })
         ]}),
         ...(['12','13','14','15','16'].map((no,i)=>{
@@ -32359,6 +32510,12 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
     para([tr('Sumber Referensi Harga Satuan:')],{compact:true,lineHeight:1.15}),
     tblLinks(links),
 
+    ...(isPoint11Khusus ? [
+      EMPTY(),
+      subJudul('Daftar/Register Kendaraan Bermotor (Keseluruhan)'),
+      tblKendaraanRegisterLengkap(),
+    ] : []),
+
     ...(kendaraanND.length ? [
       EMPTY(),
       subJudul('Rincian Kendaraan dan Pekerjaan Pemeliharaan'),
@@ -32396,6 +32553,7 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
   const program    = n.program    || notaPPTK.program    || '—';
   const kegiatan   = n.kegiatan   || notaPPTK.kegiatan   || '—';
   const kendaraanND = ndKendaraanTerpilihUntukNota(n);
+  const isPoint11Khusus = ndIsBelanjaPoint11Khusus(n.kode_belanja||notaPPTK.kode_belanja, n.nama_belanja||n.belanja||notaPPTK.nama_belanja);
   const subKeg     = n.sub_kegiatan  || notaPPTK.sub_kegiatan  || '—';
   const belanja    = n.nama_belanja  || n.belanja || notaPPTK.nama_belanja || '—';
   const kodeRek    = n.kode_rekening || notaPPTK.kode_rekening || '—';
@@ -32475,7 +32633,7 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
       ]})).concat([
         new TableRow({ cantSplit: true,children:[
           new TableCell({borders:CELL_BORDERS,columnSpan:4,width:{size:CW,type:WidthType.DXA},margins:{top:60,bottom:60,left:80,right:80},
-            children:[tblBarang(items,false)]
+            children:[isPoint11Khusus ? tblPoint11Khusus(n) : tblBarang(items,false)]
           })
         ]}),
         ...[
@@ -32551,6 +32709,12 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
     EMPTY(),
     para([tr('Sumber Referensi Harga Satuan:')],{compact:true,lineHeight:1.15}),
     tblLinks(links),
+
+    ...(isPoint11Khusus ? [
+      EMPTY(),
+      subJudul('Daftar/Register Kendaraan Bermotor (Keseluruhan)'),
+      tblKendaraanRegisterLengkap(),
+    ] : []),
 
     ...(kendaraanND.length ? [
       EMPTY(),
