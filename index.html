@@ -29920,6 +29920,37 @@ const ND_BELANJA_LOOKUP = [
   }
 ];
 
+// ============================================================
+// DATA KENDARAAN DINAS — Register Kendaraan Bermotor
+// Bagian Perekonomian dan Sumber Daya Alam Setda Kota Batu
+// Dipakai sebagai lampiran Nota Dinas PPTK/PPK untuk belanja
+// jasa pemeliharaan kendaraan dinas (roda 4 & roda 2).
+// jenis: "R. 4" = kendaraan dinas perorangan/penumpang, "R. 2" = kendaraan beroda dua
+// ============================================================
+const DATA_KENDARAAN_DINAS = [
+  { jenis:"R. 4", merek_type:"MITSUBISHI EXPANDER", nomor_rangka:"MK2NCLTARMJ002404", nomor_mesin:"4A91KAC3189", nomor_polisi:"N 1365 KP", tahun:2021, pemakai:"Dra. EMILYATI, M.Si" },
+  { jenis:"R. 4", merek_type:"DAIHATSU LUXIO", nomor_rangka:"MHKW3CA3JMK026628", nomor_mesin:"3SZDHD0546", nomor_polisi:"N 1393 KP", tahun:2021, pemakai:"TENGKO WOLOK, ST" },
+  { jenis:"R. 2", merek_type:"YAMAHA AEROX", nomor_rangka:"MH3SG6420MJ023431", nomor_mesin:"G3P4E0040151", nomor_polisi:"N 3584 JP", tahun:2021, pemakai:"Dra. EMILYATI, M.Si" },
+  { jenis:"R. 2", merek_type:"YAMAHA AEROX", nomor_rangka:"MH3SG6420MJ023700", nomor_mesin:"G3P4E0040540", nomor_polisi:"N 3580 JP", tahun:2021, pemakai:"MOCH. SOFUWAN, A.Md" },
+  { jenis:"R. 2", merek_type:"YAMAHA AEROX", nomor_rangka:"MH3SG6420MJ023101", nomor_mesin:"G3P4E0039261", nomor_polisi:"N 3586 JP", tahun:2021, pemakai:"KHUSNUL ROFI'IYAH, SE, MM" },
+  { jenis:"R. 2", merek_type:"YAMAHA FREEGO", nomor_rangka:"MH3SEF510MJ121643", nomor_mesin:"E31WE0161898", nomor_polisi:"N 3585 JP", tahun:2021, pemakai:"SARI ANAS PUTRI, SE" },
+  { jenis:"R. 2", merek_type:"YAMAHA FREEGO", nomor_rangka:"MH3SEF510MJ121904", nomor_mesin:"E31WE0162199", nomor_polisi:"N 3583 JP", tahun:2021, pemakai:"DIYAH WAHYUNI, SE, MM" },
+  { jenis:"R. 2", merek_type:"YAMAHA FREEGO", nomor_rangka:"MH3SEF510MJ121644", nomor_mesin:"E31WE0161899", nomor_polisi:"N 3581 JP", tahun:2021, pemakai:"TENGKO WOLOK, ST" },
+  { jenis:"R. 2", merek_type:"HONDA NF 100 SE", nomor_rangka:"MH1HB71198K633118", nomor_mesin:"HB71E11632942", nomor_polisi:"N 2308 KP", tahun:2008, pemakai:"NANDO ARDIANSYAH" },
+  { jenis:"R. 2", merek_type:"YAMAHA T105 ER/ERD", nomor_rangka:"MH34ST1094K521626", nomor_mesin:"4ST865338", nomor_polisi:"N 3140 JP", tahun:2004, pemakai:"DERI FIRMANSYAH" },
+];
+
+// Filter data kendaraan sesuai jenis belanja pemeliharaan (Perorangan/Penumpang -> R.4, Beroda Dua -> R.2).
+// Mengembalikan [] bila nama belanja tidak berkaitan dengan pemeliharaan kendaraan.
+function ndKendaraanUntukBelanja(namaBelanja) {
+  const nm = (namaBelanja||'').toLowerCase();
+  if (!nm.includes('kendaraan')) return [];
+  if (!(nm.includes('pemelihara') || nm.includes('jasa') || nm.includes('sewa'))) return [];
+  if (nm.includes('beroda dua')) return DATA_KENDARAAN_DINAS.filter(k=>k.jenis==='R. 2');
+  if (nm.includes('perorangan') || nm.includes('penumpang')) return DATA_KENDARAAN_DINAS.filter(k=>k.jenis==='R. 4');
+  return [];
+}
+
 if (!STATE.notaDinas) STATE.notaDinas = { pptk: [], ppk: [] };
 
 function ndSave() {
@@ -31014,6 +31045,21 @@ function cetakNotaPPTK(id) {
   const namaKota  = 'Batu';
   const tglCetak  = ndTanggalPanjang(n.tanggal);
   const namaPPTKTtd = ndFormatNamaTTD(n.pptk_nama||pptk.nama||'...');
+  const kendaraanND = ndKendaraanUntukBelanja(n.nama_belanja||n.belanja||'');
+  const htmlKendaraan = kendaraanND.length ? `
+  <p class="lamp-sub" style="margin-top:12px">Daftar Kendaraan yang Dilaksanakan Belanja Jasa Pemeliharaan</p>
+  <table class="dt">
+    <tr style="background:#e8e8e8"><th class="no">No</th><th style="width:70px">Jenis</th><th>Merek/Type</th><th>Nomor Rangka</th><th>Nomor Mesin</th><th style="width:90px">Nomor Polisi</th></tr>
+    ${kendaraanND.map((k,i)=>`
+    <tr>
+      <td class="no">${i+1}</td>
+      <td class="center">${k.jenis||'—'}</td>
+      <td>${k.merek_type||'—'}</td>
+      <td>${k.nomor_rangka||'—'}</td>
+      <td>${k.nomor_mesin||'—'}</td>
+      <td class="center">${k.nomor_polisi||'—'}</td>
+    </tr>`).join('')}
+  </table>` : '';
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
 <title>Nota Dinas PPTK ${n.nomor_urut||''}</title>
@@ -31170,6 +31216,7 @@ ${ndStyleCetak()}
       <td class="link-ref">${lnk.link||'—'}</td>
     </tr>`).join('')}
   </table>
+  ${htmlKendaraan}
 
   <p class="isi" style="margin-top:10px">Data umum dan daftar kebutuhan barang/jasa di atas dapat dijadikan dasar oleh Pejabat Pembuat Komitmen/Pejabat Pengadaan Barang/Jasa untuk proses pengadaan barang/jasa sehingga dapat segera dilaksanakan sesuai dengan aturan yang berlaku.</p>
 
@@ -31205,6 +31252,21 @@ function cetakNotaPPK(id) {
   const nipKPA     = n.ppk_nip || kpa.nip || '...';
   const jabKPA1    = 'Kuasa Pengguna Anggaran';
   const jabKPA2    = 'selaku Pejabat Pembuat Komitmen';
+  const kendaraanND = ndKendaraanUntukBelanja(n.nama_belanja||n.belanja||notaPPTK.nama_belanja||'');
+  const htmlKendaraan = kendaraanND.length ? `
+  <p class="lamp-sub" style="margin-top:10px">Daftar Kendaraan yang Dilaksanakan Belanja Jasa Pemeliharaan</p>
+  <table class="dt">
+    <tr style="background:#e8e8e8"><th class="no">No</th><th style="width:70px">Jenis</th><th>Merek/Type</th><th>Nomor Rangka</th><th>Nomor Mesin</th><th style="width:90px">Nomor Polisi</th></tr>
+    ${kendaraanND.map((k,i)=>`
+    <tr>
+      <td class="no">${i+1}</td>
+      <td class="center">${k.jenis||'—'}</td>
+      <td>${k.merek_type||'—'}</td>
+      <td>${k.nomor_rangka||'—'}</td>
+      <td>${k.nomor_mesin||'—'}</td>
+      <td class="center">${k.nomor_polisi||'—'}</td>
+    </tr>`).join('')}
+  </table>` : '';
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
 <title>Nota Dinas PPK ${n.nomor_urut||''}</title>
@@ -31349,6 +31411,7 @@ ${ndStyleCetak()}
     ${(n.links||notaPPTK.links||[{uraian:n.nama_belanja||notaPPTK.nama_belanja||'—',link:'https://katalog.inaproc.id/'}]).map((lnk,i)=>`
     <tr><td class="no">${i+1}</td><td>${lnk.uraian||'—'}</td><td class="link-ref">${lnk.link||'—'}</td></tr>`).join('')}
   </table>
+  ${htmlKendaraan}
 
   <p class="lamp-sub" style="margin-top:10px">Syarat Penyedia</p>
   <table class="dt">
@@ -31992,6 +32055,33 @@ function tblLinks(links) {
   });
 }
 
+// Tabel data kendaraan dinas (lampiran belanja pemeliharaan kendaraan)
+function tblKendaraan(list) {
+  const colW = [300, 900, 2200, 2400, 1900, 1571];
+  return new Table({
+    width: { size: CW, type: WidthType.DXA },
+    columnWidths: colW,
+    rows: [
+      new TableRow({ cantSplit: true, tableHeader:true, children:[
+        cell('No',{w:colW[0],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Jenis Kendaraan',{w:colW[1],shade:true,bold:true,align:AlignmentType.CENTER}),
+        cell('Merek/Type',{w:colW[2],shade:true,bold:true}),
+        cell('Nomor Rangka',{w:colW[3],shade:true,bold:true}),
+        cell('Nomor Mesin',{w:colW[4],shade:true,bold:true}),
+        cell('Nomor Polisi',{w:colW[5],shade:true,bold:true,align:AlignmentType.CENTER}),
+      ]}),
+      ...(list||[]).map((k,i)=>new TableRow({ cantSplit: true,children:[
+        cell(String(i+1),{w:colW[0],align:AlignmentType.CENTER}),
+        cell(k.jenis||'',{w:colW[1],align:AlignmentType.CENTER}),
+        cell(k.merek_type||'',{w:colW[2]}),
+        cell(k.nomor_rangka||'',{w:colW[3]}),
+        cell(k.nomor_mesin||'',{w:colW[4]}),
+        cell(k.nomor_polisi||'',{w:colW[5],align:AlignmentType.CENTER}),
+      ]}))
+    ]
+  });
+}
+
 // ============================================================
 // GENERATE NOTA PPTK
 // ============================================================
@@ -32006,6 +32096,7 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
   const pptkNama = ndFormatNamaTTD(n.pptk_nama || pptk.nama || '—');
   const pptkNip  = pptk.nip || '—';
   const pptkJab  = pptk.jabatan_resmi || 'Pejabat Pelaksana Teknis Kegiatan';
+  const kendaraanND = ndKendaraanUntukBelanja(n.nama_belanja || n.belanja || '');
 
   const pageProps = {
     size: { width: PAGE_W, height: PAGE_H, orientation: pgSettings.landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
@@ -32168,6 +32259,12 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
     para([tr('Sumber Referensi Harga Satuan:')],{compact:true,lineHeight:1.15}),
     tblLinks(links),
 
+    ...(kendaraanND.length ? [
+      EMPTY(),
+      subJudul('Daftar Kendaraan yang Dilaksanakan Belanja Jasa Pemeliharaan'),
+      tblKendaraan(kendaraanND),
+    ] : []),
+
     EMPTY(),
     paraIsi('Data umum dan daftar kebutuhan barang/jasa di atas dapat dijadikan dasar oleh Pejabat Pembuat Komitmen/Pejabat Pengadaan Barang/Jasa untuk proses pengadaan barang/jasa sehingga dapat segera dilaksanakan sesuai dengan aturan yang berlaku.'),
     ...ttdBlock('Pejabat Pelaksana Teknis Kegiatan', 'Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu', pptkNama, pptkNip, 'right'),
@@ -32198,6 +32295,7 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
   const jabPPK  = 'selaku Pejabat Pembuat Komitmen';
   const program    = n.program    || notaPPTK.program    || '—';
   const kegiatan   = n.kegiatan   || notaPPTK.kegiatan   || '—';
+  const kendaraanND = ndKendaraanUntukBelanja(n.nama_belanja || n.belanja || notaPPTK.nama_belanja || '');
   const subKeg     = n.sub_kegiatan  || notaPPTK.sub_kegiatan  || '—';
   const belanja    = n.nama_belanja  || n.belanja || notaPPTK.nama_belanja || '—';
   const kodeRek    = n.kode_rekening || notaPPTK.kode_rekening || '—';
@@ -32353,6 +32451,12 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
     EMPTY(),
     para([tr('Sumber Referensi Harga Satuan:')],{compact:true,lineHeight:1.15}),
     tblLinks(links),
+
+    ...(kendaraanND.length ? [
+      EMPTY(),
+      subJudul('Daftar Kendaraan yang Dilaksanakan Belanja Jasa Pemeliharaan'),
+      tblKendaraan(kendaraanND),
+    ] : []),
 
     EMPTY(),
     subJudul('Syarat Penyedia'),
