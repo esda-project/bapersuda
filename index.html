@@ -29135,6 +29135,13 @@ window.addEventListener('resize', function() {
         </div>
       </div>
 
+      <!-- Panel Pilih Kendaraan (khusus belanja pemeliharaan/sewa kendaraan) -->
+      <div id="ndpKendaraanBox" style="display:none;margin-bottom:14px;padding:10px;border:1px solid var(--c-border);border-radius:8px;background:var(--c-surface2)">
+        <label class="form-label" style="margin:0 0 6px;font-weight:700">🚗 Pilih Kendaraan yang Melaksanakan Pemeliharaan</label>
+        <div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px">Centang kendaraan yang akan diajukan. Setiap baris pekerjaan di bawah dapat dikaitkan ke salah satu kendaraan yang dicentang.</div>
+        <div id="ndpKendaraanList" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
       <!-- Tabel Items -->
       <div style="margin-bottom:10px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -29146,6 +29153,7 @@ window.addEventListener('resize', function() {
             <thead style="background:var(--c-surface2)">
               <tr>
                 <th style="border:1px solid var(--c-border);padding:6px;width:30px">#</th>
+                <th id="ndpThKendaraan" style="border:1px solid var(--c-border);padding:6px;width:150px;display:none">Kendaraan</th>
                 <th style="border:1px solid var(--c-border);padding:6px">Nama Barang/Jasa</th>
                 <th style="border:1px solid var(--c-border);padding:6px">Spesifikasi</th>
                 <th style="border:1px solid var(--c-border);padding:6px;width:60px">Satuan</th>
@@ -30342,6 +30350,8 @@ function openModalNotaPPTK(editId) {
   document.getElementById('ndpJenisDpa').value = 'DPA Murni';
   ndpClearItems();
   ndpLinks = []; ndpRenderLinks();
+  ndpKendaraanTerpilih = [];
+  ndpRenderKendaraanPicker('');
 
   // Isi dropdown rekening
   ndpPopulateRekening();
@@ -30370,6 +30380,7 @@ function openModalNotaPPTK(editId) {
     document.getElementById('ndpSumberDana2').value = nota.sumber_dana_tambahan||'';
     // Pilih rekening
     setTimeout(()=>{
+      ndpKendaraanTerpilih = (nota.kendaraan_terpilih || []).slice();
       ndpSetRekening(nota.kode_rekening||'');
       if (nota.jenis_dpa) document.getElementById('ndpJenisDpa').value = nota.jenis_dpa;
       if (nota.items && nota.items.length > 0) nota.items.forEach(item => ndpAddItem(item));
@@ -30474,6 +30485,7 @@ function ndpOnRekeningChange() {
     ['ndpProgram','ndpKegiatan','ndpSubKegiatan','ndpBelanja','ndpPagu','ndpSisa','ndpSumberDana','ndpPPTK'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.textContent='—';
     });
+    ndpRenderKendaraanPicker('');
     return;
   }
   const a = STATE.anggaran.find(x=>x.kode_rekening===kode);
@@ -30500,6 +30512,45 @@ function ndpOnRekeningChange() {
   if (halEl && !halEl.value) {
     halEl.value = 'Persiapan Pengadaan ' + (a.nama_belanja||a.belanja||'');
   }
+
+  ndpRenderKendaraanPicker(a.nama_belanja||a.belanja||'');
+}
+
+// ============================================================
+// PANEL PILIH KENDARAAN (belanja pemeliharaan/sewa kendaraan)
+// ============================================================
+let ndpKendaraanEligible = [];
+let ndpKendaraanTerpilih = [];
+function ndpRenderKendaraanPicker(namaBelanja) {
+  const box = document.getElementById('ndpKendaraanBox');
+  const list = document.getElementById('ndpKendaraanList');
+  if (!box || !list) return;
+  ndpKendaraanEligible = ndKendaraanUntukBelanja(namaBelanja||'');
+  // Buang kendaraan terpilih yang sudah tidak relevan dengan rekening baru
+  const eligibleNopol = ndpKendaraanEligible.map(k=>k.nomor_polisi);
+  ndpKendaraanTerpilih = ndpKendaraanTerpilih.filter(np=>eligibleNopol.includes(np));
+
+  if (ndpKendaraanEligible.length === 0) {
+    box.style.display = 'none';
+    list.innerHTML = '';
+    ndpRenderItems();
+    return;
+  }
+  box.style.display = 'block';
+  list.innerHTML = ndpKendaraanEligible.map(k => {
+    const checked = ndpKendaraanTerpilih.includes(k.nomor_polisi) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+      <input type="checkbox" ${checked} onchange="ndpToggleKendaraan('${escHtml(k.nomor_polisi)}')">
+      <span>${escHtml(k.jenis)} — <b>${escHtml(k.merek_type)}</b> — ${escHtml(k.nomor_polisi)} ${k.pemakai?('(' + escHtml(k.pemakai) + ')') : ''}</span>
+    </label>`;
+  }).join('');
+  ndpRenderItems();
+}
+function ndpToggleKendaraan(nopol) {
+  const i = ndpKendaraanTerpilih.indexOf(nopol);
+  if (i >= 0) ndpKendaraanTerpilih.splice(i,1);
+  else ndpKendaraanTerpilih.push(nopol);
+  ndpRenderItems();
 }
 
 // ============================================================
@@ -30582,7 +30633,7 @@ function ndpRenderLinks() {
     </div>`).join('');
 }
 function ndpAddItem(item) {
-  ndpItems.push(item || {uraian:'',spek:'',satuan:'',jumlah:0,harga:0,link:''});
+  ndpItems.push(item || {uraian:'',spek:'',satuan:'',jumlah:0,harga:0,link:'',kendaraan_nopol:''});
   ndpRenderItems();
 }
 function ndpRemoveItem(i) {
@@ -30600,15 +30651,24 @@ function ndpRenderTotal() {
 }
 function ndpRenderItems() {
   const el = document.getElementById('ndpItemsBody');
+  const thKendaraan = document.getElementById('ndpThKendaraan');
+  const showKendaraan = ndpKendaraanTerpilih && ndpKendaraanTerpilih.length > 0;
+  if (thKendaraan) thKendaraan.style.display = showKendaraan ? '' : 'none';
   if (!el) return;
   if (ndpItems.length === 0) {
-    el.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--c-text-muted);padding:16px;font-size:12px">Belum ada item — klik "+ Tambah Baris"</td></tr>';
+    el.innerHTML = '<tr><td colspan="' + (showKendaraan?8:7) + '" style="text-align:center;color:var(--c-text-muted);padding:16px;font-size:12px">Belum ada item — klik "+ Tambah Baris"</td></tr>';
     ndpRenderTotal();
     return;
   }
+  const kendaraanOptions = (k) => ndpKendaraanEligible
+    .filter(v=>ndpKendaraanTerpilih.includes(v.nomor_polisi))
+    .map(v=>`<option value="${escHtml(v.nomor_polisi)}" ${k===v.nomor_polisi?'selected':''}>${escHtml(v.merek_type)} — ${escHtml(v.nomor_polisi)}</option>`).join('');
   el.innerHTML = ndpItems.map((it,i) => `
     <tr>
       <td style="text-align:center">${i+1}</td>
+      ${showKendaraan ? `<td><select class="form-input" style="font-size:11px" onchange="ndpItemChange(${i},'kendaraan_nopol',this.value)">
+        <option value="">— pilih kendaraan —</option>${kendaraanOptions(it.kendaraan_nopol||'')}
+      </select></td>` : ''}
       <td><input class="form-input" style="font-size:12px;min-width:120px" value="${it.uraian||''}" oninput="ndpItemChange(${i},'uraian',this.value)" placeholder="Nama barang/jasa"></td>
       <td><input class="form-input" style="font-size:12px;min-width:120px" value="${it.spek||''}" oninput="ndpItemChange(${i},'spek',this.value)" placeholder="Spesifikasi"></td>
       <td><input class="form-input" style="font-size:11px;width:60px" value="${it.satuan||''}" oninput="ndpItemChange(${i},'satuan',this.value)" placeholder="Unit"></td>
@@ -30671,6 +30731,7 @@ async function saveNotaPPTK() {
     jenis_dpa: document.getElementById('ndpJenisDpa').value,
     items: ndpItems.map(it=>({...it})),
     links: ndpLinks.map(lnk=>({...lnk})),
+    kendaraan_terpilih: ndpKendaraanTerpilih.slice(),
     created_by: STATE.user.username,
     created_at: new Date().toISOString(),
   };
@@ -30916,6 +30977,7 @@ async function saveNotaPPK() {
     ppk_nip: ppkNip || ppkUser.nip || '',
     items: notaPPTK.items || [],
     links: notaPPTK.links || [],
+    kendaraan_terpilih: notaPPTK.kendaraan_terpilih || [],
     created_by: STATE.user.username,
     created_at: new Date().toISOString(),
   };
@@ -31045,21 +31107,8 @@ function cetakNotaPPTK(id) {
   const namaKota  = 'Batu';
   const tglCetak  = ndTanggalPanjang(n.tanggal);
   const namaPPTKTtd = ndFormatNamaTTD(n.pptk_nama||pptk.nama||'...');
-  const kendaraanND = ndKendaraanUntukBelanja(n.nama_belanja||n.belanja||'');
-  const htmlKendaraan = kendaraanND.length ? `
-  <p class="lamp-sub" style="margin-top:12px">Daftar Kendaraan yang Dilaksanakan Belanja Jasa Pemeliharaan</p>
-  <table class="dt">
-    <tr style="background:#e8e8e8"><th class="no">No</th><th style="width:70px">Jenis</th><th>Merek/Type</th><th>Nomor Rangka</th><th>Nomor Mesin</th><th style="width:90px">Nomor Polisi</th></tr>
-    ${kendaraanND.map((k,i)=>`
-    <tr>
-      <td class="no">${i+1}</td>
-      <td class="center">${k.jenis||'—'}</td>
-      <td>${k.merek_type||'—'}</td>
-      <td>${k.nomor_rangka||'—'}</td>
-      <td>${k.nomor_mesin||'—'}</td>
-      <td class="center">${k.nomor_polisi||'—'}</td>
-    </tr>`).join('')}
-  </table>` : '';
+  const kendaraanND = ndKendaraanTerpilihUntukNota(n);
+  const htmlKendaraan = htmlKendaraanRincianBlock(kendaraanND, n.items||[]);
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
 <title>Nota Dinas PPTK ${n.nomor_urut||''}</title>
@@ -31252,21 +31301,8 @@ function cetakNotaPPK(id) {
   const nipKPA     = n.ppk_nip || kpa.nip || '...';
   const jabKPA1    = 'Kuasa Pengguna Anggaran';
   const jabKPA2    = 'selaku Pejabat Pembuat Komitmen';
-  const kendaraanND = ndKendaraanUntukBelanja(n.nama_belanja||n.belanja||notaPPTK.nama_belanja||'');
-  const htmlKendaraan = kendaraanND.length ? `
-  <p class="lamp-sub" style="margin-top:10px">Daftar Kendaraan yang Dilaksanakan Belanja Jasa Pemeliharaan</p>
-  <table class="dt">
-    <tr style="background:#e8e8e8"><th class="no">No</th><th style="width:70px">Jenis</th><th>Merek/Type</th><th>Nomor Rangka</th><th>Nomor Mesin</th><th style="width:90px">Nomor Polisi</th></tr>
-    ${kendaraanND.map((k,i)=>`
-    <tr>
-      <td class="no">${i+1}</td>
-      <td class="center">${k.jenis||'—'}</td>
-      <td>${k.merek_type||'—'}</td>
-      <td>${k.nomor_rangka||'—'}</td>
-      <td>${k.nomor_mesin||'—'}</td>
-      <td class="center">${k.nomor_polisi||'—'}</td>
-    </tr>`).join('')}
-  </table>` : '';
+  const kendaraanND = ndKendaraanTerpilihUntukNota(n);
+  const htmlKendaraan = htmlKendaraanRincianBlock(kendaraanND, items);
 
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
 <title>Nota Dinas PPK ${n.nomor_urut||''}</title>
@@ -32082,6 +32118,70 @@ function tblKendaraan(list) {
   });
 }
 
+// Kendaraan yang berlaku untuk sebuah nota: pakai pilihan eksplisit (kendaraan_terpilih) jika ada,
+// fallback ke seluruh kendaraan sekategori (perilaku lama, untuk nota yang dibuat sebelum fitur ini ada).
+function ndKendaraanTerpilihUntukNota(n) {
+  if (n && n.kendaraan_terpilih && n.kendaraan_terpilih.length) {
+    return DATA_KENDARAAN_DINAS.filter(k => n.kendaraan_terpilih.includes(k.nomor_polisi));
+  }
+  return ndKendaraanUntukBelanja((n && (n.nama_belanja||n.belanja)) || '');
+}
+
+// Item pekerjaan pemeliharaan milik satu kendaraan tertentu.
+// Jika item tidak ditandai (kendaraan_nopol kosong) dan hanya ada 1 kendaraan terpilih, anggap semua item untuk kendaraan itu.
+function ndItemsUntukKendaraan(items, kendaraanList, nopol) {
+  const tagged = (items||[]).filter(it => it.kendaraan_nopol === nopol);
+  if (tagged.length) return tagged;
+  if ((kendaraanList||[]).length === 1) return (items||[]).filter(it => !it.kendaraan_nopol);
+  return [];
+}
+
+// Blok DOCX: untuk setiap kendaraan terpilih, tampilkan identitas + tabel pekerjaan pemeliharaannya
+function kendaraanRincianBlocksDocx(kendaraanList, items) {
+  const out = [];
+  (kendaraanList||[]).forEach((k, idx) => {
+    const its = ndItemsUntukKendaraan(items, kendaraanList, k.nomor_polisi);
+    out.push(para([tr(`${idx+1}. ${k.jenis} — ${k.merek_type} — No. Polisi ${k.nomor_polisi}`, {bold:true})], {compact:true, lineHeight:1.15, spaceBefore:2}));
+    out.push(para([tr(`No. Rangka: ${k.nomor_rangka||'—'}   |   No. Mesin: ${k.nomor_mesin||'—'}`, {italic:true, size:10})], {compact:true, lineHeight:1.15}));
+    if (its.length) {
+      out.push(tblBarang(its, false));
+    } else {
+      out.push(para([tr('Belum ada rincian pekerjaan pemeliharaan untuk kendaraan ini.', {italic:true, size:10})], {compact:true, lineHeight:1.15}));
+    }
+    out.push(EMPTY());
+  });
+  return out;
+}
+
+// Blok HTML (versi Cetak/PDF): untuk setiap kendaraan terpilih, tampilkan identitas + tabel pekerjaan pemeliharaannya
+function htmlKendaraanRincianBlock(kendaraanList, items) {
+  if (!kendaraanList || !kendaraanList.length) return '';
+  const rows = kendaraanList.map((k, idx) => {
+    const its = ndItemsUntukKendaraan(items, kendaraanList, k.nomor_polisi);
+    const tabelPekerjaan = its.length ? `
+      <table class="dt" style="margin:4px 0 10px">
+        <tr style="background:#e8e8e8"><th class="no">No</th><th>Uraian</th><th style="width:120px">Spesifikasi</th><th style="width:50px">Sat</th><th style="width:50px">Qty</th><th style="width:100px">Harga Satuan (Rp)</th><th style="width:100px">Total (Rp)</th></tr>
+        ${its.map((it,i)=>`
+        <tr>
+          <td class="no">${i+1}</td>
+          <td>${it.uraian||'—'}</td>
+          <td>${it.spek||'—'}</td>
+          <td class="center">${it.satuan||'—'}</td>
+          <td class="center">${it.jumlah||0}</td>
+          <td class="rp">${ndFmt(it.harga)}</td>
+          <td class="rp">${ndFmt((parseFloat(it.jumlah)||0)*(parseFloat(it.harga)||0))}</td>
+        </tr>`).join('')}
+      </table>` : `<p class="isi" style="font-style:italic;font-size:10pt;margin:2px 0 10px">Belum ada rincian pekerjaan pemeliharaan untuk kendaraan ini.</p>`;
+    return `
+    <p class="isi" style="font-weight:bold;margin:6px 0 0">${idx+1}. ${k.jenis||'—'} — ${k.merek_type||'—'} — No. Polisi ${k.nomor_polisi||'—'}</p>
+    <p class="isi" style="font-style:italic;font-size:10pt;margin:0 0 4px">No. Rangka: ${k.nomor_rangka||'—'} &nbsp;|&nbsp; No. Mesin: ${k.nomor_mesin||'—'}</p>
+    ${tabelPekerjaan}`;
+  }).join('');
+  return `
+  <p class="lamp-sub" style="margin-top:12px">Rincian Kendaraan dan Pekerjaan Pemeliharaan</p>
+  ${rows}`;
+}
+
 // ============================================================
 // GENERATE NOTA PPTK
 // ============================================================
@@ -32096,7 +32196,7 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
   const pptkNama = ndFormatNamaTTD(n.pptk_nama || pptk.nama || '—');
   const pptkNip  = pptk.nip || '—';
   const pptkJab  = pptk.jabatan_resmi || 'Pejabat Pelaksana Teknis Kegiatan';
-  const kendaraanND = ndKendaraanUntukBelanja(n.nama_belanja || n.belanja || '');
+  const kendaraanND = ndKendaraanTerpilihUntukNota(n);
 
   const pageProps = {
     size: { width: PAGE_W, height: PAGE_H, orientation: pgSettings.landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
@@ -32261,8 +32361,8 @@ function generateNotaPPTK(n, pptk, kpa, tahun) {
 
     ...(kendaraanND.length ? [
       EMPTY(),
-      subJudul('Daftar Kendaraan yang Dilaksanakan Belanja Jasa Pemeliharaan'),
-      tblKendaraan(kendaraanND),
+      subJudul('Rincian Kendaraan dan Pekerjaan Pemeliharaan'),
+      ...kendaraanRincianBlocksDocx(kendaraanND, items),
     ] : []),
 
     EMPTY(),
@@ -32295,7 +32395,7 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
   const jabPPK  = 'selaku Pejabat Pembuat Komitmen';
   const program    = n.program    || notaPPTK.program    || '—';
   const kegiatan   = n.kegiatan   || notaPPTK.kegiatan   || '—';
-  const kendaraanND = ndKendaraanUntukBelanja(n.nama_belanja || n.belanja || notaPPTK.nama_belanja || '');
+  const kendaraanND = ndKendaraanTerpilihUntukNota(n);
   const subKeg     = n.sub_kegiatan  || notaPPTK.sub_kegiatan  || '—';
   const belanja    = n.nama_belanja  || n.belanja || notaPPTK.nama_belanja || '—';
   const kodeRek    = n.kode_rekening || notaPPTK.kode_rekening || '—';
@@ -32454,8 +32554,8 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
 
     ...(kendaraanND.length ? [
       EMPTY(),
-      subJudul('Daftar Kendaraan yang Dilaksanakan Belanja Jasa Pemeliharaan'),
-      tblKendaraan(kendaraanND),
+      subJudul('Rincian Kendaraan dan Pekerjaan Pemeliharaan'),
+      ...kendaraanRincianBlocksDocx(kendaraanND, items),
     ] : []),
 
     EMPTY(),
