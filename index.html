@@ -31382,6 +31382,9 @@ function cetakNotaPPK(id) {
   const kodeInisialPPK = ndKodeInisialSubKegBelanja(n.sub_kegiatan||notaPPTK.sub_kegiatan, n.nama_belanja||n.belanja||notaPPTK.nama_belanja);
   const nomorNota  = `027/${n.nomor_urut}/PPK-NODIN/${kodeInisialPPK}/35.79.121/${STATE.tahun}`;
   const tglCetak   = ndTanggalPanjang(n.tanggal);
+  const kodeInisialPPTK = ndKodeInisialSubKegBelanja(notaPPTK.sub_kegiatan, notaPPTK.nama_belanja);
+  const nomorNotaPPTK = notaPPTK.nomor_urut ? `027/${notaPPTK.nomor_urut}/PPTK-NODIN/${kodeInisialPPTK}/35.79.121/${STATE.tahun}` : '—';
+  const tglNotaPPTK = notaPPTK.tanggal ? ndTanggalPanjang(notaPPTK.tanggal) : '—';
   const namaKPA    = ndFormatNamaTTD(n.ppk_nama || kpa.nama || '...');
   const nipKPA     = n.ppk_nip || kpa.nip || '...';
   const jabKPA1    = 'Kuasa Pengguna Anggaran';
@@ -31413,7 +31416,7 @@ ${ndStyleCetak()}
   </table>
   <div class="kop-garis2" style="margin:8px 0"></div>
 
-  <p class="isi">Dalam rangka pelaksanaan Kegiatan <b>${n.kegiatan||notaPPTK.kegiatan||'...'}</b> Sub Kegiatan <b>${n.sub_kegiatan||notaPPTK.sub_kegiatan||'...'}</b> untuk pelaksanaan pekerjaan <b>${n.nama_belanja||n.belanja||notaPPTK.nama_belanja||'...'}</b> mendukung Program <b>${n.program||notaPPTK.program||'...'}</b> pada Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu, maka membutuhkan proses pengadaan barang/jasa untuk pekerjaan dimaksud tersebut benar-benar merupakan kebutuhan Satuan Kerja Perangkat Daerah (SKPD) yang telah direncanakan sebelumnya sehingga tertuang dalam Dokumen Pelaksanaan Anggaran Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Tahun Anggaran ${STATE.tahun}.</p>
+  <p class="isi">Berdasarkan Nota Dinas Pejabat Pelaksana Teknis Kegiatan (PPTK) Nomor: <b>${nomorNotaPPTK}</b> Tanggal: <b>${tglNotaPPTK}</b> perihal <b>${notaPPTK.hal||n.hal||'...'}</b>, dan dalam rangka pelaksanaan Kegiatan <b>${n.kegiatan||notaPPTK.kegiatan||'...'}</b> Sub Kegiatan <b>${n.sub_kegiatan||notaPPTK.sub_kegiatan||'...'}</b> untuk pelaksanaan pekerjaan <b>${n.nama_belanja||n.belanja||notaPPTK.nama_belanja||'...'}</b> mendukung Program <b>${n.program||notaPPTK.program||'...'}</b> pada Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu, maka membutuhkan proses pengadaan barang/jasa untuk pekerjaan dimaksud tersebut benar-benar merupakan kebutuhan Satuan Kerja Perangkat Daerah (SKPD) yang telah direncanakan sebelumnya sehingga tertuang dalam Dokumen Pelaksanaan Anggaran Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Tahun Anggaran ${STATE.tahun}.</p>
 
   <p class="isi">Atas dasar hal tersebut, bersama ini disampaikan kepada Pejabat Pengadaan Barang/Jasa Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu Tahun Anggaran ${STATE.tahun} untuk melaksanakan persiapan administrasi serta melaksanakan proses pemilihan penyedia barang/jasa terhadap kebutuhan barang/jasa tersebut. Adapun data pendukung yang kami lampirkan sebagai bahan untuk proses pemilihan penyedia barang/jasa antara lain Dokumen Pelaksanaan Anggaran DPA (${n.jenis_dpa||notaPPTK.jenis_dpa||'Murni/Pergeseran/Perubahan'}), Spesifikasi Teknis dan Daftar Kebutuhan Barang/Jasa.</p>
 
@@ -32561,6 +32564,9 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
   const tglDPA     = tglPanjang(n.tanggal_dpa || notaPPTK.tanggal_dpa);
   const jenisDPA   = n.jenis_dpa || notaPPTK.jenis_dpa || 'Murni/Pergeseran/Perubahan';
   const pagu       = n.pagu || notaPPTK.pagu || 0;
+  const kodeInisialPPTK = ndKodeInisialSubKegBelanja(notaPPTK.sub_kegiatan, notaPPTK.nama_belanja);
+  const nomorNotaPPTK = notaPPTK.nomor_urut ? `027/${notaPPTK.nomor_urut}/PPTK-NODIN/${kodeInisialPPTK}/35.79.121/${tahun}` : '—';
+  const tglNotaPPTK = notaPPTK.tanggal ? tglPanjang(notaPPTK.tanggal) : '—';
 
   const pageProps = {
     size: { width: PAGE_W, height: PAGE_H, orientation: pgSettings.landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
@@ -32584,7 +32590,7 @@ function generateNotaPPK(n, notaPPTK, kpa, tahun) {
       ['Perihal',  [tr(n.hal||'Pelaksanaan Pengadaan Barang/Jasa', {bold:true})]],
     ]),
     garis(),
-    paraIsi(`Dalam rangka pelaksanaan Kegiatan ${kegiatan} Sub Kegiatan ${subKeg} untuk pelaksanaan pekerjaan ${belanja} mendukung Program ${program} pada Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu, maka membutuhkan proses pengadaan barang/jasa untuk pekerjaan dimaksud tersebut benar-benar merupakan kebutuhan Satuan Kerja Perangkat Daerah (SKPD) yang telah direncanakan sebelumnya sehingga tertuang dalam Dokumen Pelaksanaan Anggaran Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Tahun Anggaran ${tahun}.`),
+    paraIsi(`Berdasarkan Nota Dinas Pejabat Pelaksana Teknis Kegiatan (PPTK) Nomor: ${nomorNotaPPTK} Tanggal: ${tglNotaPPTK} perihal ${notaPPTK.hal||n.hal||'—'}, dan dalam rangka pelaksanaan Kegiatan ${kegiatan} Sub Kegiatan ${subKeg} untuk pelaksanaan pekerjaan ${belanja} mendukung Program ${program} pada Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu, maka membutuhkan proses pengadaan barang/jasa untuk pekerjaan dimaksud tersebut benar-benar merupakan kebutuhan Satuan Kerja Perangkat Daerah (SKPD) yang telah direncanakan sebelumnya sehingga tertuang dalam Dokumen Pelaksanaan Anggaran Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Tahun Anggaran ${tahun}.`),
     paraIsi(`Atas dasar hal tersebut, bersama ini disampaikan kepada Pejabat Pengadaan Barang/Jasa Bagian Perekonomian dan Sumber Daya Alam Sekretariat Daerah Kota Batu Tahun Anggaran ${tahun} untuk melaksanakan persiapan administrasi serta melaksanakan proses pemilihan penyedia barang/jasa terhadap kebutuhan barang/jasa tersebut. Adapun data pendukung yang kami lampirkan sebagai bahan untuk proses pemilihan penyedia barang/jasa antara lain Dokumen Pelaksanaan Anggaran DPA (${jenisDPA}), Spesifikasi Teknis dan Daftar Kebutuhan Barang/Jasa.`),
     paraIsi('Demikian atas pelaksanaannya diucapkan terima kasih.'),
     // TTD: 2 baris jabatan
