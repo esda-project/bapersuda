@@ -25680,34 +25680,56 @@ function cetakAnggaran() {
   const sisa = totalPagu - totalReal;
   const pct = totalPagu > 0 ? (totalReal / totalPagu * 100).toFixed(1) : 0;
 
-  // Kelompokkan per sub kegiatan
-  const grouped = {};
+  // Kelompokkan per Kegiatan > Sub Kegiatan
+  const byKegiatan = {};
   STATE.anggaran.forEach(a => {
-    const k = a.kode_sub_kegiatan || '-';
-    if (!grouped[k]) grouped[k] = { nama: a.sub_kegiatan || k, rows: [] };
-    grouped[k].rows.push(a);
+    const kk = a.kode_kegiatan || '-';
+    if (!byKegiatan[kk]) byKegiatan[kk] = { nama: a.kegiatan || kk, subs: {} };
+    const ks = a.kode_sub_kegiatan || '-';
+    if (!byKegiatan[kk].subs[ks]) byKegiatan[kk].subs[ks] = { nama: a.sub_kegiatan || ks, rows: [] };
+    byKegiatan[kk].subs[ks].rows.push(a);
   });
 
   let rows = '';
   let no = 1;
-  Object.values(grouped).forEach(g => {
-    rows += `<tr><td colspan="8" style="background:#e8f0fe;font-weight:700;font-size:11px">${g.nama}</td></tr>`;
-    g.rows.forEach(a => {
-      const pagu = getPagu(a);
-      const real = getRealisasiByRekening(a.kode_rekening);
-      const sisaRek = pagu - real;
-      const pct = pagu > 0 ? (real / pagu * 100).toFixed(1) : 0;
-      rows += `<tr>
-        <td class="center">${no++}</td>
-        <td class="mono" style="white-space:nowrap">${a.kode_rekening || '-'}</td>
-        <td style="max-width:250px">${a.nama_belanja || '-'}</td>
-        <td class="center"><span class="badge ${a.sumber_dana === 'DBH CHT' ? 'badge-orange' : 'badge-blue'}">${a.sumber_dana || '-'}</span></td>
-        <td class="center" style="font-size:10px">${a.pptk || '-'}</td>
-        <td class="right mono">${fmt(pagu)}</td>
-        <td class="right mono">${fmt(real)}</td>
-        <td class="right mono" style="${sisaRek < 0 ? 'color:#dc2626;font-weight:700' : ''}">${fmt(sisaRek)}</td>
+  Object.values(byKegiatan).forEach(keg => {
+    let kegPagu = 0, kegReal = 0;
+    Object.values(keg.subs).forEach(g => {
+      rows += `<tr><td colspan="8" style="background:#e8f0fe;font-weight:700;font-size:11px">${g.nama}</td></tr>`;
+      let subPagu = 0, subReal = 0;
+      g.rows.forEach(a => {
+        const pagu = getPagu(a);
+        const real = getRealisasiByRekening(a.kode_rekening);
+        const sisaRek = pagu - real;
+        const pct = pagu > 0 ? (real / pagu * 100).toFixed(1) : 0;
+        subPagu += pagu; subReal += real;
+        rows += `<tr>
+          <td class="center">${no++}</td>
+          <td class="mono" style="white-space:nowrap">${a.kode_rekening || '-'}</td>
+          <td style="max-width:250px">${a.nama_belanja || '-'}</td>
+          <td class="center"><span class="badge ${a.sumber_dana === 'DBH CHT' ? 'badge-orange' : 'badge-blue'}">${a.sumber_dana || '-'}</span></td>
+          <td class="center" style="font-size:10px">${a.pptk || '-'}</td>
+          <td class="right mono">${fmt(pagu)}</td>
+          <td class="right mono">${fmt(real)}</td>
+          <td class="right mono" style="${sisaRek < 0 ? 'color:#dc2626;font-weight:700' : ''}">${fmt(sisaRek)}</td>
+        </tr>`;
+      });
+      const subSisa = subPagu - subReal;
+      rows += `<tr style="background:#f8fafc">
+        <td colspan="5" style="text-align:right;font-weight:700;font-size:10px">Jumlah Anggaran per Sub Kegiatan</td>
+        <td class="right mono" style="font-weight:700">${fmt(subPagu)}</td>
+        <td class="right mono" style="font-weight:700">${fmt(subReal)}</td>
+        <td class="right mono" style="font-weight:700">${fmt(subSisa)}</td>
       </tr>`;
+      kegPagu += subPagu; kegReal += subReal;
     });
+    const kegSisa = kegPagu - kegReal;
+    rows += `<tr style="background:#dbeafe">
+      <td colspan="5" style="text-align:right;font-weight:700;font-size:10px">Jumlah Anggaran per Kegiatan — ${keg.nama}</td>
+      <td class="right mono" style="font-weight:700">${fmt(kegPagu)}</td>
+      <td class="right mono" style="font-weight:700">${fmt(kegReal)}</td>
+      <td class="right mono" style="font-weight:700">${fmt(kegSisa)}</td>
+    </tr>`;
   });
 
   const html = buildPrintHeader(
