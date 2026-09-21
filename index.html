@@ -29670,6 +29670,7 @@ const ND_BELANJA_LOOKUP = [
   },
   {
     "nama_belanja": "Belanja Alat/Bahan untuk Kegiatan Kantor-Kertas dan Cover",
+    "kode_belanja": "5.1.02.01.001.00025",
     "uraian": "Pengadaan belanja kertas dan cover untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja kertas dan cover secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -29726,6 +29727,7 @@ const ND_BELANJA_LOOKUP = [
   },
   {
     "nama_belanja": "Belanja Alat/Bahan untuk Kegiatan Kantor-Alat/Bahan Kantor Lainnya",
+    "kode_belanja": "5.1.02.01.001.00036",
     "uraian": "Pengadaan belanja alat/bahan kantor lainnya untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja alat/bahan kantor lainnya secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -29740,6 +29742,7 @@ const ND_BELANJA_LOOKUP = [
   },
   {
     "nama_belanja": "Belanja Perabot Kantor",
+    "kode_belanja": "5.1.02.01.001.00030",
     "uraian": "Pengadaan belanja perabot kantor untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja perabot kantor secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -29810,6 +29813,7 @@ const ND_BELANJA_LOOKUP = [
   },
   {
     "nama_belanja": "Belanja Pembayaran Pajak, Bea dan Perizinan",
+    "kode_belanja": "5.1.02.02.001.00067",
     "uraian": "Pengadaan belanja pembayaran pajak, bea dan perizinan untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja pembayaran pajak, bea dan perizinan secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -29908,6 +29912,7 @@ const ND_BELANJA_LOOKUP = [
   },
   {
     "nama_belanja": "Belanja Jasa Konsultansi Berorientasi Layanan – Jasa Khusus",
+    "kode_belanja": "5.1.02.02.009.00014",
     "uraian": "Pengadaan belanja jasa konsultansi berorientasi layanan – jasa khusus untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja jasa konsultansi berorientasi layanan – jasa khusus secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -30659,17 +30664,32 @@ function ndpToggleKendaraan(nopol) {
 // ============================================================
 // LOOKUP OTOMATIS NARASI BERDASARKAN JENIS BELANJA
 // ============================================================
-function ndCariLookupBelanja(namaBelanja) {
+// Normalisasi nama belanja: abaikan huruf besar/kecil, spasi, tanda hubung (-, –, —),
+// koma, dan tanda kurung, supaya "Kantor- Kertas" dan "Kantor-Kertas" dianggap sama.
+function ndNormBelanja(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/[^a-z0-9\/]+/g, '');
+}
+
+function ndCariLookupBelanja(namaBelanja, kodeBelanja) {
+  // 1) Cocokkan lewat kode belanja (paling akurat) bila entri lookup memilikinya
+  if (kodeBelanja) {
+    const kode = String(kodeBelanja).trim();
+    const byKode = ND_BELANJA_LOOKUP.find(b => b.kode_belanja && b.kode_belanja === kode);
+    if (byKode) return byKode;
+  }
   if (!namaBelanja) return null;
-  const target = namaBelanja.trim().toLowerCase();
-  // Exact match dulu
-  let found = ND_BELANJA_LOOKUP.find(b => b.nama_belanja.trim().toLowerCase() === target);
+  const target = ndNormBelanja(namaBelanja);
+  if (!target) return null;
+  // 2) Exact match pada nama yang sudah dinormalisasi
+  let found = ND_BELANJA_LOOKUP.find(b => ndNormBelanja(b.nama_belanja) === target);
   if (found) return found;
-  // Partial match (kontain salah satu arah)
-  found = ND_BELANJA_LOOKUP.find(b =>
-    target.includes(b.nama_belanja.trim().toLowerCase()) ||
-    b.nama_belanja.trim().toLowerCase().includes(target)
-  );
+  // 3) Partial match (salah satu mengandung yang lain)
+  found = ND_BELANJA_LOOKUP.find(b => {
+    const n = ndNormBelanja(b.nama_belanja);
+    return target.includes(n) || n.includes(target);
+  });
   return found || null;
 }
 
@@ -30678,8 +30698,12 @@ function ndpIsiOtomatis() {
   if (!kode) { showToast('Pilih rekening terlebih dahulu','error'); return; }
   const a = STATE.anggaran.find(x=>x.kode_rekening===kode);
   if (!a) return;
-  const namaBelanja = a.nama_belanja || a.belanja || '';
-  const lk = ndCariLookupBelanja(namaBelanja);
+  let namaBelanja = a.nama_belanja || a.belanja || '';
+  if (!namaBelanja && a.kode_belanja) {
+    const m = (MASTER.belanja || []).find(x => x.kode_belanja === a.kode_belanja);
+    if (m) namaBelanja = m.nama_belanja;
+  }
+  const lk = ndCariLookupBelanja(namaBelanja, a.kode_belanja);
   if (!lk) {
     showToast('Tidak ditemukan data otomatis untuk jenis belanja "' + namaBelanja + '". Silakan isi manual.', 'error');
     return;
