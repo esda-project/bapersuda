@@ -27038,7 +27038,7 @@ const REAL_FILTER_STATE = {
 // Metode Pemilihan Penyedia (dipakai di form, filter, tabel & cetak Input Realisasi)
 const METODE_PEMILIHAN = ['Pengadaan Langsung', 'e-Purchasing', 'Swakelola', 'Pengecualian'];
 function metodeBadgeClass(m) {
-  return ({'Pengadaan Langsung':'badge-blue','e-Purchasing':'badge-green','Swakelola':'badge-orange','Pengecualian':'badge-gray'})[m] || 'badge-gray';
+  return ({'Pengadaan Langsung':'badge-blue','e-Purchasing':'badge-green','Swakelola':'badge-orange','Pengecualian':''})[m] || '';
 }
 
 function getRealFilterOptions() {
@@ -28403,7 +28403,7 @@ async function unduhKinerjaPPTX() {
 const CARI_STATE = {
   mode: 'realisasi',
   program: '', kegiatan: '', subKegiatan: '',
-  belanja: '', sumberDana: '', pptk: '',
+  belanja: '', sumberDana: '', pptk: '', metode: '',
   tglDari: '', tglSampai: '', q: '',
 };
 
@@ -28455,6 +28455,7 @@ function renderCari() {
     <button class="btn ${modeRealisasi?'btn-blue':'btn-outline'}" onclick="cariSetMode('realisasi')">📑 Cari Realisasi</button>
     <button class="btn ${!modeRealisasi?'btn-blue':'btn-outline'}" onclick="cariSetMode('sisa')">💰 Cari Sisa Anggaran</button>
     <button class="btn btn-outline" onclick="cariReset()">↺ Reset Filter</button>
+    ${modeRealisasi ? `<button class="btn btn-outline" onclick="unduhHasilCariRealisasi()">⬇️ Unduh Excel (CSV)</button>` : ''}
     <button class="btn btn-outline" onclick="${modeRealisasi?'cetakHasilCariRealisasi()':'cetakHasilCariSisa()'}">🖨️ Cetak PDF</button>
   </div>
 </div>
@@ -28515,6 +28516,14 @@ function renderCari() {
     </div>
 
     ${modeRealisasi ? `
+    <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Metode Pemilihan Penyedia</label>
+      <select class="form-input" style="width:100%" id="cariMetode" onchange="cariApply('metode',this.value)">
+        <option value="">— Semua Metode —</option>
+        ${METODE_PEMILIHAN.map(m=>`<option value="${m}" ${CARI_STATE.metode===m?'selected':''}>${m}</option>`).join('')}
+        <option value="__kosong" ${CARI_STATE.metode==='__kosong'?'selected':''}>(Belum diisi)</option>
+      </select>
+    </div>
     <div>
       <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Tgl SP2D Dari</label>
       <input type="date" class="form-input" style="width:100%" value="${CARI_STATE.tglDari}"
@@ -28579,7 +28588,7 @@ function cariApply(key, val) {
 }
 
 function cariReset() {
-  Object.assign(CARI_STATE, {program:'',kegiatan:'',subKegiatan:'',belanja:'',sumberDana:'',pptk:'',tglDari:'',tglSampai:'',q:''});
+  Object.assign(CARI_STATE, {program:'',kegiatan:'',subKegiatan:'',belanja:'',sumberDana:'',pptk:'',metode:'',tglDari:'',tglSampai:'',q:''});
   showPage('cari');
 }
 
@@ -28608,7 +28617,7 @@ function getAnggaranFiltered() {
 // (TIDAK lewat kode_rekening karena bisa tidak konsisten)
 // Untuk filter program/kegiatan: resolve lewat MASTER.programKegSubkeg
 // ============================================================
-function getRealisasiFiltered() {
+function getRealisasiFiltered(ignoreMetode) {
   // Bangun lookup: kode_sub_kegiatan → {kode_program, kode_kegiatan}
   const subKegLookup = {};
   MASTER.programKegSubkeg.forEach(m => {
@@ -28631,6 +28640,10 @@ function getRealisasiFiltered() {
     if (CARI_STATE.subKegiatan && r.kode_sub_kegiatan !== CARI_STATE.subKegiatan)  return false;
     if (CARI_STATE.belanja     && r.kode_belanja      !== CARI_STATE.belanja)      return false;
     if (CARI_STATE.sumberDana  && r.sumber_dana       !== CARI_STATE.sumberDana)   return false;
+    if (!ignoreMetode && CARI_STATE.metode) {
+      if (CARI_STATE.metode === '__kosong') { if (r.metode_pemilihan) return false; }
+      else if (r.metode_pemilihan !== CARI_STATE.metode) return false;
+    }
     if (CARI_STATE.pptk) {
       // pptk di realisasi bisa "NAMA, NIP" — match partial
       const rPptk = (r.pptk||'').toLowerCase();
@@ -28647,6 +28660,59 @@ function getRealisasiFiltered() {
     }
     return true;
   });
+}
+
+// Rekap jumlah pengadaan (transaksi) per Metode Pemilihan Penyedia.
+// Memakai semua filter aktif KECUALI filter metode, agar perbandingan antar metode tetap terlihat.
+function getRekapMetode() {
+  const base = getRealisasiFiltered(true);
+  const rows = METODE_PEMILIHAN.map(m => ({key:m, label:m, jumlah:0, nominal:0}));
+  const kosong = {key:'__kosong', label:'(Belum diisi)', jumlah:0, nominal:0};
+  base.forEach(r => {
+    const row = rows.find(x => x.key === r.metode_pemilihan) || kosong;
+    row.jumlah++; row.nominal += (+r.nominal||0);
+  });
+  if (kosong.jumlah > 0) rows.push(kosong);
+  const totalJumlah = rows.reduce((t,x)=>t+x.jumlah,0);
+  const totalNominal = rows.reduce((t,x)=>t+x.nominal,0);
+  return {rows, totalJumlah, totalNominal};
+}
+
+function buildRekapMetodeCard() {
+  const {rows, totalJumlah, totalNominal} = getRekapMetode();
+  const body = rows.map(x => {
+    const pct = totalJumlah>0 ? (x.jumlah/totalJumlah*100).toFixed(1) : '0.0';
+    const aktif = CARI_STATE.metode === x.key;
+    return `<tr style="cursor:pointer;${aktif?'background:var(--c-primary-light);font-weight:700':''}" onclick="cariPilihMetode('${x.key}')" title="Klik untuk menampilkan transaksi metode ini">
+      <td>${x.label}${aktif?' ✓':''}</td>
+      <td class="center">${x.jumlah}</td>
+      <td class="center">${pct}%</td>
+      <td class="right mono">Rp ${fmt(x.nominal)}</td>
+    </tr>`;
+  }).join('');
+  return `
+  <div class="table-wrap" style="margin-bottom:12px">
+    <div class="table-toolbar">
+      <h4>📊 Jumlah Pengadaan per Metode Pemilihan Penyedia</h4>
+      <span style="font-size:12px;color:var(--c-text-muted)">Klik baris untuk memfilter · klik lagi untuk membatalkan</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Metode Pemilihan</th><th class="center">Jumlah Pengadaan</th><th class="center">Persentase</th><th class="right">Total Nominal</th></tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot><tr style="font-weight:700;background:var(--c-surface2)">
+          <td>TOTAL</td><td class="center">${totalJumlah}</td><td class="center">${totalJumlah>0?'100.0%':'0.0%'}</td><td class="right mono">Rp ${fmt(totalNominal)}</td>
+        </tr></tfoot>
+      </table>
+    </div>
+  </div>`;
+}
+
+function cariPilihMetode(key) {
+  const baru = (CARI_STATE.metode === key) ? '' : key;
+  const el = document.getElementById('cariMetode');
+  if (el) el.value = baru;
+  cariApply('metode', baru);
 }
 
 function buildCariRealisasi() {
@@ -28671,7 +28737,9 @@ function buildCariRealisasi() {
     </div>
   </div>`;
 
-  if (data.length === 0) return summary + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada transaksi yang cocok dengan filter yang dipilih.</p></div></div>`;
+  const rekapCard = buildRekapMetodeCard();
+
+  if (data.length === 0) return summary + rekapCard + `<div class="section-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada transaksi yang cocok dengan filter yang dipilih.</p></div></div>`;
 
   const sorted = [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1);
   const rows = sorted.map((r,i) => {
@@ -28686,13 +28754,14 @@ function buildCariRealisasi() {
       <td style="font-size:11px;color:var(--c-text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ang.sub_kegiatan||''}">${ang.sub_kegiatan||r.kode_sub_kegiatan||'-'}</td>
       <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.nama_belanja||ang.nama_belanja||''}">${r.nama_belanja||ang.nama_belanja||'-'}</td>
       <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
+      <td class="center" style="white-space:nowrap">${r.metode_pemilihan?`<span class="badge ${metodeBadgeClass(r.metode_pemilihan)}">${r.metode_pemilihan}</span>`:'-'}</td>
       <td class="right mono" style="font-weight:600">${fmt(r.nominal)}</td>
       <td style="white-space:nowrap">${r.tanggal_sp2d ? new Date(r.tanggal_sp2d+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '<span style="color:var(--c-text-muted)">Belum SP2D</span>'}</td>
       <td style="font-size:11px">${r.pptk?.split(',')[0]||'-'}</td>
     </tr>`;
   }).join('');
 
-  return summary + `
+  return summary + rekapCard + `
   <div class="table-wrap">
     <div class="table-toolbar">
       <h4>Hasil Pencarian Realisasi</h4>
@@ -28707,13 +28776,14 @@ function buildCariRealisasi() {
           <th>Sub Kegiatan</th>
           <th>Nama Belanja</th>
           <th class="center">Sumber Dana</th>
+          <th class="center">Metode Pemilihan</th>
           <th class="right">Nominal</th>
           <th>Tgl SP2D</th>
           <th>PPTK</th>
         </tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr style="font-weight:700;background:var(--c-surface2)">
-          <td colspan="6">TOTAL</td>
+          <td colspan="7">TOTAL</td>
           <td class="right mono">Rp ${fmt(total)}</td>
           <td colspan="2"></td>
         </tr></tfoot>
@@ -28815,8 +28885,14 @@ function cetakHasilCariRealisasi() {
     CARI_STATE.belanja     && 'Belanja: '+CARI_STATE.belanja,
     CARI_STATE.sumberDana  && 'Sumber Dana: '+CARI_STATE.sumberDana,
     CARI_STATE.pptk        && 'PPTK: '+CARI_STATE.pptk,
+    CARI_STATE.metode      && 'Metode: '+(CARI_STATE.metode==='__kosong'?'Belum diisi':CARI_STATE.metode),
     (CARI_STATE.tglDari||CARI_STATE.tglSampai) && `SP2D: ${CARI_STATE.tglDari||'awal'} s/d ${CARI_STATE.tglSampai||'akhir'}`,
   ].filter(Boolean).join(' | ') || 'Semua Data';
+  const rekap = getRekapMetode();
+  const rekapRows = rekap.rows.map(x=>`<tr>
+      <td>${x.label}</td><td class="center">${x.jumlah}</td>
+      <td class="center">${rekap.totalJumlah>0?(x.jumlah/rekap.totalJumlah*100).toFixed(1):'0.0'}%</td>
+      <td class="right mono">Rp ${fmt(x.nominal)}</td></tr>`).join('');
   const sorted = [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1);
   const rows = sorted.map((r,i)=>{
     const ang = STATE.anggaran.find(a=>a.kode_sub_kegiatan===r.kode_sub_kegiatan && a.kode_belanja===r.kode_belanja && a.sumber_dana===r.sumber_dana)
@@ -28828,6 +28904,7 @@ function cetakHasilCariRealisasi() {
       <td style="font-size:10px">${ang.sub_kegiatan||r.kode_sub_kegiatan||'-'}</td>
       <td style="font-size:10px;max-width:160px">${r.nama_belanja||ang.nama_belanja||'-'}</td>
       <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
+      <td class="center" style="font-size:10px">${r.metode_pemilihan||'-'}</td>
       <td class="right mono">${fmt(r.nominal)}</td>
       <td>${r.tanggal_sp2d||'-'}</td>
       <td style="font-size:10px">${r.pptk?.split(',')[0]||'-'}</td>
@@ -28839,12 +28916,49 @@ function cetakHasilCariRealisasi() {
     <div class="stat-box"><div class="lbl">Transaksi</div><div class="val">${data.length}</div></div>
     <div class="stat-box"><div class="lbl">Total Realisasi</div><div class="val">Rp ${fmt(total)}</div></div>
   </div>
+  <div class="section-title">REKAP JUMLAH PENGADAAN PER METODE PEMILIHAN PENYEDIA</div>
+  <table style="margin-bottom:14px">
+    <thead><tr><th>Metode Pemilihan</th><th class="center">Jumlah Pengadaan</th><th class="center">Persentase</th><th class="right">Total Nominal</th></tr></thead>
+    <tbody>${rekapRows}</tbody>
+    <tfoot><tr class="total-row"><td><b>TOTAL</b></td><td class="center"><b>${rekap.totalJumlah}</b></td><td class="center"><b>${rekap.totalJumlah>0?'100.0%':'0.0%'}</b></td><td class="right mono"><b>Rp ${fmt(rekap.totalNominal)}</b></td></tr></tfoot>
+  </table>
+  <div class="section-title">RINCIAN TRANSAKSI</div>
   <table>
-    <thead><tr><th>#</th><th>Tgl</th><th>Uraian</th><th>Sub Kegiatan</th><th>Nama Belanja</th><th>Sumber Dana</th><th class="right">Nominal</th><th>Tgl SP2D</th><th>PPTK</th></tr></thead>
+    <thead><tr><th>#</th><th>Tgl</th><th>Uraian</th><th>Sub Kegiatan</th><th>Nama Belanja</th><th>Sumber Dana</th><th>Metode Pemilihan</th><th class="right">Nominal</th><th>Tgl SP2D</th><th>PPTK</th></tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr class="total-row"><td colspan="6"><b>TOTAL</b></td><td class="right mono"><b>Rp ${fmt(total)}</b></td><td colspan="2"></td></tr></tfoot>
+    <tfoot><tr class="total-row"><td colspan="7"><b>TOTAL</b></td><td class="right mono"><b>Rp ${fmt(total)}</b></td><td colspan="2"></td></tr></tfoot>
   </table>`;
   openPrintWindow(html, `Cari Realisasi TA ${STATE.tahun}`);
+}
+
+// --- Unduh hasil cari realisasi (CSV, terbuka di Excel) ---
+function unduhHasilCariRealisasi() {
+  const data = getRealisasiFiltered();
+  if (data.length === 0) { showToast('Tidak ada data untuk diunduh.','error'); return; }
+  const esc = v => { v = (v===null||v===undefined) ? '' : String(v); return /[";\n\r]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  const line = arr => arr.map(esc).join(';');
+  const rekap = getRekapMetode();
+  const out = ['sep=;'];
+  out.push(line(['REKAP JUMLAH PENGADAAN PER METODE PEMILIHAN PENYEDIA — TA '+STATE.tahun+' ('+STATE.tahapan+')']));
+  out.push(line(['Metode Pemilihan','Jumlah Pengadaan','Persentase','Total Nominal (Rp)']));
+  rekap.rows.forEach(x => out.push(line([x.label, x.jumlah, (rekap.totalJumlah>0?(x.jumlah/rekap.totalJumlah*100).toFixed(1):'0.0')+'%', Math.round(x.nominal)])));
+  out.push(line(['TOTAL', rekap.totalJumlah, rekap.totalJumlah>0?'100.0%':'0.0%', Math.round(rekap.totalNominal)]));
+  out.push('');
+  out.push(line(['RINCIAN TRANSAKSI']));
+  out.push(line(['No','Tgl Transaksi','Uraian','Sub Kegiatan','Nama Belanja','Sumber Dana','Metode Pemilihan','Nominal (Rp)','Tgl SP2D','PPTK']));
+  [...data].sort((a,b)=>(a.tanggal||'')>(b.tanggal||'')?1:-1).forEach((r,i)=>{
+    const ang = STATE.anggaran.find(a=>a.kode_sub_kegiatan===r.kode_sub_kegiatan && a.kode_belanja===r.kode_belanja && a.sumber_dana===r.sumber_dana)
+             || STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening) || {};
+    out.push(line([i+1, r.tanggal||'', r.uraian||'', ang.sub_kegiatan||r.kode_sub_kegiatan||'', r.nama_belanja||ang.nama_belanja||'',
+      r.sumber_dana||'', r.metode_pemilihan||'', Math.round(+r.nominal||0), r.tanggal_sp2d||'', (r.pptk||'').split(',')[0]]));
+  });
+  const blob = new Blob(['\uFEFF'+out.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Pencarian_Realisasi_per_Metode_TA${STATE.tahun}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  showToast('File berhasil diunduh ✅');
 }
 
 // --- Cetak hasil cari sisa anggaran ---
