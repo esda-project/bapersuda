@@ -24135,6 +24135,16 @@ td.center{text-align:center}
             <option>SARI ANAS PUTRI, S.E.</option>
           </select>
         </div>
+        <div class="form-group span2">
+          <label class="form-label">Metode Pemilihan Penyedia</label>
+          <select class="form-select" id="rMetode">
+            <option value="">-- Pilih Metode Pemilihan --</option>
+            <option value="Pengadaan Langsung">Pengadaan Langsung</option>
+            <option value="e-Purchasing">e-Purchasing</option>
+            <option value="Swakelola">Swakelola</option>
+            <option value="Pengecualian">Pengecualian</option>
+          </select>
+        </div>
         <input type="hidden" id="rId">
       </div>
     </div>
@@ -24223,7 +24233,7 @@ const STATE = {
   currentPage: 'dashboard',
   // Data stores
   anggaran: [], // [{id,kode_program,program,kode_kegiatan,kegiatan,kode_sub_kegiatan,sub_kegiatan,kode_belanja,nama_belanja,kode_rekening,pagu_murni,pagu_pergeseran,pagu_perubahan,sumber_dana,pptk}]
-  realisasi: [], // [{id,tanggal,tanggal_sp2d,uraian,kode_sub_kegiatan,kode_belanja,kode_rekening,nominal,pptk}]
+  realisasi: [], // [{id,tanggal,tanggal_sp2d,uraian,kode_sub_kegiatan,kode_belanja,kode_rekening,nominal,pptk,metode_pemilihan}]
   kasAnggaran: {}, // {kode_rekening: {0..11: nominal}} — Murni
   kasAnggaranPergeseran: {}, // kas tahapan pergeseran
   kasAnggaranPerubahan: {},  // kas tahapan perubahan
@@ -24324,6 +24334,7 @@ CREATE TABLE IF NOT EXISTS realisasi (
   nama_belanja TEXT,
   nominal NUMERIC DEFAULT 0,
   pptk TEXT,
+  metode_pemilihan TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -24594,7 +24605,17 @@ async function saveRealisasiToSupabase(obj) {
   if (!sbClient) return;
   setSyncIndicator('syncing', 'Menyimpan...');
   const row = {...obj, tahun: STATE.tahun};
-  const { error } = await sbClient.from('realisasi').upsert(row, {onConflict: 'id'});
+  let { error } = await sbClient.from('realisasi').upsert(row, {onConflict: 'id'});
+  // Fallback: kolom metode_pemilihan belum ditambahkan di Supabase -> simpan tanpa kolom tsb
+  if (error && /metode_pemilihan/i.test(error.message || '')) {
+    const {metode_pemilihan, ...rowTanpaMetode} = row;
+    ({ error } = await sbClient.from('realisasi').upsert(rowTanpaMetode, {onConflict: 'id'}));
+    if (!error) {
+      setSyncIndicator('synced', '✅ Tersimpan (tanpa metode)');
+      showToast('Kolom metode_pemilihan belum ada di Supabase — jalankan tambah_metode_pemilihan.sql agar metode tersimpan permanen', 'error');
+      return;
+    }
+  }
   if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
   setSyncIndicator('synced', '✅ Tersimpan');
 }
@@ -25780,6 +25801,7 @@ function cetakRealisasi() {
       <td style="max-width:200px">${r.uraian || '-'}</td>
       <td style="font-size:10px">${r.nama_belanja || '-'}</td>
       <td><span class="badge ${r.sumber_dana === 'DBH CHT' ? 'badge-orange' : 'badge-blue'}">${r.sumber_dana || '-'}</span></td>
+      <td class="center" style="font-size:10px">${r.metode_pemilihan || '-'}</td>
       <td class="right mono">${fmt(r.nominal)}</td>
       <td class="center">${r.tanggal_sp2d ? new Date(r.tanggal_sp2d+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '<span style="color:#999">Belum SP2D</span>'}</td>
       <td style="font-size:10px">${r.pptk || '-'}</td>
@@ -25804,13 +25826,14 @@ function cetakRealisasi() {
       <th>Uraian</th>
       <th>Belanja</th>
       <th class="center">Sumber Dana</th>
+      <th class="center">Metode Pemilihan</th>
       <th class="right">Nominal</th>
       <th class="center">Tgl SP2D</th>
       <th>PPTK</th>
     </tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr class="total-row">
-      <td colspan="5"><b>TOTAL</b></td>
+      <td colspan="6"><b>TOTAL</b></td>
       <td class="right mono"><b>Rp ${fmt(total)}</b></td>
       <td colspan="2"></td>
     </tr></tfoot>
@@ -27009,8 +27032,14 @@ function sortRealisasi(dir) {
 // (pola sama seperti CARI_STATE pada menu Pencarian Data)
 // ============================================================
 const REAL_FILTER_STATE = {
-  kegiatan: '', subKegiatan: '', belanja: '', sumberDana: '', pptk: '',
+  kegiatan: '', subKegiatan: '', belanja: '', sumberDana: '', pptk: '', metode: '',
 };
+
+// Metode Pemilihan Penyedia (dipakai di form, filter, tabel & cetak Input Realisasi)
+const METODE_PEMILIHAN = ['Pengadaan Langsung', 'e-Purchasing', 'Swakelola', 'Pengecualian'];
+function metodeBadgeClass(m) {
+  return ({'Pengadaan Langsung':'badge-blue','e-Purchasing':'badge-green','Swakelola':'badge-orange','Pengecualian':'badge-gray'})[m] || 'badge-gray';
+}
 
 function getRealFilterOptions() {
   const ang = STATE.anggaran;
@@ -27054,6 +27083,7 @@ function getRealisasiFilteredForDisplay() {
     if (REAL_FILTER_STATE.subKegiatan && r.kode_sub_kegiatan !== REAL_FILTER_STATE.subKegiatan)  return false;
     if (REAL_FILTER_STATE.belanja     && r.kode_belanja !== REAL_FILTER_STATE.belanja)           return false;
     if (REAL_FILTER_STATE.sumberDana  && r.sumber_dana !== REAL_FILTER_STATE.sumberDana)         return false;
+    if (REAL_FILTER_STATE.metode      && (r.metode_pemilihan||'') !== REAL_FILTER_STATE.metode)  return false;
     if (REAL_FILTER_STATE.pptk) {
       const rPptk = (r.pptk||'').toLowerCase();
       const fPptk = REAL_FILTER_STATE.pptk.toLowerCase();
@@ -27091,7 +27121,7 @@ function realApply(key, val) {
 }
 
 function realResetFilter() {
-  Object.assign(REAL_FILTER_STATE, {kegiatan:'',subKegiatan:'',belanja:'',sumberDana:'',pptk:''});
+  Object.assign(REAL_FILTER_STATE, {kegiatan:'',subKegiatan:'',belanja:'',sumberDana:'',pptk:'',metode:''});
   showPage('realisasi');
 }
 
@@ -27107,7 +27137,7 @@ function buildRealisasiTable() {
     });
   }
   const rows = filteredReal.length === 0
-    ? `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📑</div><p>Belum ada transaksi realisasi.</p></div></td></tr>`
+    ? `<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">📑</div><p>Belum ada transaksi realisasi.</p></div></td></tr>`
     : filteredReal.map((r,i)=>`<tr>
         <td class="center">${i+1}</td>
         <td>${r.tanggal||'-'}</td>
@@ -27115,6 +27145,7 @@ function buildRealisasiTable() {
         <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="mono">${r.kode_rekening||'-'}</td>
         <td class="right mono">${fmt(r.nominal)}</td>
         <td class="center"><span class="badge ${r.sumber_dana==='DBH CHT'?'badge-orange':'badge-blue'}">${r.sumber_dana||'-'}</span></td>
+        <td class="center" style="white-space:nowrap">${r.metode_pemilihan?`<span class="badge ${metodeBadgeClass(r.metode_pemilihan)}">${r.metode_pemilihan}</span>`:'-'}</td>
         <td>${r.pptk?.split(',')[0]||'-'}</td>
         <td>${r.tanggal_sp2d||'-'}</td>
         <td class="center"><span class="badge ${r.tanggal_sp2d?'badge-green':'badge-orange'}">${r.tanggal_sp2d?'SP2D':'Proses'}</span></td>
@@ -27141,6 +27172,7 @@ function buildRealisasiTable() {
         <th>Kode Rekening</th>
         <th class="right">Nominal</th>
         <th class="center">Sumber Dana</th>
+        <th class="center">Metode Pemilihan</th>
         <th>PPTK</th>
         <th>Tgl SP2D</th>
         <th class="center">Status</th>
@@ -27212,6 +27244,14 @@ ${isUserPPTK() ? `<div class="section-card" style="padding:10px 14px;margin-bott
     </div>
 
     <div>
+      <label style="font-size:11px;font-weight:600;color:var(--c-text-muted);display:block;margin-bottom:4px">Metode Pemilihan Penyedia</label>
+      <select class="form-input" style="width:100%" id="realMetode" onchange="realApply('metode',this.value)">
+        <option value="">— Semua Metode —</option>
+        ${METODE_PEMILIHAN.map(m=>`<option value="${m}" ${REAL_FILTER_STATE.metode===m?'selected':''}>${m}</option>`).join('')}
+      </select>
+    </div>
+
+    <div>
       <button class="btn btn-outline" style="width:100%" onclick="realResetFilter()">↺ Reset Filter</button>
     </div>
 
@@ -27247,6 +27287,7 @@ function openModalRealisasi(idx) {
   document.getElementById('rTanggalSP2D').value = '';
   document.getElementById('rUraian').value = '';
   document.getElementById('rNominal').value = '';
+  document.getElementById('rMetode').value = '';
   document.getElementById('rId').value = '';
   document.getElementById('rInfoPagu').style.display = 'none';
   document.getElementById('modalRealisasiTitle').textContent = 'Input Transaksi Realisasi';
@@ -27260,6 +27301,7 @@ function openModalRealisasi(idx) {
     document.getElementById('rUraian').value = r.uraian;
     document.getElementById('rNominal').value = r.nominal;
     document.getElementById('rPPTK').value = r.pptk;
+    document.getElementById('rMetode').value = r.metode_pemilihan || '';
     document.getElementById('rSubKegiatan').value = r.kode_sub_kegiatan;
     // Set sumber dana dari data realisasi (lookup dari anggaran)
     const angRow = STATE.anggaran.find(a=>a.kode_rekening===r.kode_rekening);
@@ -27362,6 +27404,7 @@ async function saveRealisasi() {
     nama_belanja: angRow?.nama_belanja||'',
     nominal,
     pptk: isUserPPTK() ? getPPTKNama() : document.getElementById('rPPTK').value,
+    metode_pemilihan: document.getElementById('rMetode').value || null,
   };
 
   if (idx!=='') STATE.realisasi[parseInt(idx)]=obj;
