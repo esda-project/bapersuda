@@ -24726,7 +24726,27 @@ async function doLogin() {
     setSyncIndicator('syncing', 'Login...');
     try {
       const { data, error } = await sbClient.from('pengguna').select('*').eq('username', u).eq('password', p).single();
-      if (error || !data) { setSyncIndicator('hidden'); showToast('Username atau password salah','error'); return; }
+      if (error || !data) {
+        setSyncIndicator('hidden');
+        // Bedakan "kredensial salah" dari "database menolak/tidak terbaca"
+        if (error && error.code !== 'PGRST116') {
+          showToast('Gagal terhubung ke database: ' + (error.message || error.code) + ' — hubungi admin (jalankan PULIHKAN_AKSES_USERNAME.sql)', 'error');
+          return;
+        }
+        try {
+          const probe = await sbClient.from('pengguna').select('id', { count: 'exact', head: true });
+          if (probe.error) {
+            showToast('Tabel pengguna tidak dapat dibaca: ' + probe.error.message + ' — jalankan PULIHKAN_AKSES_USERNAME.sql', 'error');
+            return;
+          }
+          if (!probe.count) {
+            showToast('Tabel pengguna tampak kosong/diblokir (RLS). Jalankan PULIHKAN_AKSES_USERNAME.sql di Supabase.', 'error');
+            return;
+          }
+        } catch(pe) { /* abaikan, lanjut pesan standar */ }
+        showToast('Username atau password salah','error');
+        return;
+      }
       STATE.pengguna = (await sbClient.from('pengguna').select('*')).data || STATE.pengguna;
       var user = data;
     } catch(e) {
