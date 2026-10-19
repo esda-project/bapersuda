@@ -23684,101 +23684,11 @@ td.center{text-align:center}
 #greetingBanner .greet-name { font-weight:700;color:var(--c-primary-dark) }
 #greetingBanner .greet-text { color:var(--c-text-muted);font-size:12px;margin-top:1px }
 
-/* ===== FLOATING MUSIC PLAYER ===== */
-#musicPlayer {
-  position:fixed;bottom:24px;right:24px;z-index:8888;
-  background:var(--c-sidebar-bg);border:1px solid rgba(139,124,246,.16);
-  border-radius:18px;padding:12px 14px;
-  box-shadow:0 10px 36px rgba(0,0,0,.4);
-  min-width:230px;max-width:260px;
-  backdrop-filter:blur(14px);
-  animation:playerIn .4s cubic-bezier(.16,1,.3,1) both;
-  display:none;
-}
-@keyframes playerIn{from{opacity:0;transform:translateY(20px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
-#musicPlayer.show { display:block }
-.mp-header {
-  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;
-}
-.mp-title {
-  font-size:11px;font-weight:700;color:#9791C4;
-  text-transform:uppercase;letter-spacing:1px;
-}
-.mp-close {
-  background:none;border:none;color:#655F8C;cursor:pointer;font-size:14px;line-height:1;
-}
-.mp-close:hover{color:#9791C4}
-.mp-track-info {
-  margin-bottom:10px;min-height:30px;
-}
-.mp-track-name {
-  font-size:12px;font-weight:600;color:#e7e4f6;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;
-}
-.mp-track-sub {font-size:10px;color:#655F8C;margin-top:2px}
-.mp-visualizer {
-  display:flex;align-items:flex-end;gap:2px;height:20px;margin-bottom:10px;
-}
-.mp-bar {
-  width:3px;border-radius:2px;background:linear-gradient(180deg,#C6F135,#5B4FE9);
-  animation:mpBar .8s ease-in-out infinite alternate;
-}
-.mp-bar:nth-child(1){height:40%;animation-delay:0s}
-.mp-bar:nth-child(2){height:70%;animation-delay:.1s}
-.mp-bar:nth-child(3){height:100%;animation-delay:.2s}
-.mp-bar:nth-child(4){height:55%;animation-delay:.3s}
-.mp-bar:nth-child(5){height:80%;animation-delay:.05s}
-.mp-bar:nth-child(6){height:35%;animation-delay:.25s}
-.mp-bar:nth-child(7){height:65%;animation-delay:.15s}
-.mp-bar:nth-child(8){height:90%;animation-delay:.35s}
-@keyframes mpBar{from{opacity:.5;transform:scaleY(.6)}to{opacity:1;transform:scaleY(1)}}
-.mp-visualizer.paused .mp-bar { animation-play-state:paused;opacity:.3 }
-.mp-controls {
-  display:flex;align-items:center;gap:6px;margin-bottom:10px;
-}
-.mp-btn {
-  background:rgba(255,255,255,.07);border:none;border-radius:9px;
-  color:#9791C4;cursor:pointer;padding:6px 8px;font-size:14px;
-  transition:all .15s;
-}
-.mp-btn:hover{background:rgba(255,255,255,.15);color:#fff}
-.mp-btn.play-btn {
-  background:var(--grad-brand);color:#fff;border-radius:10px;
-  padding:7px 14px;font-size:15px;flex:1;
-}
-.mp-btn.play-btn:hover{filter:brightness(1.1)}
-.mp-volume {
-  display:flex;align-items:center;gap:6px;
-}
-.mp-volume span{font-size:12px;color:#655F8C}
-#mpVolumeSlider {
-  flex:1;-webkit-appearance:none;appearance:none;
-  height:3px;background:rgba(255,255,255,.15);border-radius:2px;outline:none;cursor:pointer;
-}
-#mpVolumeSlider::-webkit-slider-thumb {
-  -webkit-appearance:none;width:12px;height:12px;
-  border-radius:50%;background:var(--c-primary);cursor:pointer;
-}
-
-/* Music trigger FAB */
-#musicFab {
-  position:fixed;bottom:24px;right:24px;z-index:8887;
-  width:46px;height:46px;border-radius:50%;
-  background:var(--grad-brand);border:none;color:#fff;
-  font-size:20px;cursor:pointer;box-shadow:0 6px 24px rgba(91,79,233,.5);
-  display:none;transition:transform .2s,box-shadow .2s;
-  animation:fabIn .4s cubic-bezier(.16,1,.3,1) both;
-}
-@keyframes fabIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
-#musicFab:hover{transform:scale(1.1);box-shadow:0 8px 32px rgba(91,79,233,.65)}
-#musicFab.show { display:flex;align-items:center;justify-content:center }
 
 @media(max-width:768px){
   #datetimeWidget{min-width:100px}
   #dtTime{font-size:13px}
   #dtDate{display:none}
-  #musicPlayer{right:12px;bottom:70px;min-width:200px}
-  #musicFab{right:12px;bottom:70px}
   .sidebar.collapsed{width:var(--sidebar-w)!important}/* don't collapse on mobile */
 }
 
@@ -23960,6 +23870,9 @@ td.center{text-align:center}
         </button>
       </div>
       <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importJSON(this)">
+      <button style="width:100%;padding:8px;background:rgba(148,163,184,.15);border:none;border-radius:6px;color:#cbd5e1;font-size:12px;margin-top:6px;cursor:pointer;font-family:inherit" onclick="openGantiPassword(false)">
+        🔑 Ganti Password
+      </button>
       <button style="width:100%;padding:8px;background:rgba(220,38,38,.15);border:none;border-radius:6px;color:#f87171;font-size:12px;margin-top:6px;cursor:pointer;font-family:inherit" onclick="doLogout()">
         🚪 Keluar
       </button>
@@ -24172,8 +24085,12 @@ td.center{text-align:center}
           <input class="form-input" id="pUsername" placeholder="username">
         </div>
         <div class="form-group">
-          <label class="form-label">Password</label>
-          <input class="form-input" id="pPassword" type="password" placeholder="Password baru">
+          <label class="form-label" for="pPassword">Password</label>
+          <div style="display:flex;gap:6px">
+            <input class="form-input" id="pPassword" type="password" autocomplete="new-password" placeholder="Minimal 12 karakter" style="flex:1">
+            <button type="button" class="btn btn-sm btn-outline" onclick="pBuatPasswordAcak()" title="Buat password acak" aria-label="Buat password acak">🎲</button>
+          </div>
+          <span class="form-hint">Pengguna wajib menggantinya saat login pertama.</span>
         </div>
         <div class="form-group">
           <label class="form-label">NIP</label>
@@ -24197,12 +24114,67 @@ td.center{text-align:center}
           <label class="form-label">Jabatan / Keterangan Internal</label>
           <input class="form-input" id="pJabatan" placeholder="Misal: Kasubag Anggaran">
         </div>
+        <div class="form-group span2">
+          <label class="form-label" for="pPptkNama">Batasi Data ke Nama PPTK (opsional, khusus Operator)</label>
+          <input class="form-input" id="pPptkNama" placeholder="Persis seperti kolom PPTK pada data anggaran, mis. TENGKO WOLOK, S.T.">
+          <span class="form-hint">Jika diisi, akun hanya dapat melihat/mengubah anggaran, realisasi, dan kas milik PPTK tersebut (ditegakkan di database). Kosongkan bila operator boleh melihat semua.</span>
+        </div>
         <input type="hidden" id="pId">
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-gray" onclick="closeModal('modalPengguna')">Batal</button>
       <button class="btn btn-blue" onclick="savePengguna()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GANTI PASSWORD -->
+<div class="modal-overlay" id="modalGantiPassword" role="dialog" aria-modal="true" aria-labelledby="gpTitle">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="gpTitle">🔑 Ganti Password</h3>
+      <button class="modal-close" id="gpClose" onclick="closeModal('modalGantiPassword')" aria-label="Tutup">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="gpWajibInfo" style="display:none;margin-bottom:10px;font-size:12px;padding:8px 10px;border-radius:6px;background:var(--c-primary-light)">
+        Demi keamanan, Anda wajib mengganti password sementara sebelum melanjutkan.
+      </p>
+      <div class="form-grid">
+        <div class="form-group span2">
+          <label class="form-label" for="gpLama">Password saat ini</label>
+          <input class="form-input" id="gpLama" type="password" autocomplete="current-password">
+        </div>
+        <div class="form-group span2">
+          <label class="form-label" for="gpBaru">Password baru (minimal 12 karakter)</label>
+          <input class="form-input" id="gpBaru" type="password" autocomplete="new-password">
+        </div>
+        <div class="form-group span2">
+          <label class="form-label" for="gpUlang">Ulangi password baru</label>
+          <input class="form-input" id="gpUlang" type="password" autocomplete="new-password">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" id="gpBatal" onclick="closeModal('modalGantiPassword')">Batal</button>
+      <button class="btn btn-blue" id="gpSimpan" onclick="simpanGantiPassword()">💾 Simpan Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HASIL IMPOR AKUN LAMA -->
+<div class="modal-overlay" id="modalHasilImpor" data-locked="1" role="dialog" aria-modal="true" aria-labelledby="hiTitle">
+  <div class="modal">
+    <div class="modal-header"><h3 id="hiTitle">📥 Hasil Impor Akun</h3></div>
+    <div class="modal-body">
+      <p style="font-size:12px;margin-bottom:8px;color:#b45309">
+        ⚠️ Password sementara hanya ditampilkan SEKALI dan tidak disimpan. Salin dan bagikan secara aman (jangan lewat grup chat terbuka).
+      </p>
+      <textarea id="hasilImporText" class="form-input" rows="12" readonly style="font-family:monospace;font-size:12px;width:100%"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="salinHasilImpor()">📋 Salin</button>
+      <button class="btn btn-blue" onclick="tutupHasilImpor()">✓ Selesai</button>
     </div>
   </div>
 </div>
@@ -24237,10 +24209,7 @@ const STATE = {
   kasAnggaran: {}, // {kode_rekening: {0..11: nominal}} — Murni
   kasAnggaranPergeseran: {}, // kas tahapan pergeseran
   kasAnggaranPerubahan: {},  // kas tahapan perubahan
-  pengguna: [
-    {id:1,nama:'Administrator',username:'admin',password:'admin123',role:'admin',jabatan:'Admin Sistem'},
-    {id:2,nama:'TENGKO WOLOK, S.T.',username:'tengko',password:'pptk123',role:'input',jabatan:'PPTK'},
-  ],
+  pengguna: [], // diisi dari tabel public.profiles setelah login (tanpa password)
   aiAnalysisCache: null,
   notaDinas: {pptk:[], ppk:[]}  // Nota Dinas PPTK dan PPK
 };
@@ -24284,130 +24253,9 @@ function showToast(msg, type='success') {
 // ========================================
 let sbClient = null; // Supabase client instance (renamed to avoid conflict with global supabase namespace)
 
-const SQL_MIGRATION = `-- SIANGGARAN Supabase Migration
--- Jalankan script ini di SQL Editor Supabase Anda
--- Script ini aman dijalankan berulang kali (idempotent)
-
--- Tabel pengguna (custom, bukan Supabase Auth)
-CREATE TABLE IF NOT EXISTS pengguna (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  nama TEXT NOT NULL,
-  username TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'input',
-  jabatan TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Tabel anggaran
-CREATE TABLE IF NOT EXISTS anggaran (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tahun TEXT NOT NULL,
-  kode_program TEXT,
-  program TEXT,
-  kode_kegiatan TEXT,
-  kegiatan TEXT,
-  kode_sub_kegiatan TEXT,
-  sub_kegiatan TEXT,
-  kode_belanja TEXT,
-  nama_belanja TEXT,
-  kode_rekening TEXT NOT NULL,
-  pagu_murni NUMERIC DEFAULT 0,
-  pagu_pergeseran NUMERIC,
-  pagu_perubahan NUMERIC,
-  sumber_dana TEXT,
-  pptk TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Tabel realisasi
-CREATE TABLE IF NOT EXISTS realisasi (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tahun TEXT NOT NULL,
-  tanggal DATE,
-  tanggal_sp2d DATE,
-  uraian TEXT,
-  kode_sub_kegiatan TEXT,
-  kode_belanja TEXT,
-  sumber_dana TEXT,
-  kode_rekening TEXT,
-  nama_belanja TEXT,
-  nominal NUMERIC DEFAULT 0,
-  pptk TEXT,
-  metode_pemilihan TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Tabel kas anggaran (JSON per rekening)
-CREATE TABLE IF NOT EXISTS kas_anggaran (
-  id TEXT PRIMARY KEY,
-  tahun TEXT NOT NULL,
-  kode_rekening TEXT NOT NULL,
-  tahapan TEXT NOT NULL DEFAULT 'Murni',
-  data JSONB DEFAULT '{}',
-  UNIQUE(tahun, kode_rekening, tahapan)
-);
-
--- Tabel app settings
-CREATE TABLE IF NOT EXISTS app_settings (
-  key TEXT PRIMARY KEY,
-  value TEXT
-);
-
--- ============================================================
--- PATCH: Tambah kolom yang mungkin belum ada di tabel lama
--- (Aman dijalankan meski kolom sudah ada — menggunakan DO block)
--- ============================================================
-DO $$
-BEGIN
-  -- Patch tabel realisasi
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='sumber_dana') THEN
-    ALTER TABLE realisasi ADD COLUMN sumber_dana TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='nama_belanja') THEN
-    ALTER TABLE realisasi ADD COLUMN nama_belanja TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='kode_sub_kegiatan') THEN
-    ALTER TABLE realisasi ADD COLUMN kode_sub_kegiatan TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='kode_belanja') THEN
-    ALTER TABLE realisasi ADD COLUMN kode_belanja TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='realisasi' AND column_name='tahun') THEN
-    ALTER TABLE realisasi ADD COLUMN tahun TEXT;
-  END IF;
-  -- Patch tabel anggaran
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='sumber_dana') THEN
-    ALTER TABLE anggaran ADD COLUMN sumber_dana TEXT;
-  END IF;
-  -- Patch tabel kas_anggaran: tambah kolom tahapan jika belum ada
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kas_anggaran' AND column_name='tahapan') THEN
-    ALTER TABLE kas_anggaran ADD COLUMN tahapan TEXT NOT NULL DEFAULT 'Murni';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='pagu_pergeseran') THEN
-    ALTER TABLE anggaran ADD COLUMN pagu_pergeseran NUMERIC;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='anggaran' AND column_name='pagu_perubahan') THEN
-    ALTER TABLE anggaran ADD COLUMN pagu_perubahan NUMERIC;
-  END IF;
-END $$;
-
--- RLS: Disable for simplicity (enable & configure as needed)
-ALTER TABLE pengguna DISABLE ROW LEVEL SECURITY;
-ALTER TABLE anggaran DISABLE ROW LEVEL SECURITY;
-ALTER TABLE realisasi DISABLE ROW LEVEL SECURITY;
-ALTER TABLE kas_anggaran DISABLE ROW LEVEL SECURITY;
-ALTER TABLE app_settings DISABLE ROW LEVEL SECURITY;
-
--- Seed default admin user
-INSERT INTO pengguna (id, nama, username, password, role, jabatan)
-VALUES (gen_random_uuid(), 'Administrator', 'admin', 'admin123', 'admin', 'Admin Sistem')
-ON CONFLICT (username) DO NOTHING;
-
-INSERT INTO pengguna (id, nama, username, password, role, jabatan)
-VALUES (gen_random_uuid(), 'TENGKO WOLOK, S.T.', 'tengko', 'pptk123', 'input', 'PPTK')
-ON CONFLICT (username) DO NOTHING;
-`;
+const SQL_MIGRATION = `-- DINONAKTIFKAN.
+-- Skema & kebijakan keamanan kini dikelola lewat berkas tahap5/sql/*.sql
+-- (lihat RUNBOOK_TAHAP5.md). Jangan menjalankan migrasi lama yang menonaktifkan RLS.`;
 
 function getSupabaseConfig() {
   try {
@@ -24416,12 +24264,27 @@ function getSupabaseConfig() {
   } catch(e){ return null; }
 }
 
+// ========================================
+// AUTENTIKASI — Supabase Auth (email sintetis dari username)
+// ========================================
+// HARUS sama dengan EMAIL_DOMAIN di Edge Function admin-users dan 00_bootstrap_admin.sql
+const AUTH_EMAIL_DOMAIN = 'sianggaran.invalid';
+function usernameToEmail(u) { return String(u || '').trim().toLowerCase() + '@' + AUTH_EMAIL_DOMAIN; }
+
 function initSupabase(url, key) {
   try {
     sbClient = window.supabase.createClient(url, key, {
       realtime: { enabled: false },
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      global: { headers: { 'X-Client-Info': 'sianggaran/1.0' } }
+      // Sesi hanya di memori (hilang saat tab ditutup/muat ulang); token diperbarui otomatis.
+      auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false },
+      global: { headers: { 'X-Client-Info': 'sianggaran/2.0' } }
+    });
+    sbClient.auth.onAuthStateChange((event) => {
+      // Sesi berakhir/dicabut di tengah pemakaian -> kembali ke login, data di memori dibersihkan
+      if (event === 'SIGNED_OUT' && STATE.user && !STATE._loggingOut) {
+        showToast('Sesi berakhir. Silakan login kembali.', 'error');
+        setTimeout(() => location.reload(), 1500);
+      }
     });
     return true;
   } catch(e) {
@@ -24448,7 +24311,7 @@ async function saveSupabaseConfig() {
 
   // Test connection
   try {
-    const { error } = await sbClient.from('pengguna').select('id').limit(1);
+    const { error } = await sbClient.from('profiles').select('id').limit(1);
     if (error) throw error;
     localStorage.setItem('sianggaranSupabaseConfig', JSON.stringify({url, key}));
     statusEl.innerHTML = '<div class="db-status ok">✅ Koneksi berhasil! Mengalihkan ke login...</div>';
@@ -24548,7 +24411,7 @@ async function loadDataFromSupabase() {
       sbClient.from('anggaran').select('*').eq('tahun', STATE.tahun),
       sbClient.from('realisasi').select('*').eq('tahun', STATE.tahun),
       sbClient.from('kas_anggaran').select('*').eq('tahun', STATE.tahun),
-      sbClient.from('pengguna').select('*'),
+      sbClient.from('profiles').select('*').order('nama'),
     ]);
     if (angRes.error) throw angRes.error;
     if (realRes.error) throw realRes.error;
@@ -24650,31 +24513,32 @@ async function saveKasToSupabase() {
   setSyncIndicator('synced', '✅ Kas disimpan');
 }
 
-async function savePenggunaToSupabase(obj) {
-  if (!sbClient) return;
-  setSyncIndicator('syncing', 'Menyimpan...');
-  const { error } = await sbClient.from('pengguna').upsert(obj, {onConflict: 'id'});
+// Semua perubahan akun dilakukan oleh Edge Function admin-users (service_role di server).
+async function adminUsersCall(payload) {
+  if (!sbClient) throw new Error('Koneksi database belum siap');
+  const { data, error } = await sbClient.functions.invoke('admin-users', { body: payload });
   if (error) {
-    console.error('Supabase upsert pengguna error:', error);
-    setSyncIndicator('error', '⚠️ ' + (error.message||'Gagal'));
-    throw new Error(error.message + (error.hint ? ' | Hint: '+error.hint : '') + (error.details ? ' | Detail: '+error.details : ''));
+    let msg = error.message || 'Permintaan gagal';
+    try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch(e) {}
+    throw new Error(msg);
   }
-  setSyncIndicator('synced', '✅ Tersimpan');
+  if (data && data.error) throw new Error(data.error);
+  return data;
 }
 
-async function deletePenggunaFromSupabase(id) {
-  if (!sbClient) return;
-  setSyncIndicator('syncing', 'Menghapus...');
-  const { error } = await sbClient.from('pengguna').delete().eq('id', id);
-  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
-  setSyncIndicator('synced', '✅ Dihapus');
+async function reloadProfiles() {
+  const { data, error } = await sbClient.from('profiles').select('*').order('nama');
+  if (error) throw error;
+  STATE.pengguna = data || [];
 }
 
 // ========================================
 // LEGACY STATE FUNCTIONS (kept for fallback)
 // ========================================
 function saveState() {
-  try { localStorage.setItem('sianggaranState', JSON.stringify(STATE)); } catch(e){}
+  // Hanya preferensi tampilan. Data anggaran, pengguna, nota dinas, dan sesi
+  // TIDAK disimpan di perangkat (aman untuk komputer bersama).
+  try { localStorage.setItem('sianggaranState', JSON.stringify({ darkMode: !!STATE.darkMode })); } catch(e){}
 }
 
 function loadState() {
@@ -24682,10 +24546,12 @@ function loadState() {
     const s = localStorage.getItem('sianggaranState');
     if (s) {
       const d = JSON.parse(s);
-      // Only load non-data settings from localStorage (dark mode, etc)
       if (d.darkMode !== undefined) STATE.darkMode = d.darkMode;
-    if (d.notaDinas) STATE.notaDinas = d.notaDinas;
     }
+    // Bersihkan sisa versi lama (snapshot lama memuat daftar pengguna + password)
+    saveState();
+    localStorage.removeItem('sianggaranSupabaseConfig');
+    localStorage.removeItem('sianggaranMusicTracks');
   } catch(e){}
 }
 
@@ -24717,64 +24583,63 @@ function unique(arr, key) {
 // ========================================
 // LOGIN / LOGOUT
 // ========================================
+let _loginBusy = false;
 async function doLogin() {
-  const u = document.getElementById('loginUser').value.trim();
-  const p = document.getElementById('loginPass').value.trim();
+  if (_loginBusy) return;
+  const u = document.getElementById('loginUser').value.trim().toLowerCase();
+  const p = document.getElementById('loginPass').value;
+  if (!u || !p) { showToast('Username dan password wajib diisi', 'error'); return; }
+  if (!sbClient) { showToast('Koneksi database belum siap. Muat ulang halaman.', 'error'); return; }
 
-  // Fetch pengguna from Supabase if connected
-  if (sbClient) {
-    setSyncIndicator('syncing', 'Login...');
-    try {
-      const { data, error } = await sbClient.from('pengguna').select('*').eq('username', u).eq('password', p).single();
-      if (error || !data) {
-        setSyncIndicator('hidden');
-        // Bedakan "kredensial salah" dari "database menolak/tidak terbaca"
-        if (error && error.code !== 'PGRST116') {
-          showToast('Gagal terhubung ke database: ' + (error.message || error.code) + ' — hubungi admin (jalankan PULIHKAN_AKSES_USERNAME.sql)', 'error');
-          return;
-        }
-        try {
-          const probe = await sbClient.from('pengguna').select('id', { count: 'exact', head: true });
-          if (probe.error) {
-            showToast('Tabel pengguna tidak dapat dibaca: ' + probe.error.message + ' — jalankan PULIHKAN_AKSES_USERNAME.sql', 'error');
-            return;
-          }
-          if (!probe.count) {
-            showToast('Tabel pengguna tampak kosong/diblokir (RLS). Jalankan PULIHKAN_AKSES_USERNAME.sql di Supabase.', 'error');
-            return;
-          }
-        } catch(pe) { /* abaikan, lanjut pesan standar */ }
-        showToast('Username atau password salah','error');
-        return;
-      }
-      STATE.pengguna = (await sbClient.from('pengguna').select('*')).data || STATE.pengguna;
-      var user = data;
-    } catch(e) {
-      showToast('Gagal login: ' + e.message, 'error'); return;
+  _loginBusy = true;
+  const btn = document.querySelector('#loginScreen .btn-primary');
+  if (btn) btn.disabled = true;
+  setSyncIndicator('syncing', 'Login...');
+  try {
+    const { data, error } = await sbClient.auth.signInWithPassword({ email: usernameToEmail(u), password: p });
+    if (error || !data || !data.user) {
+      setSyncIndicator('hidden');
+      let msg = 'Username atau password salah';
+      if (error && error.status === 429) msg = 'Terlalu banyak percobaan login. Coba lagi beberapa menit lagi.';
+      else if (error && (error.status === 0 || /fetch|network/i.test(error.message || ''))) msg = 'Tidak dapat terhubung ke server. Periksa koneksi internet.';
+      showToast(msg, 'error');
+      return;
     }
-  } else {
-    var user = STATE.pengguna.find(x => x.username===u && x.password===p);
-    if (!user) { showToast('Username atau password salah','error'); return; }
-  }
+    // Peran diambil dari database (bukan dari klien)
+    const { data: prof, error: pErr } = await sbClient.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+    if (pErr || !prof) {
+      try { await sbClient.auth.signOut(); } catch(e) {}
+      setSyncIndicator('hidden');
+      showToast('Akun belum terdaftar di SIANGGARAN. Hubungi admin.', 'error');
+      return;
+    }
 
-  STATE.tahun = document.getElementById('loginTahun').value;
-  STATE.tahapan = document.getElementById('loginTahapan').value;
-  STATE.user = user;
-  const mode = document.getElementById('loginMode').value;
-  if (mode === 'dark') { document.documentElement.classList.add('dark'); STATE.darkMode = true; }
-  else { document.documentElement.classList.remove('dark'); STATE.darkMode = false; }
-  saveState();
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('app').classList.add('visible');
-  updateSidebar();
-  showPage('dashboard');
-  startClock();
-
-  // Load data from Supabase
-  if (sbClient) {
-    await loadDataFromSupabase();
-    await ndLoadSupabase();  // Load nota dinas
+    STATE.tahun = document.getElementById('loginTahun').value;
+    STATE.tahapan = document.getElementById('loginTahapan').value;
+    STATE.user = prof;
+    const mode = document.getElementById('loginMode').value;
+    if (mode === 'dark') { document.documentElement.classList.add('dark'); STATE.darkMode = true; }
+    else { document.documentElement.classList.remove('dark'); STATE.darkMode = false; }
+    saveState();
+    document.getElementById('loginPass').value = '';
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    updateSidebar();
     showPage('dashboard');
+    startClock();
+
+    await loadDataFromSupabase();
+    await ndLoadSupabase();
+    showPage('dashboard');
+
+    if (prof.must_change_password) openGantiPassword(true);
+  } catch(e) {
+    console.error('doLogin', e);
+    setSyncIndicator('hidden');
+    showToast('Gagal login. Coba lagi.', 'error');
+  } finally {
+    _loginBusy = false;
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -24796,7 +24661,6 @@ function exportJSON() {
     kasAnggaran: STATE.kasAnggaran,
     kasAnggaranPergeseran: STATE.kasAnggaranPergeseran || {},
     kasAnggaranPerubahan:  STATE.kasAnggaranPerubahan  || {},
-    pengguna: STATE.pengguna.map(u=>({...u, password: '***'})), // mask passwords
   };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -24827,10 +24691,7 @@ function importJSON(input) {
       if (d.kasAnggaran) STATE.kasAnggaran = d.kasAnggaran;
       if (d.kasAnggaranPergeseran) STATE.kasAnggaranPergeseran = d.kasAnggaranPergeseran;
       if (d.kasAnggaranPerubahan)  STATE.kasAnggaranPerubahan  = d.kasAnggaranPerubahan;
-      // Pengguna hanya di-import jika tidak ada masking password
-      if (d.pengguna && d.pengguna.every(u=>u.password !== '***')) {
-        STATE.pengguna = d.pengguna;
-      }
+      // Data pengguna tidak pernah diimpor dari file (dikelola lewat Supabase Auth).
       if (d._meta?.tahun) STATE.tahun = d._meta.tahun;
       if (d._meta?.tahapan) STATE.tahapan = d._meta.tahapan;
       saveState();
@@ -24845,12 +24706,56 @@ function importJSON(input) {
   reader.readAsText(file);
 }
 
-function doLogout() {
-  saveState();
-  document.getElementById('loginScreen').style.display = '';
-  document.getElementById('app').classList.remove('visible');
-  document.getElementById('loginUser').value = '';
-  document.getElementById('loginPass').value = '';
+async function doLogout() {
+  STATE._loggingOut = true;
+  try { if (sbClient) await sbClient.auth.signOut(); } catch(e) {}
+  location.reload(); // membersihkan seluruh data dari memori
+}
+
+// ---- Ganti password (semua pengguna) ----
+function openGantiPassword(wajib) {
+  ['gpLama','gpBaru','gpUlang'].forEach(id => document.getElementById(id).value = '');
+  const m = document.getElementById('modalGantiPassword');
+  document.getElementById('gpWajibInfo').style.display = wajib ? '' : 'none';
+  document.getElementById('gpBatal').style.display = wajib ? 'none' : '';
+  document.getElementById('gpClose').style.display = wajib ? 'none' : '';
+  if (wajib) m.setAttribute('data-locked', '1'); else m.removeAttribute('data-locked');
+  m.classList.add('open');
+}
+
+let _gpBusy = false;
+async function simpanGantiPassword() {
+  if (_gpBusy) return;
+  const lama = document.getElementById('gpLama').value;
+  const baru = document.getElementById('gpBaru').value;
+  const ulang = document.getElementById('gpUlang').value;
+  if (!lama || !baru) { showToast('Semua kolom wajib diisi', 'error'); return; }
+  if (baru.length < 12) { showToast('Password baru minimal 12 karakter', 'error'); return; }
+  if (baru !== ulang) { showToast('Konfirmasi password tidak sama', 'error'); return; }
+  if (baru === lama) { showToast('Password baru harus berbeda dari yang lama', 'error'); return; }
+  if (baru.toLowerCase().includes(STATE.user.username.toLowerCase())) { showToast('Password tidak boleh memuat username', 'error'); return; }
+  _gpBusy = true;
+  const btn = document.getElementById('gpSimpan'); btn.disabled = true;
+  try {
+    // Verifikasi password lama
+    const chk = await sbClient.auth.signInWithPassword({ email: usernameToEmail(STATE.user.username), password: lama });
+    if (chk.error) { showToast('Password lama salah', 'error'); return; }
+    const { error } = await sbClient.auth.updateUser({ password: baru });
+    if (error) { showToast('Gagal mengubah password: ' + error.message, 'error'); return; }
+    if (STATE.user.must_change_password) {
+      const r = await sbClient.rpc('clear_must_change_password');
+      if (r.error) console.error('clear_must_change_password', r.error);
+      STATE.user.must_change_password = false;
+    }
+    document.getElementById('modalGantiPassword').removeAttribute('data-locked');
+    closeModal('modalGantiPassword');
+    showToast('Password berhasil diubah ✅');
+  } catch(e) {
+    showToast('Gagal mengubah password', 'error');
+  } finally {
+    _gpBusy = false; btn.disabled = false;
+    ['gpLama','gpBaru','gpUlang'].forEach(id => document.getElementById(id).value = '');
+  }
 }
 
 function toggleTheme() {
@@ -24910,14 +24815,12 @@ function startClock() {
 // ========================================
 // Mengembalikan true jika user yang login adalah PPTK (bukan admin/kpa)
 function isUserPPTK() {
-  if (!STATE.user) return false;
-  const u = STATE.user.username || '';
-  return u.toLowerCase().startsWith('pptk');
+  return !!(STATE.user && STATE.user.role === 'input' && (STATE.user.pptk_nama || '').trim());
 }
 
-// Nama lengkap PPTK yang sedang login (untuk filter data)
+// Nama PPTK yang dipakai untuk membatasi data (sama dengan aturan RLS di server)
 function getPPTKNama() {
-  return STATE.user ? STATE.user.nama : '';
+  return STATE.user ? (STATE.user.pptk_nama || STATE.user.nama) : '';
 }
 
 // Normalisasi teks nama (trim + collapse spasi ganda + uppercase) agar pencocokan PPTK tidak gagal
@@ -29031,99 +28934,141 @@ function cetakHasilCariSisa() {
 function renderPengguna() {
   const roleLabel = {admin:'Administrator',kpa:'KPA / PPK',input:'Operator (PPTK)',view:'Viewer'};
   const roleBadge = {admin:'badge-blue',kpa:'badge-purple',input:'badge-green',view:'badge-orange'};
+  const meId = STATE.user ? STATE.user.id : null;
   return `
 <div class="page-header">
   <h2>👥 Manajemen Pengguna</h2>
-  <button class="btn btn-blue" onclick="openModalPengguna()">➕ Tambah Pengguna</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-outline" onclick="imporAkunLama()">📥 Impor Akun Lama</button>
+    <button class="btn btn-blue" onclick="openModalPengguna()">➕ Tambah Pengguna</button>
+  </div>
 </div>
 <div style="margin-bottom:12px;padding:10px 14px;background:var(--c-primary-light);border-radius:8px;border-left:3px solid var(--c-primary);font-size:12px;color:var(--c-text)">
-  <b>ℹ️ Catatan Role:</b> Admin = akses penuh &nbsp;|&nbsp; KPA/PPK = Nota Dinas PPK + LRA (viewer menu lain) &nbsp;|&nbsp; Operator = input data + Nota PPTK &nbsp;|&nbsp; Viewer = read only
+  <b>ℹ️ Catatan Role:</b> Admin = akses penuh &nbsp;|&nbsp; KPA/PPK = Nota Dinas PPK + LRA (viewer menu lain) &nbsp;|&nbsp; Operator = input data + Nota PPTK &nbsp;|&nbsp; Viewer = read only<br>
+  Password disimpan terenkripsi oleh Supabase Auth dan tidak dapat dilihat siapa pun. Hak akses ditegakkan di database (RLS), bukan hanya di tampilan.
 </div>
 <div style="display:grid;gap:10px">
   ${STATE.pengguna.map((u,i)=>`
     <div class="user-card">
-      <div class="avatar" style="width:40px;height:40px;font-size:16px">${u.nama.charAt(0)}</div>
+      <div class="avatar" style="width:40px;height:40px;font-size:16px">${escHtml((u.nama||'?').charAt(0))}</div>
       <div style="flex:1">
-        <div style="font-weight:700;font-size:14px">${u.nama}</div>
-        <div style="font-size:12px;color:var(--c-text-muted)">@${u.username} ${u.nip?'· NIP '+u.nip:''}</div>
-        <div style="font-size:11px;color:var(--c-text-muted)">${u.jabatan_resmi||u.jabatan||'—'}</div>
+        <div style="font-weight:700;font-size:14px">${escHtml(u.nama)}</div>
+        <div style="font-size:12px;color:var(--c-text-muted)">@${escHtml(u.username)} ${u.nip?'· NIP '+escHtml(u.nip):''}</div>
+        <div style="font-size:11px;color:var(--c-text-muted)">${escHtml(u.jabatan_resmi||u.jabatan||'—')}${u.pptk_nama?' · 🔒 data dibatasi: '+escHtml(u.pptk_nama):''}</div>
       </div>
-      <span class="user-role-badge badge ${roleBadge[u.role]||'badge-gray'}">${roleLabel[u.role]||u.role}</span>
+      <span class="user-role-badge badge ${roleBadge[u.role]||'badge-gray'}">${escHtml(roleLabel[u.role]||u.role)}</span>
       <div class="action-btns">
         <button class="btn btn-sm btn-outline" onclick="editPengguna(${i})">✏️ Edit</button>
-        ${STATE.pengguna.length>1?`<button class="btn btn-sm btn-red" onclick="hapusPengguna(${i})">🗑️</button>`:''}
+        ${u.id!==meId?`<button class="btn btn-sm btn-red" onclick="hapusPengguna(${i})" aria-label="Hapus pengguna ${escHtml(u.username)}">🗑️</button>`:''}
       </div>
     </div>`).join('')}
 </div>`;
 }
 
 function openModalPengguna(idx) {
-  ['pNama','pUsername','pPassword','pJabatan','pNip','pJabatanResmi'].forEach(id=>document.getElementById(id).value='');
+  ['pNama','pUsername','pPassword','pJabatan','pNip','pJabatanResmi','pPptkNama'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pPassword').type = 'password';
+  document.getElementById('pUsername').disabled = false;
   document.getElementById('pRole').value='input';
   document.getElementById('pId').value='';
+  document.getElementById('pPassword').placeholder = 'Minimal 12 karakter';
   document.getElementById('modalPenggunaTitle').textContent='Tambah Pengguna';
   if(idx!==undefined){
     const u=STATE.pengguna[idx];
     document.getElementById('modalPenggunaTitle').textContent='Edit Pengguna';
     document.getElementById('pId').value=idx;
-    document.getElementById('pNama').value=u.nama;
-    document.getElementById('pUsername').value=u.username;
+    document.getElementById('pNama').value=u.nama||'';
+    document.getElementById('pUsername').value=u.username||'';
+    document.getElementById('pUsername').disabled = true; // username terkait nota dinas & login; tidak diubah
     document.getElementById('pRole').value=u.role||'input';
     document.getElementById('pJabatan').value=u.jabatan||'';
     document.getElementById('pNip').value=u.nip||'';
     document.getElementById('pJabatanResmi').value=u.jabatan_resmi||'';
+    document.getElementById('pPptkNama').value=u.pptk_nama||'';
+    document.getElementById('pPassword').placeholder = 'Kosongkan jika tidak direset';
   }
   document.getElementById('modalPengguna').classList.add('open');
 }
 
 function editPengguna(i){openModalPengguna(i);}
+
+function pBuatPasswordAcak() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const buf = new Uint32Array(14); crypto.getRandomValues(buf);
+  const f = document.getElementById('pPassword');
+  f.value = Array.from(buf, n => chars[n % chars.length]).join('');
+  f.type = 'text';
+}
+
 async function hapusPengguna(i){
-  if(!confirm('Hapus pengguna ini?'))return;
-  const id = STATE.pengguna[i].id;
-  STATE.pengguna.splice(i,1);saveState();
-  if(sbClient){
-    try{ await deletePenggunaFromSupabase(id); }catch(e){showToast('Gagal hapus: '+e.message,'error');return;}
-  }
+  const u = STATE.pengguna[i];
+  if(!u) return;
+  if(!confirm('Hapus akun "' + u.username + '" (' + u.nama + ')?\n\nAkun ini tidak akan bisa login lagi dan tidak dapat dipulihkan. Nota dinas yang pernah dibuat tetap tersimpan.'))return;
+  try{ await adminUsersCall({action:'delete', id:u.id}); await reloadProfiles(); }
+  catch(e){showToast('Gagal hapus: '+e.message,'error');return;}
   showToast('Pengguna dihapus');showPage('pengguna');
 }
 
+let _pSaving = false;
 async function savePengguna(){
+  if(_pSaving) return;
   const idx=document.getElementById('pId').value;
   const nama=document.getElementById('pNama').value.trim();
-  const uname=document.getElementById('pUsername').value.trim();
+  const uname=document.getElementById('pUsername').value.trim().toLowerCase();
   const pass=document.getElementById('pPassword').value;
   const nip=document.getElementById('pNip').value.trim();
   const jabatanResmi=document.getElementById('pJabatanResmi').value.trim();
-  if(!nama||!uname){showToast('Nama dan username wajib diisi','error');return;}
-  let obj;
+  const role=document.getElementById('pRole').value;
+  const payload={
+    nama, role,
+    jabatan:document.getElementById('pJabatan').value.trim(),
+    nip, jabatan_resmi:jabatanResmi,
+    pptk_nama:document.getElementById('pPptkNama').value.trim(),
+  };
+  if(!nama){showToast('Nama wajib diisi','error');return;}
   if(idx===''){
-    if(STATE.pengguna.find(u=>u.username===uname)){showToast('Username sudah digunakan','error');return;}
-    obj={id:genId(),nama,username:uname,password:pass||'pptk123',
-         role:document.getElementById('pRole').value,
-         jabatan:document.getElementById('pJabatan').value,
-         nip, jabatan_resmi:jabatanResmi};
-    STATE.pengguna.push(obj);
+    if(!/^[a-z0-9._-]{3,40}$/.test(uname)){showToast('Username 3–40 karakter: huruf kecil, angka, titik, strip, garis bawah','error');return;}
+    if(pass.length<12){showToast('Password minimal 12 karakter','error');return;}
+    payload.action='create'; payload.username=uname; payload.password=pass;
   }else{
-    const u=STATE.pengguna[parseInt(idx)];
-    u.nama=nama;u.username=uname;
-    u.role=document.getElementById('pRole').value;
-    u.jabatan=document.getElementById('pJabatan').value;
-    u.nip=nip; u.jabatan_resmi=jabatanResmi;
-    if(pass)u.password=pass;
-    obj=u;
+    if(pass && pass.length<12){showToast('Password minimal 12 karakter','error');return;}
+    payload.action='update'; payload.id=STATE.pengguna[parseInt(idx)].id;
+    if(pass) payload.password=pass;
   }
-  saveState();closeModal('modalPengguna');
-  if(sbClient){
-    try{ await savePenggunaToSupabase(obj);showToast('Data pengguna disimpan ✅'); }
-    catch(e){
-      console.error('savePengguna error:', e);
-      showToast('Gagal simpan ke database: '+(e.message||e.details||JSON.stringify(e)),'error');
-      return;
-    }
-  }else{
-    showToast('Data pengguna disimpan ✅');
-  }
-  showPage('pengguna');
+  _pSaving = true;
+  try{
+    await adminUsersCall(payload);
+    await reloadProfiles();
+    closeModal('modalPengguna');
+    showToast(idx===''?'Pengguna dibuat ✅ (wajib ganti password saat login pertama)':'Data pengguna disimpan ✅');
+    showPage('pengguna');
+  }catch(e){
+    console.error('savePengguna error:', e);
+    showToast('Gagal simpan: '+(e.message||'terjadi kesalahan'),'error');
+  }finally{ _pSaving = false; }
+}
+
+async function imporAkunLama(){
+  if(!confirm('Impor akun dari tabel pengguna lama?\n\nSetiap akun dibuat ulang dengan PASSWORD SEMENTARA ACAK (password lama tidak dibawa). Daftar password sementara hanya ditampilkan SEKALI — catat dan bagikan secara aman. Pengguna wajib menggantinya saat login pertama.'))return;
+  try{
+    const r = await adminUsersCall({action:'import_legacy'});
+    await reloadProfiles();
+    const lines = (r.report||[]).map(x => x.temp_password
+      ? `${x.username}\t${x.role}\t${x.temp_password}`
+      : `${x.username}\t-\t${x.status}`);
+    document.getElementById('hasilImporText').value = 'username\trole\tpassword sementara / status\n' + lines.join('\n');
+    document.getElementById('modalHasilImpor').classList.add('open');
+    showPage('pengguna');
+  }catch(e){ showToast('Gagal impor: '+e.message,'error'); }
+}
+
+function salinHasilImpor(){
+  const t = document.getElementById('hasilImporText');
+  navigator.clipboard.writeText(t.value).then(()=>showToast('Disalin ✅'));
+}
+function tutupHasilImpor(){
+  document.getElementById('hasilImporText').value='';
+  closeModal('modalHasilImpor');
 }
 
 function resetSupabaseConfig() {
@@ -29137,7 +29082,7 @@ function resetSupabaseConfig() {
 // ========================================
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 window.addEventListener('click',e=>{
-  document.querySelectorAll('.modal-overlay.open').forEach(m=>{if(e.target===m)m.classList.remove('open');});
+  document.querySelectorAll('.modal-overlay.open').forEach(m=>{if(e.target===m && !m.hasAttribute('data-locked'))m.classList.remove('open');});
 });
 
 // ========================================
@@ -29155,7 +29100,6 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 (async function initApp() {
   // Always use hardcoded credentials — no config screen needed
   initSupabase(SUPABASE_URL, SUPABASE_KEY);
-  localStorage.setItem('sianggaranSupabaseConfig', JSON.stringify({url: SUPABASE_URL, key: SUPABASE_KEY}));
   // Show login directly — koneksi Supabase akan diverifikasi saat doLogin()
   document.getElementById('loginScreen').style.display = '';
 })();
@@ -29554,158 +29498,10 @@ window.addEventListener('resize', function() {
   </div>
 </div>
 
-<!-- ===== FLOATING MUSIC PLAYER ===== -->
-<button id="musicFab" onclick="openMusicPlayer()" title="Putar Musik Kerja 🎵">🎵</button>
-
-<!-- ===== MUSIC PLAYER WIDGET ===== -->
-<div id="musicPlayer">
-  <div class="mp-header">
-    <span class="mp-title">🎵 Musik Kerja</span>
-    <div style="display:flex;gap:4px">
-      <button class="mp-close" onclick="openMusicManager()" title="Kelola Playlist" style="font-size:13px">🎼</button>
-      <button class="mp-close" onclick="closeMusicPlayer()" title="Minimize">▼</button>
-    </div>
-  </div>
-  <div class="mp-track-info">
-    <div class="mp-track-name" id="mpTrackName">—</div>
-    <div class="mp-track-sub" id="mpTrackSub">Belum ada lagu</div>
-  </div>
-  <div class="mp-visualizer" id="mpVisualizer">
-    <div class="mp-bar"></div><div class="mp-bar"></div><div class="mp-bar"></div>
-    <div class="mp-bar"></div><div class="mp-bar"></div><div class="mp-bar"></div>
-    <div class="mp-bar"></div><div class="mp-bar"></div>
-  </div>
-  <div class="mp-controls">
-    <button class="mp-btn" onclick="mpPrev()" title="Sebelumnya">⏮</button>
-    <button class="mp-btn play-btn" id="mpPlayBtn" onclick="mpTogglePlay()">▶ Play</button>
-    <button class="mp-btn" onclick="mpNext()" title="Berikutnya">⏭</button>
-    <button class="mp-btn" id="mpShuffleBtn" onclick="mpToggleShuffle()" title="Acak">🔀</button>
-  </div>
-  <div class="mp-volume">
-    <span>🔈</span>
-    <input type="range" id="mpVolumeSlider" min="0" max="100" value="40" oninput="mpSetVolume(this.value)">
-    <span>🔊</span>
-  </div>
-  <!-- Mini playlist -->
-  <div id="mpPlaylist" style="margin-top:10px;max-height:130px;overflow-y:auto;display:none"></div>
-  <button onclick="toggleMpPlaylist()" style="width:100%;margin-top:6px;background:rgba(255,255,255,.05);border:none;border-radius:6px;color:#64748b;font-size:11px;padding:4px;cursor:pointer" id="mpPlaylistToggle">▾ Lihat Playlist</button>
-</div>
-
-<!-- ===== MUSIC MANAGER MODAL ===== -->
-<div id="musicManagerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;padding:16px">
-  <div style="background:var(--c-surface);border-radius:16px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">
-    <!-- Header -->
-    <div style="padding:18px 20px;border-bottom:1px solid var(--c-border);display:flex;align-items:center;justify-content:space-between">
-      <div>
-        <h3 style="font-size:16px;font-weight:700">🎼 Kelola Playlist Musik</h3>
-        <p style="font-size:12px;color:var(--c-text-muted);margin-top:2px">Tambah, edit, atau hapus lagu dari daftar putar</p>
-      </div>
-      <button onclick="closeMusicManager()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--c-text-muted)">✕</button>
-    </div>
-
-    <!-- Tabs -->
-    <div style="display:flex;gap:0;border-bottom:1px solid var(--c-border);padding:0 20px">
-      <button class="mm-tab active" id="mmTab1" onclick="mmSwitchTab(1)" style="padding:10px 16px;background:none;border:none;border-bottom:2px solid var(--c-primary);color:var(--c-primary);font-weight:600;font-size:13px;cursor:pointer">📋 Daftar Lagu</button>
-      <button class="mm-tab" id="mmTab2" onclick="mmSwitchTab(2)" style="padding:10px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--c-text-muted);font-size:13px;cursor:pointer">➕ Tambah Lagu</button>
-      <button class="mm-tab" id="mmTab3" onclick="mmSwitchTab(3)" style="padding:10px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--c-text-muted);font-size:13px;cursor:pointer">💡 Bantuan URL</button>
-    </div>
-
-    <!-- Tab 1: Daftar Lagu -->
-    <div id="mmPane1" style="flex:1;overflow-y:auto;padding:16px 20px">
-      <div id="mmTrackList"></div>
-    </div>
-
-    <!-- Tab 2: Tambah / Edit Lagu -->
-    <div id="mmPane2" style="flex:1;overflow-y:auto;padding:16px 20px;display:none">
-      <input type="hidden" id="mmEditIdx" value="-1">
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div class="form-group">
-          <label class="form-label">Nama Lagu / Judul</label>
-          <input class="form-input" id="mmName" placeholder="cth: Bengawan Solo — Gesang">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Kategori / Keterangan</label>
-          <input class="form-input" id="mmSub" placeholder="cth: Keroncong Jawa, Indonesia, Lo-Fi...">
-        </div>
-        <div class="form-group">
-          <label class="form-label">URL File Audio (mp3/ogg/wav)</label>
-          <input class="form-input" id="mmUrl" placeholder="https://..." style="font-family:monospace;font-size:12px">
-          <span class="form-hint">Tempel URL langsung dari browser atau layanan hosting audio. Klik tab "Bantuan URL" untuk panduan.</span>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-blue" onclick="mmSaveTrack()" style="flex:1">💾 Simpan Lagu</button>
-          <button class="btn btn-gray" onclick="mmCancelEdit()">Batal</button>
-        </div>
-        <div id="mmTestArea" style="display:none;background:var(--c-surface2);border-radius:8px;padding:12px;border:1px solid var(--c-border)">
-          <p style="font-size:12px;font-weight:600;margin-bottom:6px">🔊 Tes Audio:</p>
-          <audio id="mmTestAudio" controls style="width:100%;height:32px"></audio>
-        </div>
-        <button onclick="mmTestUrl()" class="btn btn-outline btn-sm" style="align-self:flex-start">🔊 Tes URL Audio</button>
-      </div>
-    </div>
-
-    <!-- Tab 3: Bantuan URL -->
-    <div id="mmPane3" style="flex:1;overflow-y:auto;padding:16px 20px;display:none">
-      <div style="display:flex;flex-direction:column;gap:14px;font-size:13px">
-        <div style="background:var(--c-primary-light);border-radius:8px;padding:14px;border-left:3px solid var(--c-primary)">
-          <p style="font-weight:700;color:var(--c-primary);margin-bottom:6px">🎵 Cara Mendapat URL Lagu</p>
-          <p style="color:var(--c-text);line-height:1.7">URL audio harus berakhiran <code style="background:rgba(26,86,219,.1);padding:1px 5px;border-radius:3px;font-family:monospace">.mp3</code>, <code style="background:rgba(26,86,219,.1);padding:1px 5px;border-radius:3px;font-family:monospace">.ogg</code>, atau <code style="background:rgba(26,86,219,.1);padding:1px 5px;border-radius:3px;font-family:monospace">.wav</code> dan bisa diakses publik.</p>
-        </div>
-
-        <div style="border:1px solid var(--c-border);border-radius:8px;overflow:hidden">
-          <div style="background:var(--c-surface2);padding:10px 14px;font-weight:700;font-size:12px;border-bottom:1px solid var(--c-border)">📦 Sumber Lagu Gratis Bebas Hak Cipta</div>
-          <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
-            <div>
-              <p style="font-weight:600;color:var(--c-text)">1. Pixabay Music <span style="color:var(--c-success);font-size:11px">✅ Gratis & bebas royalti</span></p>
-              <p style="color:var(--c-text-muted);font-size:12px">Buka <b>pixabay.com/music</b> → cari genre → klik lagu → klik kanan tombol Download → "Copy link address" → paste ke kolom URL.</p>
-            </div>
-            <div>
-              <p style="font-weight:600;color:var(--c-text)">2. Free Music Archive <span style="color:var(--c-success);font-size:11px">✅ Gratis CC License</span></p>
-              <p style="color:var(--c-text-muted);font-size:12px">Buka <b>freemusicarchive.org</b> → pilih lagu → klik kanan tombol Download MP3 → "Copy link address".</p>
-            </div>
-            <div>
-              <p style="font-weight:600;color:var(--c-text)">3. GitHub / Google Drive / OneDrive</p>
-              <p style="color:var(--c-text-muted);font-size:12px">Upload file MP3 ke GitHub (raw URL) atau Google Drive (ubah link ke format direct download). Pastikan file bisa diakses tanpa login.</p>
-            </div>
-            <div>
-              <p style="font-weight:600;color:var(--c-text)">4. Supabase Storage <span style="color:var(--c-success);font-size:11px">✅ Rekomendasi untuk file pribadi</span></p>
-              <p style="color:var(--c-text-muted);font-size:12px">Upload MP3 ke Supabase Storage bucket (set public) → copy URL publik → paste di sini. Cocok untuk lagu Jawa / Indonesia koleksi sendiri.</p>
-            </div>
-          </div>
-        </div>
-
-        <div style="background:var(--c-warning-light);border-radius:8px;padding:12px;border-left:3px solid var(--c-warning)">
-          <p style="font-weight:600;color:var(--c-warning);margin-bottom:4px">⚠️ YouTube & Spotify</p>
-          <p style="color:var(--c-text);font-size:12px;line-height:1.7">URL dari YouTube / Spotify <b>tidak bisa</b> digunakan langsung karena bukan file audio langsung. Gunakan sumber yang memberikan link file .mp3 langsung.</p>
-        </div>
-
-        <div style="background:var(--c-success-light);border-radius:8px;padding:12px;border-left:3px solid var(--c-success)">
-          <p style="font-weight:600;color:var(--c-success);margin-bottom:6px">💡 Contoh URL yang Valid</p>
-          <code style="font-size:11px;color:var(--c-text-muted);word-break:break-all;display:block;line-height:1.8">
-            https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3<br>
-            https://files.freemusicarchive.org/storage.../track.mp3<br>
-            https://raw.githubusercontent.com/user/repo/main/lagu.mp3
-          </code>
-        </div>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div style="padding:12px 20px;border-top:1px solid var(--c-border);display:flex;align-items:center;justify-content:space-between;gap:8px">
-      <span style="font-size:12px;color:var(--c-text-muted)" id="mmTrackCount">0 lagu</span>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-sm btn-outline" onclick="mmResetToDefault()">↺ Reset Default</button>
-        <button class="btn btn-sm btn-blue" onclick="closeMusicManager()">✓ Selesai</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<audio id="bgAudio" preload="none"></audio>
 
 <script>
 /* ===================================================
-   FITUR BARU: Datetime, Greeting, Music, Sidebar Collapse
+   FITUR BARU: Datetime, Greeting, Sidebar Collapse
    =================================================== */
 
 // ============ DATETIME WIDGET ============
@@ -29785,9 +29581,6 @@ window.startClock = function() {
   setTimeout(function() {
     var nama = (STATE.user && STATE.user.nama) ? STATE.user.nama.split(',')[0].trim() : 'Sampeyan';
     showGreeting(nama);
-    // Tampilkan FAB musik setelah login
-    var fab = document.getElementById('musicFab');
-    if (fab) fab.classList.add('show');
   }, 600);
 };
 
@@ -30252,41 +30045,48 @@ function ndSave() {
 }
 
 async function ndSyncSupabase() {
-  // Upsert nota_dinas_pptk & nota_dinas_ppk ke Supabase.
-  // PENTING: error TIDAK boleh didiamkan (sebelumnya .catch(()=>{}) menelan error diam-diam,
-  // sehingga nota bisa gagal tersimpan ke server tanpa pemberitahuan apa pun ke pengguna —
-  // walau toast "tersimpan ✅" sudah terlanjur muncul saat data hanya sukses tersimpan lokal).
+  // Upsert nota ke Supabase. Aturan akses ditegakkan RLS di server; klien hanya mengirim
+  // nota yang memang boleh ditulis akun ini agar tidak memicu penolakan.
+  if (!sbClient || !STATE.user) return false;
+  const role = STATE.user.role;
+  const uname = STATE.user.username;
+  const bolehPPTK = n => role === 'admin' || n.created_by === uname;
+  const bolehPPK  = n => role === 'admin' || role === 'kpa' || n.created_by === uname;
   try {
-    const rows = STATE.notaDinas.pptk.map(n => ({
-      id: n.id, tahun: STATE.tahun, data: n
-    }));
+    const rows = STATE.notaDinas.pptk.filter(bolehPPTK).map(n => ({ id: n.id, tahun: STATE.tahun, data: n }));
     if (rows.length > 0) {
       const { error } = await sbClient.from('nota_dinas_pptk').upsert(rows, {onConflict:'id'});
       if (error) throw error;
     }
-    const rowsPPK = STATE.notaDinas.ppk.map(n => ({
-      id: n.id, tahun: STATE.tahun, data: n
-    }));
+    const rowsPPK = STATE.notaDinas.ppk.filter(bolehPPK).map(n => ({ id: n.id, tahun: STATE.tahun, data: n }));
     if (rowsPPK.length > 0) {
       const { error } = await sbClient.from('nota_dinas_ppk').upsert(rowsPPK, {onConflict:'id'});
       if (error) throw error;
     }
+    return true;
   } catch(e) {
     console.error('ndSyncSupabase', e);
-    showToast('⚠️ Nota dinas tersimpan di perangkat ini tapi GAGAL sinkron ke server: ' + (e.message || 'periksa koneksi'), 'error');
+    showToast('⚠️ Nota dinas GAGAL tersimpan ke server: ' + (e.message || 'periksa koneksi') + '. Jangan tutup halaman sebelum berhasil.', 'error');
+    return false;
   }
 }
 
 async function ndLoadSupabase() {
   if (!sbClient) return;
   try {
-    const { data: dp } = await sbClient.from('nota_dinas_pptk')
-      .select('data').eq('tahun', STATE.tahun);
-    if (dp && dp.length > 0) STATE.notaDinas.pptk = dp.map(r => r.data);
-    const { data: dk } = await sbClient.from('nota_dinas_ppk')
-      .select('data').eq('tahun', STATE.tahun);
-    if (dk && dk.length > 0) STATE.notaDinas.ppk = dk.map(r => r.data);
-  } catch(e) { console.error('ndLoadSupabase', e); }
+    const [dp, dk] = await Promise.all([
+      sbClient.from('nota_dinas_pptk').select('data').eq('tahun', STATE.tahun),
+      sbClient.from('nota_dinas_ppk').select('data').eq('tahun', STATE.tahun),
+    ]);
+    if (dp.error) throw dp.error;
+    if (dk.error) throw dk.error;
+    // Server adalah sumber kebenaran (RLS sudah membatasi sesuai peran)
+    STATE.notaDinas.pptk = (dp.data || []).map(r => r.data);
+    STATE.notaDinas.ppk  = (dk.data || []).map(r => r.data);
+  } catch(e) {
+    console.error('ndLoadSupabase', e);
+    showToast('Gagal memuat nota dinas: ' + (e.message || 'periksa koneksi'), 'error');
+  }
 }
 
 // Format nomor nota: DD.MM atau DD.MM.NN
@@ -31794,317 +31594,9 @@ function previewNotaPPK(id) { cetakNotaPPK(id); }
 // Load nota dinas from Supabase on init (called after login)
 
 
-// ============ MUSIC PLAYER ============
-var MP_DEFAULT_TRACKS = [
-  { name: 'Lo-Fi Beats — Fokus Kerja',       sub: 'Ambient / Lo-Fi',     url: 'https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3' },
-  { name: 'Chill Office Vibes',              sub: 'Instrumental',         url: 'https://cdn.pixabay.com/audio/2022/03/15/audio_eb0e70e560.mp3' },
-  { name: 'Soft Piano — Deep Focus',         sub: 'Piano / Ambient',      url: 'https://cdn.pixabay.com/audio/2022/01/18/audio_d1718ab69a.mp3' },
-  { name: 'Morning Coffee Lounge',           sub: 'Acoustic / Jazz',      url: 'https://cdn.pixabay.com/audio/2022/08/03/audio_2dde668d05.mp3' },
-  { name: 'Productive Flow — Synth Ambient', sub: 'Electronic / Ambient', url: 'https://cdn.pixabay.com/audio/2023/03/13/audio_9e39b5782e.mp3' },
-];
-
-var MP = {
-  tracks: [],
-  current: 0,
-  playing: false,
-  shuffle: false,
-};
-
-// Load saved playlist from localStorage
-function mpLoadSavedTracks() {
-  try {
-    var saved = localStorage.getItem('sianggaranMusicTracks');
-    if (saved) {
-      var parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        MP.tracks = parsed;
-        return;
-      }
-    }
-  } catch(e) {}
-  MP.tracks = MP_DEFAULT_TRACKS.slice();
-}
-
-function mpSaveTracks() {
-  try { localStorage.setItem('sianggaranMusicTracks', JSON.stringify(MP.tracks)); } catch(e) {}
-}
-
-mpLoadSavedTracks();
-
-var _audio = null;
-function getMpAudio() {
-  if (!_audio) _audio = document.getElementById('bgAudio');
-  return _audio;
-}
-
-function mpLoadTrack(idx) {
-  var audio = getMpAudio();
-  var t = MP.tracks[idx];
-  if (!t) return;
-  audio.src = t.url;
-  audio.volume = document.getElementById('mpVolumeSlider').value / 100;
-  document.getElementById('mpTrackName').textContent = t.name;
-  document.getElementById('mpTrackSub').textContent = (t.sub || '') + ' · Track ' + (idx+1) + ' / ' + MP.tracks.length;
-  MP.current = idx;
-  // Highlight in mini playlist
-  mpRenderPlaylist();
-}
-
-function mpTogglePlay() {
-  var audio = getMpAudio();
-  if (MP.tracks.length === 0) { showToast('Playlist kosong — tambah lagu dulu via 🎼', 'error'); return; }
-  if (!audio.src || audio.src === window.location.href) mpLoadTrack(MP.current);
-  if (MP.playing) {
-    audio.pause();
-    MP.playing = false;
-    document.getElementById('mpPlayBtn').textContent = '▶ Play';
-    document.getElementById('mpVisualizer').classList.add('paused');
-  } else {
-    audio.play().then(function() {
-      MP.playing = true;
-      document.getElementById('mpPlayBtn').textContent = '⏸ Pause';
-      document.getElementById('mpVisualizer').classList.remove('paused');
-    }).catch(function() {
-      showToast('Browser memblokir autoplay — klik Play lagi', 'error');
-    });
-  }
-}
-
-function mpNext() {
-  if (MP.tracks.length === 0) return;
-  var next;
-  if (MP.shuffle) {
-    do { next = Math.floor(Math.random() * MP.tracks.length); } while (MP.tracks.length > 1 && next === MP.current);
-  } else {
-    next = (MP.current + 1) % MP.tracks.length;
-  }
-  mpLoadTrack(next);
-  if (MP.playing) getMpAudio().play();
-}
-
-function mpPrev() {
-  if (MP.tracks.length === 0) return;
-  var prev = (MP.current - 1 + MP.tracks.length) % MP.tracks.length;
-  mpLoadTrack(prev);
-  if (MP.playing) getMpAudio().play();
-}
-
-function mpSetVolume(val) {
-  getMpAudio().volume = val / 100;
-}
-
-function mpToggleShuffle() {
-  MP.shuffle = !MP.shuffle;
-  var btn = document.getElementById('mpShuffleBtn');
-  if (btn) {
-    btn.style.background = MP.shuffle ? 'rgba(26,86,219,.35)' : '';
-    btn.style.color = MP.shuffle ? '#60a5fa' : '';
-  }
-}
-
-function mpRenderPlaylist() {
-  var el = document.getElementById('mpPlaylist');
-  if (!el) return;
-  if (MP.tracks.length === 0) {
-    el.innerHTML = '<p style="font-size:12px;color:#64748b;text-align:center;padding:8px">Belum ada lagu — tambah via 🎼</p>';
-    return;
-  }
-  el.innerHTML = MP.tracks.map(function(t, i) {
-    var active = i === MP.current;
-    return '<div onclick="mpJumpTo(' + i + ')" style="padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:2px;' +
-      (active ? 'background:rgba(26,86,219,.25);' : 'background:transparent;') + '">' +
-      '<span style="font-size:13px;width:16px;text-align:center;flex-shrink:0">' + (active ? '▶' : (i+1)) + '</span>' +
-      '<div style="min-width:0;flex:1">' +
-        '<div style="font-size:12px;font-weight:' + (active?'700':'500') + ';color:' + (active?'#e2e8f0':'#94a3b8') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(t.name) + '</div>' +
-        '<div style="font-size:10px;color:#475569">' + escHtml(t.sub||'') + '</div>' +
-      '</div></div>';
-  }).join('');
-}
-
-function mpJumpTo(idx) {
-  mpLoadTrack(idx);
-  if (!MP.playing) mpTogglePlay();
-}
-
-function toggleMpPlaylist() {
-  var pl = document.getElementById('mpPlaylist');
-  var btn = document.getElementById('mpPlaylistToggle');
-  var visible = pl.style.display !== 'none';
-  pl.style.display = visible ? 'none' : 'block';
-  btn.textContent = visible ? '▾ Lihat Playlist' : '▴ Tutup Playlist';
-  if (!visible) mpRenderPlaylist();
-}
-
-function openMusicPlayer() {
-  document.getElementById('musicPlayer').classList.add('show');
-  document.getElementById('musicFab').classList.remove('show');
-  if (MP.tracks.length > 0 && (!getMpAudio().src || getMpAudio().src === window.location.href)) {
-    mpLoadTrack(MP.current);
-  } else if (MP.tracks.length === 0) {
-    document.getElementById('mpTrackName').textContent = '— Belum ada lagu —';
-    document.getElementById('mpTrackSub').textContent = 'Tambah lagu via tombol 🎼';
-  }
-}
-
-function closeMusicPlayer() {
-  document.getElementById('musicPlayer').classList.remove('show');
-  document.getElementById('musicFab').classList.add('show');
-}
-
-getMpAudio().addEventListener('ended', function() {
-  mpNext();
-});
-
-// ============ MUSIC MANAGER ============
+// ============ UTIL ============
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function openMusicManager() {
-  document.getElementById('musicManagerOverlay').style.display = 'flex';
-  mmSwitchTab(1);
-  mmRenderTrackList();
-}
-
-function closeMusicManager() {
-  document.getElementById('musicManagerOverlay').style.display = 'none';
-  // Refresh player display
-  if (MP.tracks.length > 0) mpLoadTrack(Math.min(MP.current, MP.tracks.length-1));
-  else {
-    document.getElementById('mpTrackName').textContent = '— Belum ada lagu —';
-    document.getElementById('mpTrackSub').textContent = 'Tambah lagu via tombol 🎼';
-  }
-}
-
-function mmSwitchTab(n) {
-  [1,2,3].forEach(function(i) {
-    var pane = document.getElementById('mmPane'+i);
-    var tab = document.getElementById('mmTab'+i);
-    if (pane) pane.style.display = i===n ? 'block' : 'none';
-    if (tab) {
-      tab.style.borderBottomColor = i===n ? 'var(--c-primary)' : 'transparent';
-      tab.style.color = i===n ? 'var(--c-primary)' : 'var(--c-text-muted)';
-      tab.style.fontWeight = i===n ? '600' : '400';
-    }
-  });
-  if (n===1) mmRenderTrackList();
-  if (n===2) mmCancelEdit();
-}
-
-function mmRenderTrackList() {
-  var el = document.getElementById('mmTrackList');
-  var countEl = document.getElementById('mmTrackCount');
-  if (countEl) countEl.textContent = MP.tracks.length + ' lagu';
-  if (!el) return;
-  if (MP.tracks.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--c-text-muted)">' +
-      '<div style="font-size:36px;margin-bottom:10px">🎵</div>' +
-      '<p style="font-weight:600">Playlist kosong</p>' +
-      '<p style="font-size:12px;margin-top:4px">Klik tab "Tambah Lagu" untuk mulai</p></div>';
-    return;
-  }
-  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">' +
-    MP.tracks.map(function(t, i) {
-      var isPlaying = i === MP.current && MP.playing;
-      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--c-surface2);border-radius:8px;border:1px solid var(--c-border)">' +
-        '<div style="width:28px;height:28px;border-radius:50%;background:var(--c-primary);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex-shrink:0;font-weight:700">' + (i+1) + '</div>' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(t.name) + (isPlaying ? ' <span style="color:var(--c-primary);font-size:10px">▶ Sedang diputar</span>' : '') + '</div>' +
-          '<div style="font-size:11px;color:var(--c-text-muted)">' + escHtml(t.sub||'') + '</div>' +
-          '<div style="font-size:10px;color:#64748b;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">' + escHtml(t.url) + '</div>' +
-        '</div>' +
-        '<div style="display:flex;gap:4px;flex-shrink:0">' +
-          (i>0?'<button onclick="mmMoveUp('+i+')" class="btn btn-sm btn-outline" title="Naikan">↑</button>':'') +
-          (i<MP.tracks.length-1?'<button onclick="mmMoveDown('+i+')" class="btn btn-sm btn-outline" title="Turunkan">↓</button>':'') +
-          '<button onclick="mmEditTrack('+i+')" class="btn btn-sm btn-outline">✏️</button>' +
-          '<button onclick="mmDeleteTrack('+i+')" class="btn btn-sm btn-red">🗑</button>' +
-        '</div>' +
-      '</div>';
-    }).join('') + '</div>';
-}
-
-function mmEditTrack(idx) {
-  var t = MP.tracks[idx];
-  if (!t) return;
-  document.getElementById('mmEditIdx').value = idx;
-  document.getElementById('mmName').value = t.name;
-  document.getElementById('mmSub').value = t.sub || '';
-  document.getElementById('mmUrl').value = t.url;
-  document.getElementById('mmTestArea').style.display = 'none';
-  mmSwitchTab(2);
-}
-
-function mmCancelEdit() {
-  document.getElementById('mmEditIdx').value = -1;
-  document.getElementById('mmName').value = '';
-  document.getElementById('mmSub').value = '';
-  document.getElementById('mmUrl').value = '';
-  document.getElementById('mmTestArea').style.display = 'none';
-}
-
-function mmSaveTrack() {
-  var name = document.getElementById('mmName').value.trim();
-  var sub  = document.getElementById('mmSub').value.trim();
-  var url  = document.getElementById('mmUrl').value.trim();
-  if (!name) { showToast('Nama lagu wajib diisi', 'error'); return; }
-  if (!url)  { showToast('URL audio wajib diisi', 'error'); return; }
-  if (!url.startsWith('http')) { showToast('URL harus diawali https://', 'error'); return; }
-  var track = { name: name, sub: sub, url: url };
-  var editIdx = parseInt(document.getElementById('mmEditIdx').value);
-  if (editIdx >= 0 && editIdx < MP.tracks.length) {
-    MP.tracks[editIdx] = track;
-    showToast('Lagu berhasil diperbarui ✅');
-  } else {
-    MP.tracks.push(track);
-    showToast('Lagu berhasil ditambahkan ✅');
-  }
-  mpSaveTracks();
-  mmCancelEdit();
-  mmSwitchTab(1);
-}
-
-function mmDeleteTrack(idx) {
-  var t = MP.tracks[idx];
-  if (!confirm('Hapus lagu "' + t.name + '" dari playlist?')) return;
-  MP.tracks.splice(idx, 1);
-  if (MP.current >= MP.tracks.length) MP.current = Math.max(0, MP.tracks.length-1);
-  mpSaveTracks();
-  mmRenderTrackList();
-  showToast('Lagu dihapus');
-}
-
-function mmMoveUp(idx) {
-  if (idx === 0) return;
-  var tmp = MP.tracks[idx-1]; MP.tracks[idx-1] = MP.tracks[idx]; MP.tracks[idx] = tmp;
-  if (MP.current === idx) MP.current = idx-1;
-  else if (MP.current === idx-1) MP.current = idx;
-  mpSaveTracks(); mmRenderTrackList();
-}
-
-function mmMoveDown(idx) {
-  if (idx >= MP.tracks.length-1) return;
-  var tmp = MP.tracks[idx+1]; MP.tracks[idx+1] = MP.tracks[idx]; MP.tracks[idx] = tmp;
-  if (MP.current === idx) MP.current = idx+1;
-  else if (MP.current === idx+1) MP.current = idx;
-  mpSaveTracks(); mmRenderTrackList();
-}
-
-function mmResetToDefault() {
-  if (!confirm('Reset playlist ke daftar lagu default?\nSemua lagu yang sudah Anda tambahkan akan dihapus.')) return;
-  MP.tracks = MP_DEFAULT_TRACKS.slice();
-  MP.current = 0;
-  mpSaveTracks();
-  mmRenderTrackList();
-  showToast('Playlist direset ke default ✅');
-}
-
-function mmTestUrl() {
-  var url = document.getElementById('mmUrl').value.trim();
-  if (!url) { showToast('Isi URL terlebih dahulu', 'error'); return; }
-  var testAudio = document.getElementById('mmTestAudio');
-  testAudio.src = url;
-  document.getElementById('mmTestArea').style.display = 'block';
-  showToast('Silakan klik play di bawah untuk tes audio 🔊');
 }
 
 </script>

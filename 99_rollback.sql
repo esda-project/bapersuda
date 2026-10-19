@@ -1,0 +1,72 @@
+-- ============================================================================
+-- SIANGGARAN — TAHAP 5 / ROLLBACK
+-- ============================================================================
+-- PERINGATAN: BAGIAN A mengembalikan kebijakan anon lama (akses penuh tanpa login)
+-- = risiko KRITIS yang ditemukan pada audit. Pakai HANYA sebagai darurat
+-- sementara, dan sertakan rencana perbaikan segera.
+-- Jalankan per bagian (blok terpisah), bukan seluruh file sekaligus.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- BAGIAN A — batalkan 02_kunci_akses_anon.sql (aplikasi lama bisa jalan lagi)
+-- Syarat: deploy kembali index.html lama (git revert / Vercel "Promote" deployment lama).
+-- ----------------------------------------------------------------------------
+-- begin;
+-- grant all on table public.pengguna, public.anggaran, public.realisasi,
+--                    public.kas_anggaran, public.app_settings to anon;
+-- create policy pengguna_anon_all     on public.pengguna     for all to anon using (true) with check (true);
+-- create policy anggaran_anon         on public.anggaran     for all to anon using (true) with check (true);
+-- create policy realisasi_anon        on public.realisasi    for all to anon using (true) with check (true);
+-- create policy kas_anggaran_anon     on public.kas_anggaran for all to anon using (true) with check (true);
+-- create policy app_settings_anon     on public.app_settings for all to anon using (true) with check (true);
+-- -- (jika tabel nota ada)
+-- grant all on table public.nota_dinas_pptk, public.nota_dinas_ppk to anon;
+-- create policy nota_pptk_anon on public.nota_dinas_pptk for all to anon using (true) with check (true);
+-- create policy nota_ppk_anon  on public.nota_dinas_ppk  for all to anon using (true) with check (true);
+-- -- view direktori kembali membaca tabel pengguna lama (diperlukan juga oleh Bagian B)
+-- create or replace view public.v_pengguna_publik with (security_invoker = true) as
+--   select id, nama, username, role, jabatan, nip, jabatan_resmi from public.pengguna;
+-- grant select on public.v_pengguna_publik to anon, authenticated;
+-- commit;
+
+-- ----------------------------------------------------------------------------
+-- BAGIAN B — batalkan 01_tambahan_aman.sql (hapus objek baru; data TIDAK tersentuh)
+-- Jika 02 sudah pernah dijalankan, jalankan BAGIAN A lebih dulu (view v_pengguna_publik).
+-- Auth users di Dashboard tidak ikut terhapus (hapus manual bila perlu).
+-- ----------------------------------------------------------------------------
+-- begin;
+-- drop policy if exists anggaran_sel_auth on public.anggaran;
+-- drop policy if exists anggaran_ins_auth on public.anggaran;
+-- drop policy if exists anggaran_upd_auth on public.anggaran;
+-- drop policy if exists anggaran_del_auth on public.anggaran;
+-- drop policy if exists realisasi_sel_auth on public.realisasi;
+-- drop policy if exists realisasi_ins_auth on public.realisasi;
+-- drop policy if exists realisasi_upd_auth on public.realisasi;
+-- drop policy if exists realisasi_del_auth on public.realisasi;
+-- drop policy if exists kas_sel_auth on public.kas_anggaran;
+-- drop policy if exists kas_ins_auth on public.kas_anggaran;
+-- drop policy if exists kas_upd_auth on public.kas_anggaran;
+-- drop policy if exists kas_del_auth on public.kas_anggaran;
+-- drop policy if exists settings_sel_auth on public.app_settings;
+-- drop policy if exists settings_wr_auth  on public.app_settings;
+-- drop policy if exists nd_pptk_sel_auth on public.nota_dinas_pptk;
+-- drop policy if exists nd_pptk_ins_auth on public.nota_dinas_pptk;
+-- drop policy if exists nd_pptk_upd_auth on public.nota_dinas_pptk;
+-- drop policy if exists nd_pptk_del_auth on public.nota_dinas_pptk;
+-- drop policy if exists nd_ppk_sel_auth  on public.nota_dinas_ppk;
+-- drop policy if exists nd_ppk_ins_auth  on public.nota_dinas_ppk;
+-- drop policy if exists nd_ppk_upd_auth  on public.nota_dinas_ppk;
+-- drop policy if exists nd_ppk_del_auth  on public.nota_dinas_ppk;
+-- drop function if exists public.clear_must_change_password();
+-- drop function if exists public.auth_pptk();
+-- drop function if exists public.auth_username();
+-- drop function if exists public.auth_role();
+-- drop function if exists public.norm_nama(text);
+-- drop table if exists public.profiles;
+-- commit;
+
+-- ----------------------------------------------------------------------------
+-- BAGIAN C — pemulihan data dari backup (bila ada data rusak)
+-- Gunakan backup dari RUNBOOK bagian 2 (pg_dump / Supabase Backups), restore ke
+-- project BARU terlebih dahulu untuk verifikasi, jangan menimpa produksi langsung.
+-- ----------------------------------------------------------------------------
