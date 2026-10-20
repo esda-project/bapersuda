@@ -24311,7 +24311,7 @@ async function saveSupabaseConfig() {
 
   // Test connection
   try {
-    const { error } = await sbClient.from('profiles').select('id').limit(1);
+    const { error } = await sbClient.from('sianggaran_profiles').select('id').limit(1);
     if (error) throw error;
     localStorage.setItem('sianggaranSupabaseConfig', JSON.stringify({url, key}));
     statusEl.innerHTML = '<div class="db-status ok">✅ Koneksi berhasil! Mengalihkan ke login...</div>';
@@ -24411,7 +24411,7 @@ async function loadDataFromSupabase() {
       sbClient.from('anggaran').select('*').eq('tahun', STATE.tahun),
       sbClient.from('realisasi').select('*').eq('tahun', STATE.tahun),
       sbClient.from('kas_anggaran').select('*').eq('tahun', STATE.tahun),
-      sbClient.from('profiles').select('*').order('nama'),
+      sbClient.from('sianggaran_profiles').select('*').order('nama'),
     ]);
     if (angRes.error) throw angRes.error;
     if (realRes.error) throw realRes.error;
@@ -24527,7 +24527,7 @@ async function adminUsersCall(payload) {
 }
 
 async function reloadProfiles() {
-  const { data, error } = await sbClient.from('profiles').select('*').order('nama');
+  const { data, error } = await sbClient.from('sianggaran_profiles').select('*').order('nama');
   if (error) throw error;
   STATE.pengguna = data || [];
 }
@@ -24599,14 +24599,22 @@ async function doLogin() {
     const { data, error } = await sbClient.auth.signInWithPassword({ email: usernameToEmail(u), password: p });
     if (error || !data || !data.user) {
       setSyncIndicator('hidden');
+      // Pesan ke pengguna tetap umum untuk salah username/password (tidak membocorkan akun mana yang ada),
+      // tetapi penyebab teknis lain ditampilkan agar admin bisa mendiagnosis.
+      const code = error && (error.code || '');
       let msg = 'Username atau password salah';
       if (error && error.status === 429) msg = 'Terlalu banyak percobaan login. Coba lagi beberapa menit lagi.';
       else if (error && (error.status === 0 || /fetch|network/i.test(error.message || ''))) msg = 'Tidak dapat terhubung ke server. Periksa koneksi internet.';
+      else if (code === 'email_address_invalid' || code === 'validation_failed' || /invalid format|unable to validate email/i.test((error && error.message) || ''))
+        msg = 'Konfigurasi login ditolak server (format email sintetis, kode: ' + (code || 'validasi') + '). Hubungi admin sistem.';
+      else if (code === 'email_not_confirmed') msg = 'Akun belum dikonfirmasi. Hubungi admin sistem.';
+      else if (code && code !== 'invalid_credentials' && error.status >= 500) msg = 'Layanan autentikasi sedang bermasalah (kode: ' + code + ').';
+      console.warn('login gagal:', code, error && error.status);
       showToast(msg, 'error');
       return;
     }
     // Peran diambil dari database (bukan dari klien)
-    const { data: prof, error: pErr } = await sbClient.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+    const { data: prof, error: pErr } = await sbClient.from('sianggaran_profiles').select('*').eq('id', data.user.id).maybeSingle();
     if (pErr || !prof) {
       try { await sbClient.auth.signOut(); } catch(e) {}
       setSyncIndicator('hidden');
@@ -24743,8 +24751,8 @@ async function simpanGantiPassword() {
     const { error } = await sbClient.auth.updateUser({ password: baru });
     if (error) { showToast('Gagal mengubah password: ' + error.message, 'error'); return; }
     if (STATE.user.must_change_password) {
-      const r = await sbClient.rpc('clear_must_change_password');
-      if (r.error) console.error('clear_must_change_password', r.error);
+      const r = await sbClient.rpc('sg_clear_must_change_password');
+      if (r.error) console.error('sg_clear_must_change_password', r.error);
       STATE.user.must_change_password = false;
     }
     document.getElementById('modalGantiPassword').removeAttribute('data-locked');
