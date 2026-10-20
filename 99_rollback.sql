@@ -23,10 +23,6 @@
 -- grant all on table public.nota_dinas_pptk, public.nota_dinas_ppk to anon;
 -- create policy nota_pptk_anon on public.nota_dinas_pptk for all to anon using (true) with check (true);
 -- create policy nota_ppk_anon  on public.nota_dinas_ppk  for all to anon using (true) with check (true);
--- -- view direktori kembali membaca tabel pengguna lama (diperlukan juga oleh Bagian B)
--- create or replace view public.v_pengguna_publik with (security_invoker = true) as
---   select id, nama, username, role, jabatan, nip, jabatan_resmi from public.pengguna;
--- grant select on public.v_pengguna_publik to anon, authenticated;
 -- commit;
 
 -- ----------------------------------------------------------------------------
@@ -57,12 +53,12 @@
 -- drop policy if exists nd_ppk_ins_auth  on public.nota_dinas_ppk;
 -- drop policy if exists nd_ppk_upd_auth  on public.nota_dinas_ppk;
 -- drop policy if exists nd_ppk_del_auth  on public.nota_dinas_ppk;
--- drop function if exists public.clear_must_change_password();
--- drop function if exists public.auth_pptk();
--- drop function if exists public.auth_username();
--- drop function if exists public.auth_role();
--- drop function if exists public.norm_nama(text);
--- drop table if exists public.profiles;
+-- drop function if exists public.sg_clear_must_change_password();
+-- drop function if exists public.sg_auth_pptk();
+-- drop function if exists public.sg_auth_username();
+-- drop function if exists public.sg_auth_role();
+-- drop function if exists public.sg_norm_nama(text);
+-- drop table if exists public.sianggaran_profiles;
 -- commit;
 
 -- ----------------------------------------------------------------------------

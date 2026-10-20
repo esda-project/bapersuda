@@ -34,7 +34,7 @@ end $$;
 
 -- 2. Cabut semua hak anon pada tabel aplikasi
 revoke all on table public.pengguna, public.anggaran, public.realisasi,
-                    public.kas_anggaran, public.app_settings, public.profiles
+                    public.kas_anggaran, public.app_settings, public.sianggaran_profiles
   from anon;
 do $$
 begin
@@ -56,7 +56,7 @@ declare v text;
 begin
   foreach v in array array['v_pagu_aktif','v_realisasi_per_rekening','v_rekap_anggaran_realisasi',
                            'v_rekap_per_subkegiatan','v_rekap_per_pptk','v_rekap_per_sumber_dana',
-                           'v_lra','v_pengguna_publik']
+                           'v_lra']
   loop
     if to_regclass('public.'||v) is not null then
       execute format('alter view public.%I set (security_invoker = true)', v);
@@ -66,11 +66,7 @@ begin
   end loop;
 end $$;
 
--- v_pengguna_publik tidak lagi membaca tabel pengguna lama (yang punya password)
-create or replace view public.v_pengguna_publik with (security_invoker = true) as
-  select id, nama, username, role, jabatan, nip, jabatan_resmi from public.profiles;
-revoke all on public.v_pengguna_publik from anon;
-grant select on public.v_pengguna_publik to authenticated;
+-- CATATAN: view v_pengguna_publik sengaja TIDAK disentuh (di project ini dipakai aplikasi lain; kolom role bertipe app_role).
 
 commit;
 

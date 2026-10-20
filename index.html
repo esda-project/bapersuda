@@ -23693,6 +23693,34 @@ td.center{text-align:center}
 }
 
 </style>
+<style id="sg-modern">
+/* ===== SIANGGARAN — lapisan UI modern (hanya tampilan; data & logika tidak berubah) ===== */
+:root{--c-bg:#F4F6FB;--c-border:#E3E8F2;--c-primary:#4F46E5;--c-primary-dark:#4338CA;--radius:12px;--radius-lg:18px;--shadow-sm:0 1px 2px rgba(15,23,42,.06);--shadow-md:0 8px 24px rgba(15,23,42,.08)}
+body{-webkit-font-smoothing:antialiased;background:var(--c-bg)}
+*:focus-visible{outline:3px solid #818CF8;outline-offset:2px;border-radius:6px}
+.topbar{position:sticky;top:0;z-index:20;backdrop-filter:saturate(1.4) blur(10px);background:color-mix(in srgb,var(--c-surface) 82%,transparent);border-bottom:1px solid var(--c-border)}
+.card,.stat-card,.chart-card{border:1px solid var(--c-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);transition:transform .2s,box-shadow .2s}
+.card:hover,.stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.nav-item{border-radius:10px;transition:background .15s,transform .15s}.nav-item:hover{transform:translateX(3px)}
+table{border-collapse:separate;border-spacing:0}thead th{position:sticky;top:0;background:var(--c-surface2);z-index:1}
+tbody tr{transition:background .12s}tbody tr:hover{background:var(--c-primary-light)}
+input,select,textarea{border-radius:10px!important;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgba(79,70,229,.15)!important}
+.sg-hero{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;padding:22px 26px;margin-bottom:18px;border-radius:var(--radius-lg);color:#fff;background:linear-gradient(120deg,#312E81,#4F46E5 55%,#7C3AED);box-shadow:0 14px 34px rgba(79,70,229,.28);animation:sgIn .5s both}
+.sg-hero h2{font-family:var(--font-display);font-size:22px;margin:0 0 4px}.sg-hero p{margin:0;opacity:.85;font-size:13px}
+.sg-chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.sg-chip{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:8px 14px;min-width:130px}
+.sg-chip b{display:block;font-size:16px;font-family:var(--font-display)}.sg-chip span{font-size:11px;opacity:.8}
+.sg-ring{width:116px;height:116px;position:relative}.sg-ring svg{transform:rotate(-90deg)}
+.sg-ring div{position:absolute;inset:0;display:grid;place-items:center;font:700 22px var(--font-display)}
+.sg-quick{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.sg-quick button{border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-text);padding:9px 16px;border-radius:999px;font:600 13px var(--font);cursor:pointer;transition:all .15s}
+.sg-quick button:hover{background:var(--c-primary);color:#fff;border-color:var(--c-primary);transform:translateY(-1px)}
+@keyframes sgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(max-width:700px){.sg-hero{grid-template-columns:1fr}.sg-ring{display:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+</style>
 </head>
 <body>
 
@@ -24275,8 +24303,8 @@ function initSupabase(url, key) {
   try {
     sbClient = window.supabase.createClient(url, key, {
       realtime: { enabled: false },
-      // Sesi hanya di memori (hilang saat tab ditutup/muat ulang); token diperbarui otomatis.
-      auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false },
+      // Sesi di sessionStorage: bertahan saat refresh, hilang saat tab/browser ditutup.
+      auth: { persistSession: true, storage: window.sessionStorage, storageKey: 'sg-auth', autoRefreshToken: true, detectSessionInUrl: false },
       global: { headers: { 'X-Client-Info': 'sianggaran/2.0' } }
     });
     sbClient.auth.onAuthStateChange((event) => {
@@ -24622,25 +24650,7 @@ async function doLogin() {
       return;
     }
 
-    STATE.tahun = document.getElementById('loginTahun').value;
-    STATE.tahapan = document.getElementById('loginTahapan').value;
-    STATE.user = prof;
-    const mode = document.getElementById('loginMode').value;
-    if (mode === 'dark') { document.documentElement.classList.add('dark'); STATE.darkMode = true; }
-    else { document.documentElement.classList.remove('dark'); STATE.darkMode = false; }
-    saveState();
-    document.getElementById('loginPass').value = '';
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('app').classList.add('visible');
-    updateSidebar();
-    showPage('dashboard');
-    startClock();
-
-    await loadDataFromSupabase();
-    await ndLoadSupabase();
-    showPage('dashboard');
-
-    if (prof.must_change_password) openGantiPassword(true);
+    await sgEnterApp(prof);
   } catch(e) {
     console.error('doLogin', e);
     setSyncIndicator('hidden');
@@ -29108,9 +29118,31 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 (async function initApp() {
   // Always use hardcoded credentials — no config screen needed
   initSupabase(SUPABASE_URL, SUPABASE_KEY);
-  // Show login directly — koneksi Supabase akan diverifikasi saat doLogin()
   document.getElementById('loginScreen').style.display = '';
+  // Pulihkan sesi setelah refresh (tanpa login ulang)
+  try {
+    const { data: ss } = await sbClient.auth.getSession();
+    if (ss && ss.session) {
+      const { data: prof } = await sbClient.from('sianggaran_profiles').select('*').eq('id', ss.session.user.id).maybeSingle();
+      if (prof) { await sgEnterApp(prof); return; }
+      await sbClient.auth.signOut();
+    }
+  } catch(e) { console.warn('restore sesi gagal', e); }
 })();
+
+async function sgEnterApp(prof) {
+  STATE.tahun = document.getElementById('loginTahun').value;
+  STATE.tahapan = document.getElementById('loginTahapan').value;
+  STATE.user = prof;
+  const dark = STATE.darkMode || document.getElementById('loginMode').value === 'dark';
+  document.documentElement.classList.toggle('dark', !!dark); STATE.darkMode = !!dark;
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  updateSidebar(); showPage('dashboard'); startClock();
+  await loadDataFromSupabase(); await ndLoadSupabase(); showPage('dashboard');
+  if (prof.must_change_password) openGantiPassword(true);
+}
 
 
 // Note: Data seed dilakukan via SQL migration script di Supabase.
@@ -32535,6 +32567,27 @@ function downloadBlob(blob, filename) {
   document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
+
+
+// ===== Dashboard interaktif: ringkasan, cincin capaian & pintasan (membungkus renderDashboard; tanpa mengubah data) =====
+(function(){
+  const _rd = renderDashboard;
+  const MENU = [['anggaran','📋 Input Anggaran'],['realisasi','💳 Input Realisasi'],['kas','📅 Anggaran Kas'],['rekap','📊 Rekap'],['lra','📑 LRA'],['cari','🔎 Pencarian Data'],['notaPPTK','📝 Nota PPTK'],['kinerja','📈 Laporan Kinerja']];
+  renderDashboard = function(){
+    const html = _rd.apply(this, arguments);
+    try{
+      const pagu = getTotalPagu(), real = getTotalRealisasi(), sisa = pagu - real;
+      const pct = pagu > 0 ? Math.min(real/pagu*100,100) : 0, C = 2*Math.PI*46;
+      const nm = String((STATE.user && (STATE.user.nama||STATE.user.username)) || '').replace(/[<>&"']/g,'');
+      const h = new Date().getHours(), sapa = h<11?'Selamat pagi':h<15?'Selamat siang':h<18?'Selamat sore':'Selamat malam';
+      const q = MENU.filter(m=>document.getElementById('nav-'+m[0])).map(m=>`<button onclick="showPage('${m[0]}')">${m[1]}</button>`).join('');
+      return `<section class="sg-hero"><div><h2>${sapa}, ${nm} 👋</h2><p>Tahun ${STATE.tahun} · ${STATE.tahapan} — ringkasan anggaran Anda hari ini.</p>
+        <div class="sg-chips"><div class="sg-chip"><b>${fmtSingkat(pagu)}</b><span>Total Pagu</span></div><div class="sg-chip"><b>${fmtSingkat(real)}</b><span>Realisasi</span></div><div class="sg-chip"><b>${fmtSingkat(sisa)}</b><span>Sisa Anggaran</span></div></div></div>
+        <div class="sg-ring" title="Capaian realisasi"><svg width="116" height="116"><circle cx="58" cy="58" r="46" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="11"/><circle cx="58" cy="58" r="46" fill="none" stroke="#C6F135" stroke-width="11" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct/100)}"/></svg><div>${pct.toFixed(1)}%</div></div></section>
+        <div class="sg-quick" role="navigation" aria-label="Pintasan">${q}</div>` + html;
+    }catch(e){ console.warn('hero dashboard', e); return html; }
+  };
+})();
 
 </script>
 </body>

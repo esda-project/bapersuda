@@ -1,5 +1,5 @@
 // SIANGGARAN — Edge Function: admin-users
-// Mengelola akun (Supabase Auth + tabel public.profiles) HANYA untuk pemanggil ber-role admin.
+// Mengelola akun (Supabase Auth + tabel public.sianggaran_profiles) HANYA untuk pemanggil ber-role admin.
 // service_role key tidak pernah keluar dari fungsi ini (dibaca dari environment Edge Function).
 //
 // Aksi (body JSON { action, ... }):
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: me } = await admin
-    .from("profiles").select("id, role").eq("id", u.user.id).maybeSingle();
+    .from("sianggaran_profiles").select("id, role").eq("id", u.user.id).maybeSingle();
   if (!me || me.role !== "admin") return fail(403, "Hanya admin yang boleh mengelola pengguna.");
 
   let body: Record<string, unknown>;
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
   const action = str(body.action, 30);
 
   const countAdmins = async () => {
-    const { count } = await admin.from("profiles")
+    const { count } = await admin.from("sianggaran_profiles")
       .select("id", { count: "exact", head: true }).eq("role", "admin");
     return count ?? 0;
   };
@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       if (!ROLES.includes(role)) return fail(400, "Role tidak valid.");
       if (password.length < MIN_PASSWORD) return fail(400, `Password minimal ${MIN_PASSWORD} karakter.`);
 
-      const { data: exists } = await admin.from("profiles").select("id").eq("username", username).maybeSingle();
+      const { data: exists } = await admin.from("sianggaran_profiles").select("id").eq("username", username).maybeSingle();
       if (exists) return fail(409, "Username sudah digunakan.");
 
       const { data: created, error: cErr } = await admin.auth.admin.createUser({
@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
       });
       if (cErr || !created?.user) { console.error("createUser", cErr?.message); return fail(400, "Gagal membuat akun."); }
 
-      const { error: pErr } = await admin.from("profiles").insert({
+      const { error: pErr } = await admin.from("sianggaran_profiles").insert({
         id: created.user.id, username, nama, role,
         jabatan: str(body.jabatan) || null, nip: str(body.nip, 30) || null,
         jabatan_resmi: str(body.jabatan_resmi) || null,
@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
     // ------------------------------------------------------------------ update
     if (action === "update") {
       const id = str(body.id, 60);
-      const { data: target } = await admin.from("profiles").select("id, role").eq("id", id).maybeSingle();
+      const { data: target } = await admin.from("sianggaran_profiles").select("id, role").eq("id", id).maybeSingle();
       if (!target) return fail(404, "Pengguna tidak ditemukan.");
 
       const patch: Record<string, unknown> = {};
@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
         if (id !== me.id) patch.must_change_password = true;
       }
       if (Object.keys(patch).length) {
-        const { error } = await admin.from("profiles").update(patch).eq("id", id);
+        const { error } = await admin.from("sianggaran_profiles").update(patch).eq("id", id);
         if (error) { console.error("update profile", error.message); return fail(400, "Gagal menyimpan perubahan."); }
       }
       return json({ ok: true });
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
     if (action === "delete") {
       const id = str(body.id, 60);
       if (id === me.id) return fail(400, "Anda tidak dapat menghapus akun Anda sendiri.");
-      const { data: target } = await admin.from("profiles").select("id, role").eq("id", id).maybeSingle();
+      const { data: target } = await admin.from("sianggaran_profiles").select("id, role").eq("id", id).maybeSingle();
       if (!target) return fail(404, "Pengguna tidak ditemukan.");
       if (target.role === "admin" && (await countAdmins()) <= 1) return fail(400, "Harus tersisa minimal satu admin.");
       const { error } = await admin.auth.admin.deleteUser(id); // profiles ikut terhapus (ON DELETE CASCADE)
@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
           report.push({ username: String(row.username ?? ""), status: "DILEWATI: username/nama tidak valid" });
           continue;
         }
-        const { data: exists } = await admin.from("profiles").select("id").eq("username", username).maybeSingle();
+        const { data: exists } = await admin.from("sianggaran_profiles").select("id").eq("username", username).maybeSingle();
         if (exists) { report.push({ username, status: "DILEWATI: sudah ada" }); continue; }
 
         const password = tempPassword();
@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
 
         // Perilaku lama: akun ber-username "pptk*" dibatasi ke nama PPTK-nya. Akun lain tidak dibatasi.
         const scoped = role === "input" && username.startsWith("pptk");
-        const { error: pErr } = await admin.from("profiles").insert({
+        const { error: pErr } = await admin.from("sianggaran_profiles").insert({
           id: created.user.id, username, nama, role,
           jabatan: row.jabatan ?? null, nip: row.nip ?? null, jabatan_resmi: row.jabatan_resmi ?? null,
           pptk_nama: scoped ? normNama(nama) : null,
