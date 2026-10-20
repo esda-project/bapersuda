@@ -1,0 +1,56 @@
+# PEMULIHAN AKSES SIANGGARAN (darurat)
+
+Gejala: login menolak "username/password salah". Penyebab paling mungkin: `index.html` baru (login Supabase Auth)
+sudah tayang di Vercel, tetapi akun di Supabase Auth belum dibuat. Password lama (admin123 dll.) tidak berlaku
+di versi baru. Tidak ada data yang hilang: skrip Tahap 5 tidak pernah menghapus/mengubah data anggaran.
+
+## LANGKAH 1 — Kembalikan akses SEKARANG (±2 menit)
+
+Cek dulu apakah `02_kunci_akses_anon.sql` sudah pernah dijalankan. Di Supabase > SQL Editor:
+
+```sql
+select count(*) as kebijakan_anon_tersisa from pg_policies
+where schemaname='public' and roles && array['anon','public']::name[]
+  and tablename in ('pengguna','anggaran','realisasi','kas_anggaran','app_settings','nota_dinas_pptk','nota_dinas_ppk');
+```
+
+- **Hasil > 0 → 02 BELUM dijalankan** (kondisi paling mungkin). Aplikasi lama masih bisa dipakai:
+  Vercel > project bapersuda > Deployments > pilih deployment SEBELUM perubahan Tahap 5 > ⋯ > **Promote to Production**
+  (atau "Instant Rollback"). Setelah itu login lama (username + password lama) berfungsi kembali.
+- **Hasil = 0 → 02 SUDAH dijalankan.** Jalankan `sql/99_rollback.sql` **BAGIAN A** (hapus tanda `-- ` pada baris di dalam
+  bagian A saja), lalu lakukan Promote deployment lama di Vercel seperti di atas.
+  Ini mengembalikan akses anon lama (risiko keamanan tetap ada) — hanya agar tim bisa bekerja sementara.
+
+## LANGKAH 2 — Cek kondisi Tahap 5 (hanya SELECT, aman)
+
+```sql
+select (select count(*) from auth.users)                                         as akun_auth,
+       (select count(*) from public.sianggaran_profiles)                          as profil_sianggaran,
+       (select string_agg(email, ', ') from auth.users where email like '%@sianggaran.%') as email_sintetis;
+```
+
+Tafsir:
+| akun_auth (email @sianggaran.*) | profil_sianggaran | Artinya |
+|---|---|---|
+| kosong / 0 | 0 | Admin pertama belum dibuat → ikuti Langkah 3 |
+| ada | 0 | Admin dibuat di Auth tetapi `00_bootstrap_admin.sql` belum jalan → jalankan 00 |
+| ada | ≥ 1 | Akun ada; salah password, atau domain email tidak cocok antara klien dan akun |
+
+## LANGKAH 3 — Migrasi ulang dengan urutan aman (uji di URL pratinjau, JANGAN langsung produksi)
+
+1. Dashboard > Authentication > Users > **Add user** → email `admin@sianggaran.invalid`, password kuat (≥12), centang *Auto Confirm User*.
+   - Jika Dashboard menolak email tsb (mis. "email address is invalid"): domain `.invalid` ditolak validasi Supabase.
+     Ganti domain di TIGA tempat, harus sama persis: `AUTH_EMAIL_DOMAIN` di `index.html`,
+     `EMAIL_DOMAIN` di `supabase/functions/admin-users/index.ts`, dan `00_bootstrap_admin.sql`.
+     Pilih domain milik Anda yang mailboxnya dipastikan tidak dipakai orang lain (alamat sintetis tidak pernah dikirimi email
+     karena akun dibuat terkonfirmasi, tetapi fitur "lupa password" Supabase akan mengirim ke alamat itu).
+2. Jalankan `sql/00_bootstrap_admin.sql` → harus muncul 1 baris `admin | admin`.
+3. Deploy Edge Function `admin-users`.
+4. Deploy `index.html` baru ke **Preview** (branch/PR di Vercel), buka URL pratinjau, login `admin` + password yang Anda buat.
+   Pesan galat login kini menyebut penyebab teknis (mis. format email ditolak) selain "username/password salah".
+5. Di pratinjau: menu Pengguna > **Impor Akun Lama**, catat password sementara, uji tiap peran.
+6. Baru **Promote ke Production**. `02_kunci_akses_anon.sql` dijalankan terakhir setelah semua peran lulus uji.
+
+## Catatan
+- Selama langkah 1–3 data anggaran tidak berubah; kebijakan baru hanya menambah akses untuk role `authenticated`.
+- Jika masih buntu, kirimkan: hasil query Langkah 1 dan Langkah 2, serta pesan galat yang tampil di login (kini lebih spesifik).
