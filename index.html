@@ -26361,33 +26361,7 @@ function kasBuildMainPanelHTML(kasData, rekIdx, tahapan, tw) {
       ${twCards}
     </div>
 
-    <!-- Input bulan -->
-    <div class="section-card" style="padding:12px 16px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--c-text)">${KAS_TW_LABEL[tw-1]} — Rincian per Bulan</div>
-        <button class="btn btn-sm btn-outline" onclick="kasKosongkanTW(${tw})" style="font-size:11px;padding:3px 8px">Kosongkan TW ini</button>
-      </div>
-      ${bulanInputs}
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:2px solid var(--c-border)">
-        <div style="font-size:12px;color:var(--c-text-muted)">Total ${KAS_TW_SHORT[tw-1]}</div>
-        <div id="kasTWTotal" style="font-size:15px;font-weight:700;font-family:var(--font-mono);
-          color:${totalTWLainnya+twNominal>pagu?'var(--c-danger)':twNominal>0?'var(--c-success)':'var(--c-text-muted)'}">
-          ${fmt(twNominal)}
-        </div>
-      </div>
-      <div id="kasValidasiMsg" style="margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px;border-left:3px solid;
-        ${totalKasDiisi>pagu
-          ?'background:#FCEBEB;border-color:#E24B4A;color:#501313'
-          :totalKasDiisi===pagu&&pagu>0
-            ?'background:#EAF3DE;border-color:#639922;color:#173404'
-            :'background:#E6F1FB;border-color:#185FA5;color:#042C53'}">
-        ${totalKasDiisi>pagu
-          ?'⚠️ Total kas ('+fmt(totalKasDiisi)+') melebihi pagu '+fmt(pagu)+'. Kurangi '+fmt(totalKasDiisi-pagu)+'.'
-          :totalKasDiisi===pagu&&pagu>0
-            ?'✅ Total kas sudah sesuai pagu ('+fmt(pagu)+').'
-            :'ℹ️ Sisa pagu yang belum dialokasikan: '+fmt(sisaPagu)+'. Bisa dibagi ke TW lain.'}
-      </div>
-    </div>
+    ${kasTwInputsHTML(rek, store, pagu, tw)}
 
     <!-- Riwayat tahapan -->
     ${riwayat?`<div class="section-card" style="padding:12px 16px;margin-bottom:10px">
@@ -32588,6 +32562,86 @@ function downloadBlob(blob, filename) {
     }catch(e){ console.warn('hero dashboard', e); return html; }
   };
 })();
+
+
+// ===== Anggaran Kas: entri langsung per Triwulan, bagi rata, & kalkulator manual =====
+// Penyimpanan tetap per bulan (laporan/cetak/LRA tidak berubah): nominal TW dibagi rata ke 3 bulannya.
+window._kasCalc = window._kasCalc || [{ket:'',vol:1,harga:0}];
+function kasEval(txt){
+  let t = String(txt==null?'':txt).replace(/\s+/g,'').replace(/rp/ig,'');
+  if (!t) return 0;
+  t = t.replace(/\d{1,3}(\.\d{3})+(?!\d)/g, m=>m.replace(/\./g,'')).replace(/,/g,'.').replace(/x/ig,'*');
+  if (!/^[\d+\-*/().]+$/.test(t)) return NaN;
+  try { const v = Function('"use strict";return ('+t+')')(); return isFinite(v) ? Math.max(0, Math.round(v)) : NaN; } catch(e){ return NaN; }
+}
+function kasPutTW(store, kode, tw, nominal){
+  const ms = KAS_TW_BULAN[tw-1], base = Math.floor(nominal/3);
+  if (!store[kode]) store[kode] = {};
+  store[kode][ms[0]] = base; store[kode][ms[1]] = base; store[kode][ms[2]] = nominal - 2*base;
+}
+function kasCurRek(){ const r = getKasDisplayList()[window._kasUI.rekIdx||0]; return r ? {rek:r, store:getKasStore(getKasTahapan())} : null; }
+function kasSetTWNominal(tw, txt){
+  const c = kasCurRek(); if(!c) return;
+  const v = kasEval(txt);
+  if (isNaN(v)) { showToast('Rumus tidak valid. Gunakan angka dan + - * / ( )','error'); return showPage('kas'); }
+  kasPutTW(c.store, c.rek.kode_rekening, tw, v); showPage('kas');
+}
+function kasBagiRata(){
+  const c = kasCurRek(); if(!c) return;
+  const pagu = getPagu(c.rek); if (!(pagu>0)) return showToast('Pagu rekening ini 0','error');
+  const ada = getTotalKasRek(c.store, c.rek.kode_rekening) > 0;
+  if (ada && !confirm('Nominal kas yang sudah ada akan diganti dengan pembagian rata 4 triwulan. Lanjutkan?')) return;
+  const b = Math.floor(pagu/4);
+  [1,2,3].forEach(t=>kasPutTW(c.store,c.rek.kode_rekening,t,b)); kasPutTW(c.store,c.rek.kode_rekening,4,pagu-3*b);
+  showToast('Pagu dibagi rata ke 4 triwulan'); showPage('kas');
+}
+function kasIsiSisa(tw){
+  const c = kasCurRek(); if(!c) return;
+  const k = c.rek.kode_rekening, sisa = getPagu(c.rek) - getTotalKasRek(c.store,k);
+  if (sisa <= 0) return showToast('Tidak ada sisa pagu','error');
+  kasPutTW(c.store,k,tw,getKasTW(c.store,k,tw)+sisa); showPage('kas');
+}
+function kasCalcSet(i,f,v){ const r=window._kasCalc[i]; if(!r) return; r[f]= f==='ket'?v:(kasEval(v)||0); const t=document.getElementById('kasCalcTot'); if(t) t.textContent=fmt(kasCalcTotal()); const s=document.getElementById('kasCalcSub'+i); if(s) s.textContent=fmt(r.vol*r.harga); }
+function kasCalcTotal(){ return window._kasCalc.reduce((s,r)=>s+(r.vol||0)*(r.harga||0),0); }
+function kasCalcAdd(){ window._kasCalc.push({ket:'',vol:1,harga:0}); showPage('kas'); }
+function kasCalcDel(i){ window._kasCalc.splice(i,1); if(!window._kasCalc.length) window._kasCalc=[{ket:'',vol:1,harga:0}]; showPage('kas'); }
+function kasCalcApply(){
+  const c = kasCurRek(); if(!c) return;
+  const tw = parseInt(document.getElementById('kasCalcTW').value,10), tot = kasCalcTotal();
+  if (!(tot>0)) return showToast('Total hitungan masih 0','error');
+  kasPutTW(c.store,c.rek.kode_rekening,tw,tot); showToast('Hasil hitungan diisi ke '+KAS_TW_LABEL[tw-1]); showPage('kas');
+}
+function kasTwInputsHTML(rek, store, pagu, tw){
+  const k = rek.kode_rekening, tws=[1,2,3,4].map(t=>getKasTW(store,k,t)), tot=tws.reduce((a,b)=>a+b,0), sisa=pagu-tot;
+  const inp = 'width:100%;padding:8px 10px;border:1px solid var(--c-border);border-radius:10px;background:var(--c-surface);color:var(--c-text);font-family:var(--font-mono);font-size:14px;text-align:right';
+  const rows = [1,2,3,4].map(t=>`<div style="display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--c-border)">
+      <div><b style="font-size:13px">${KAS_TW_LABEL[t-1]}</b><div style="font-size:10px;color:var(--c-text-muted)">${['Jan–Mar','Apr–Jun','Jul–Sep','Okt–Des'][t-1]} · ${pagu>0?(tws[t-1]/pagu*100).toFixed(1):0}%</div></div>
+      <input type="text" inputmode="decimal" value="${tws[t-1]||''}" placeholder="0 atau rumus, mis. 12*350000" style="${inp}" onchange="kasSetTWNominal(${t},this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+      <button class="btn btn-sm btn-outline" title="Isi sisa pagu ke triwulan ini" onclick="kasIsiSisa(${t})" style="font-size:11px">+ Sisa</button></div>`).join('');
+  const calc = window._kasCalc.map((r,i)=>`<div style="display:grid;grid-template-columns:1.4fr .6fr 1fr auto auto;gap:6px;align-items:center;margin-bottom:6px">
+      <input type="text" placeholder="Uraian (opsional)" value="${String(r.ket||'').replace(/"/g,'&quot;')}" oninput="kasCalcSet(${i},'ket',this.value)" style="${inp};text-align:left;font-family:var(--font);font-size:12px">
+      <input type="text" inputmode="decimal" value="${r.vol||''}" placeholder="Volume" oninput="kasCalcSet(${i},'vol',this.value)" style="${inp};font-size:12px">
+      <input type="text" inputmode="decimal" value="${r.harga||''}" placeholder="Harga satuan" oninput="kasCalcSet(${i},'harga',this.value)" style="${inp};font-size:12px">
+      <span id="kasCalcSub${i}" style="font:600 12px var(--font-mono);min-width:96px;text-align:right">${fmt((r.vol||0)*(r.harga||0))}</span>
+      <button class="btn btn-sm btn-outline" onclick="kasCalcDel(${i})" aria-label="Hapus baris">✕</button></div>`).join('');
+  const over = tot>pagu;
+  return `<div class="section-card" style="padding:14px 16px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700">Anggaran Kas per Triwulan</div>
+      <button class="btn btn-sm btn-blue" onclick="kasBagiRata()" style="font-size:12px">⚖️ Bagi Rata 4 Triwulan</button></div>
+    ${rows}
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:13px"><span>Total kas</span><b id="kasTWTotal" style="font-family:var(--font-mono);color:${over?'var(--c-danger)':tot>0?'var(--c-success)':'var(--c-text-muted)'}">${fmt(tot)}</b></div>
+    <div id="kasValidasiMsg" style="margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px;border-left:3px solid;${over?'background:#FCEBEB;border-color:#E24B4A;color:#501313':tot===pagu&&pagu>0?'background:#EAF3DE;border-color:#639922;color:#173404':'background:#E6F1FB;border-color:#185FA5;color:#042C53'}">
+      ${over?'⚠️ Total kas ('+fmt(tot)+') melebihi pagu '+fmt(pagu)+'. Kurangi '+fmt(tot-pagu)+'.':tot===pagu&&pagu>0?'✅ Total kas sudah sesuai pagu ('+fmt(pagu)+').':'ℹ️ Sisa pagu belum dialokasikan: '+fmt(sisa)+'.'}</div>
+    <div style="font-size:11px;color:var(--c-text-muted);margin-top:6px">Nominal triwulan otomatis dibagi rata ke 3 bulannya. Kolom nominal bisa diisi rumus (contoh: <code>12*350000+2500000</code>), lalu tekan Enter.</div>
+  </div>
+  <details class="section-card" style="padding:12px 16px;margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;font-weight:700">🧮 Hitung Manual (Volume × Harga Satuan)</summary>
+    <div style="margin-top:10px">${calc}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"><button class="btn btn-sm btn-outline" onclick="kasCalcAdd()">+ Tambah baris</button>
+        <span style="margin-left:auto;font-size:12px">Total: <b id="kasCalcTot" style="font-family:var(--font-mono)">${fmt(kasCalcTotal())}</b></span>
+        <select id="kasCalcTW" style="padding:6px 8px;border:1px solid var(--c-border);border-radius:8px">${[1,2,3,4].map(t=>`<option value="${t}" ${t===tw?'selected':''}>${KAS_TW_LABEL[t-1]}</option>`).join('')}</select>
+        <button class="btn btn-sm btn-blue" onclick="kasCalcApply()">Isi ke Triwulan</button></div></div></details>`;
+}
 
 </script>
 </body>
