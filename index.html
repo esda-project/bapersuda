@@ -23720,6 +23720,19 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgba(79,70,229,.15)
 @media(max-width:700px){.sg-hero{grid-template-columns:1fr}.sg-ring{display:none}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
+/* ===== Animasi dashboard (halus & selaras; nonaktif otomatis bila pengguna memilih "reduced motion") ===== */
+.sg-pre{opacity:0;transform:translateY(14px)}
+.sg-pre.sg-in{opacity:1;transform:none;transition:opacity .6s cubic-bezier(.22,1,.36,1) var(--d,0ms),transform .6s cubic-bezier(.22,1,.36,1) var(--d,0ms)}
+.bar-inner,.progress-fill{transition:width .95s cubic-bezier(.22,1,.36,1)!important;position:relative;overflow:hidden}
+.bar-inner::after,.progress-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(-120%);animation:sgShine 3.6s ease-in-out 1.4s infinite}
+.bar-row:hover .bar-inner{filter:brightness(1.12) saturate(1.1)}
+.bar-row{transition:transform .2s}.bar-row:hover{transform:translateX(2px)}
+.stat-card .stat-icon{transition:transform .35s cubic-bezier(.34,1.56,.64,1)}.stat-card:hover .stat-icon{transform:scale(1.2) rotate(-6deg)}
+.sg-svgpart{transition:opacity .5s ease var(--d,0ms),transform .7s cubic-bezier(.22,1,.36,1) var(--d,0ms),stroke-dashoffset 1.4s cubic-bezier(.65,0,.35,1) var(--d,0ms)}
+svg rect.sg-svgpart{transform-box:fill-box;transform-origin:50% 100%}
+@keyframes sgShine{0%{transform:translateX(-120%)}55%,100%{transform:translateX(120%)}}
+@media(prefers-reduced-motion:reduce){.sg-pre{opacity:1;transform:none}.bar-inner::after,.progress-fill::after{display:none}}
+
 </style>
 </head>
 <body>
@@ -32642,6 +32655,44 @@ function kasTwInputsHTML(rek, store, pagu, tw){
         <select id="kasCalcTW" style="padding:6px 8px;border:1px solid var(--c-border);border-radius:8px">${[1,2,3,4].map(t=>`<option value="${t}" ${t===tw?'selected':''}>${KAS_TW_LABEL[t-1]}</option>`).join('')}</select>
         <button class="btn btn-sm btn-blue" onclick="kasCalcApply()">Isi ke Triwulan</button></div></div></details>`;
 }
+
+
+// ===== Animasi dashboard: hitung naik angka, bar tumbuh, garis tergambar, kartu muncul bertahap =====
+(function(){
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  function countUp(el){
+    const txt = el.textContent, m = txt.match(/-?\d[\d.]*(?:,\d+)?/); if (!m) return;
+    const raw = m[0], dec = (raw.split(',')[1] || '').length, target = parseFloat(raw.replace(/\./g,'').replace(',','.'));
+    if (!isFinite(target) || target === 0) return;
+    const pre = txt.slice(0, m.index), post = txt.slice(m.index + raw.length);
+    const nf = new Intl.NumberFormat('id-ID', {minimumFractionDigits:dec, maximumFractionDigits:dec}), t0 = performance.now(), D = 1200;
+    (function f(now){ const p = Math.min((now - t0)/D, 1); el.textContent = p < 1 ? pre + nf.format(target*ease(p)) + post : txt; if (p < 1) requestAnimationFrame(f); })(t0);
+  }
+  window.sgAnimateDashboard = function(){
+    const root = document.getElementById('pageContent'); if (!root || reduce || !('IntersectionObserver' in window)) return;
+    root.querySelectorAll('.stat-value').forEach((el,i)=> setTimeout(()=>countUp(el), 150 + i*110));
+    // kartu: muncul bertahap saat terlihat
+    const cards = root.querySelectorAll('.sg-hero,.stats-grid > *,.ai-card,.chart-card,.section-card,.sg-quick');
+    // elemen berbasis lebar (bar) & SVG disiapkan ke keadaan awal
+    const prep = (card)=>{
+      const bars = [...card.querySelectorAll('.bar-inner,.progress-fill')].map((b,i)=>{ const w=b.style.width; b.style.width='0%'; return ()=>setTimeout(()=>{b.style.width=w;}, 120 + i*70); });
+      const parts = [];
+      card.querySelectorAll('svg polyline').forEach(pl=>{ let L=0; try{L=pl.getTotalLength();}catch(e){} if(L){ pl.style.strokeDasharray=L; pl.style.strokeDashoffset=L; pl.classList.add('sg-svgpart'); pl.style.setProperty('--d','500ms'); parts.push(()=>{pl.style.strokeDashoffset=0;}); } });
+      card.querySelectorAll('svg rect.sg-bar, svg rect[rx]').forEach((r,i)=>{ if(r.closest('.sg-ring')) return; r.classList.add('sg-svgpart'); r.style.transform='scaleY(0)'; r.style.setProperty('--d',(i*90)+'ms'); parts.push(()=>{r.style.transform='scaleY(1)';}); });
+      card.querySelectorAll('svg circle:not([stroke-dasharray]), svg text').forEach((c,i)=>{ if(c.closest('.sg-ring')) return; c.classList.add('sg-svgpart'); c.style.opacity=0; c.style.setProperty('--d',(900+i*40)+'ms'); parts.push(()=>{c.style.opacity=1;}); });
+      card.querySelectorAll('.sg-ring circle[stroke-dasharray]').forEach(c=>{ const to=c.getAttribute('stroke-dashoffset'), from=c.getAttribute('stroke-dasharray'); c.classList.add('sg-svgpart'); c.style.strokeDashoffset=from; c.style.setProperty('--d','300ms'); parts.push(()=>{c.style.strokeDashoffset=to;}); });
+      return ()=>{ bars.forEach(f=>f()); requestAnimationFrame(()=>requestAnimationFrame(()=>parts.forEach(f=>f()))); };
+    };
+    const play = new Map();
+    cards.forEach((c,i)=>{ c.classList.add('sg-pre'); c.style.setProperty('--d', Math.min(i,8)*70+'ms'); play.set(c, prep(c)); });
+    const io = new IntersectionObserver((es)=>es.forEach(e=>{ if(!e.isIntersecting) return; const c=e.target; io.unobserve(c); c.classList.add('sg-in'); setTimeout(play.get(c), 160); }), {threshold:.12});
+    cards.forEach(c=>io.observe(c));
+    setTimeout(()=>cards.forEach(c=>{ if(!c.classList.contains('sg-in')){ io.unobserve(c); c.classList.add('sg-in'); play.get(c)(); } }), 4000); // cadangan
+  };
+  const _init = initDashboardCharts;
+  initDashboardCharts = function(){ const r = _init.apply(this, arguments); try{ sgAnimateDashboard(); }catch(e){ console.warn('animasi dashboard', e); } return r; };
+})();
 
 </script>
 </body>
