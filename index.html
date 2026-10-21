@@ -23733,6 +23733,28 @@ svg rect.sg-svgpart{transform-box:fill-box;transform-origin:50% 100%}
 @keyframes sgShine{0%{transform:translateX(-120%)}55%,100%{transform:translateX(120%)}}
 @media(prefers-reduced-motion:reduce){.sg-pre{opacity:1;transform:none}.bar-inner::after,.progress-fill::after{display:none}}
 
+/* ===== Login informatif & interaktif ===== */
+#loginScreen{gap:56px;padding:24px;flex-wrap:wrap}
+.lp{position:relative;z-index:2;width:min(460px,100%);color:#e7e4f6;animation:cardIn .7s .1s cubic-bezier(.16,1,.3,1) both}
+.lp-time{font:700 44px var(--font-display);letter-spacing:-1px;background:linear-gradient(100deg,#fff,#C6F135);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lp-date{font-size:13px;color:#9791C4;margin-bottom:14px}
+.lp-chip{display:inline-flex;gap:8px;align-items:center;font-size:12px;padding:6px 12px;border-radius:999px;background:rgba(139,124,246,.14);border:1px solid rgba(139,124,246,.3);margin:0 6px 8px 0}
+.lp-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8}.lp-dot.on{background:#C6F135;box-shadow:0 0 0 0 rgba(198,241,53,.6);animation:lpPulse 2s infinite}.lp-dot.off{background:#f87171}
+@keyframes lpPulse{70%{box-shadow:0 0 0 8px rgba(198,241,53,0)}100%{box-shadow:0 0 0 0 rgba(198,241,53,0)}}
+.lp-slides{position:relative;min-height:128px;margin:10px 0 8px;border-radius:18px;background:rgba(16,13,36,.7);border:1px solid rgba(139,124,246,.22);padding:18px 20px;overflow:hidden}
+.lp-slide{position:absolute;inset:18px 20px;opacity:0;transform:translateX(18px);transition:opacity .5s,transform .5s;pointer-events:none}
+.lp-slide.on{opacity:1;transform:none;pointer-events:auto}
+.lp-slide h3{margin:0 0 6px;font:700 16px var(--font-display)}.lp-slide p{margin:0;font-size:12.5px;line-height:1.55;color:#b8b3dc}
+.lp-dots{display:flex;gap:6px;margin-bottom:14px}.lp-dots button{width:22px;height:5px;border:0;border-radius:9px;background:rgba(255,255,255,.2);cursor:pointer;transition:all .3s}.lp-dots button.on{width:38px;background:#C6F135}
+.lp-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.lp-steps div{font-size:11.5px;padding:10px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(139,124,246,.15);transition:transform .2s,border-color .2s}
+.lp-steps div:hover{transform:translateY(-3px);border-color:rgba(198,241,53,.5)}.lp-steps b{display:block;font-size:15px;margin-bottom:2px}
+.lp-pw{position:relative}.lp-pw input{padding-right:44px!important}.lp-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:#9791C4;cursor:pointer;font-size:16px;padding:6px}
+.lp-hint{font-size:11px;margin-top:5px;min-height:14px;color:#9791C4}.lp-hint.warn{color:#fbbf24}
+.lp-rem{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#9791C4;margin:-4px 0 14px}.lp-rem label{display:flex;gap:6px;align-items:center;cursor:pointer}.lp-rem a{color:#C6F135;cursor:pointer;text-decoration:none}
+.login-card.shake{animation:lpShake .45s}@keyframes lpShake{20%,60%{transform:translateX(-9px)}40%,80%{transform:translateX(9px)}}
+@media(max-width:980px){.lp{display:none}}
+@media(prefers-reduced-motion:reduce){.lp-dot.on{animation:none}.login-card.shake{animation:none}}
+
 </style>
 </head>
 <body>
@@ -27125,6 +27147,7 @@ function renderRealisasi() {
   <h2>📑 Input Realisasi</h2>
   <div style="display:flex;gap:8px">
     <button class="btn btn-blue" onclick="openModalRealisasi()">➕ Tambah Transaksi</button>
+    ${sgImpCanUse() ? '<button class="btn btn-outline" onclick="sgImpOpen()">📥 Impor Excel</button>' : ''}
     <button class="btn btn-outline" onclick="cetakRealisasi()">🖨️ Cetak PDF</button>
   </div>
 </div>
@@ -32818,6 +32841,196 @@ function kasRekapHTML(){
     ${daftar('Belum diisi', r.kosong, '#BA7517')}${daftar('Kas kurang dari pagu', r.kurang, '#BA7517')}${daftar('Kas melebihi pagu', r.lebih, '#E24B4A')}
     <div style="font-size:11px;color:var(--c-text-muted);margin-top:8px">Klik rekening pada daftar untuk langsung membukanya. Tanda • menandai tahapan yang sedang aktif diisi.</div></details>`;
 }
+
+
+// ===== Impor Excel Realisasi + penentuan tahapan otomatis berdasarkan tanggal DPA =====
+const SG_DPA_DEFAULT = { '2026': { pergeseran: '2026-03-16', perubahan: '' } };
+function sgDpaGet(tahun){
+  tahun = String(tahun || (STATE && STATE.tahun) || '');
+  try { const s = JSON.parse(localStorage.getItem('sg-dpa-' + tahun) || 'null'); if (s) return s; } catch(e){}
+  return Object.assign({ pergeseran: '', perubahan: '' }, SG_DPA_DEFAULT[tahun] || {});
+}
+function sgDpaSet(tahun, v){ try { localStorage.setItem('sg-dpa-' + tahun, JSON.stringify(v)); } catch(e){} }
+// Murni: sebelum tgl DPA Pergeseran; Pergeseran: s.d. sebelum tgl DPA Perubahan; Perubahan: sejak tgl DPA Perubahan
+function sgTahapanByDate(iso, tahun){
+  const d = sgDpaGet(tahun);
+  if (d.perubahan && iso >= d.perubahan) return 'Perubahan';
+  if (d.pergeseran && iso >= d.pergeseran) return 'Pergeseran';
+  return 'Murni';
+}
+function sgParseTanggal(v){
+  if (v === '' || v == null) return '';
+  if (typeof v === 'number' && v > 20000 && v < 80000) { const d = new Date(Date.UTC(1899,11,30) + Math.floor(v)*864e5); return d.toISOString().slice(0,10); }
+  if (v instanceof Date && !isNaN(v)) return new Date(v.getTime() + 12*36e5).toISOString().slice(0,10);
+  const s = String(v).trim(); let m;
+  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/))) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  return '';
+}
+function sgParseNominal(v){
+  if (typeof v === 'number') return isFinite(v) ? Math.round(v*100)/100 : NaN;
+  let t = String(v == null ? '' : v).replace(/rp|\s/ig,''); if (!t) return NaN;
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g,'').replace(',','.'); else if (/^\d+,\d+$/.test(t)) t = t.replace(',','.');
+  return /^\d+(\.\d+)?$/.test(t) ? parseFloat(t) : NaN;
+}
+function sgLoadXlsx(){
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((ok, gagal) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload = ok; s.onerror = () => gagal(new Error('Gagal memuat pustaka Excel (periksa koneksi internet)')); document.head.appendChild(s); });
+}
+const SG_IMP_KOLOM = ['Tanggal','Tanggal SP2D','Uraian','Kode Sub Kegiatan','Kode Belanja','Sumber Dana','Nominal','PPTK','Metode Pemilihan'];
+const SG_IMP_ALIAS = { tanggal:['tanggal','tgl','tanggaltransaksi'], sp2d:['tanggalsp2d','tglsp2d','sp2d'], uraian:['uraian','keterangan'], sub:['kodesubkegiatan','kodesubkeg','kdsubkegiatan'], bel:['kodebelanja','kdbelanja'], sd:['sumberdana','sd'], nominal:['nominal','jumlah','realisasi','nilai'], pptk:['pptk'], metode:['metodepemilihan','metode'] };
+function sgImpCanUse(){ const r = STATE.user && STATE.user.role; return r === 'admin' || r === 'input'; }
+function sgImpClose(){ const m = document.getElementById('sgImp'); if (m) m.remove(); document.removeEventListener('keydown', sgImpEsc); }
+function sgImpEsc(e){ if (e.key === 'Escape') sgImpClose(); }
+function sgImpOpen(){
+  if (!sgImpCanUse()) return showToast('Hanya Admin/Operator yang dapat mengimpor data', 'error');
+  sgImpClose(); const d = sgDpaGet(), inp = 'padding:8px 10px;border:1px solid var(--c-border);border-radius:10px;background:var(--c-surface);color:var(--c-text)';
+  const m = document.createElement('div'); m.id = 'sgImp';
+  m.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,8,30,.55);backdrop-filter:blur(4px);display:grid;place-items:center;padding:16px';
+  m.innerHTML = `<div style="background:var(--c-surface);color:var(--c-text);width:min(1000px,100%);max-height:92vh;overflow:auto;border-radius:18px;padding:20px 22px;box-shadow:0 30px 80px rgba(0,0,0,.4)" role="dialog" aria-label="Impor Excel Realisasi">
+    <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-family:var(--font-display)">📥 Impor Excel — Realisasi TA ${escHtml(STATE.tahun)}</h3><button class="btn btn-sm btn-outline" onclick="sgImpClose()" aria-label="Tutup">✕</button></div>
+    <p style="font-size:12px;color:var(--c-text-muted);margin:6px 0 12px">Tahapan tiap transaksi ditentukan otomatis dari <b>tanggal</b>: sebelum DPA Pergeseran = <b>Murni</b>; sejak DPA Pergeseran s.d. sebelum DPA Perubahan = <b>Pergeseran</b>; sejak DPA Perubahan = <b>Perubahan</b>.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:12px">
+      <label style="font-size:12px">Tgl. DPA Pergeseran<br><input type="date" id="sgDpaP" value="${d.pergeseran||''}" style="${inp}"></label>
+      <label style="font-size:12px">Tgl. DPA Perubahan<br><input type="date" id="sgDpaU" value="${d.perubahan||''}" style="${inp}"></label>
+      <button class="btn btn-sm btn-outline" onclick="sgImpSimpanDpa()">💾 Simpan tanggal</button>
+      <button class="btn btn-sm btn-outline" onclick="sgImpTemplate()">⬇️ Unduh Template Excel</button>
+      <label class="btn btn-sm btn-blue" style="cursor:pointer">📂 Pilih File (.xlsx / .csv)<input type="file" id="sgImpFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="sgImpBaca(this.files[0])"></label></div>
+    <div id="sgImpHasil" style="font-size:13px;color:var(--c-text-muted)">Unduh template, isi sesuai kolom, lalu pilih file untuk melihat pratinjau sebelum disimpan. Data yang sudah ada tidak diubah.</div></div>`;
+  document.body.appendChild(m); document.addEventListener('keydown', sgImpEsc);
+}
+function sgImpSimpanDpa(){ sgDpaSet(STATE.tahun, { pergeseran: document.getElementById('sgDpaP').value, perubahan: document.getElementById('sgDpaU').value }); showToast('Tanggal DPA disimpan'); if (window._sgImpRows) sgImpRender(); }
+async function sgImpTemplate(){
+  try { await sgLoadXlsx(); } catch(e){ return showToast(e.message, 'error'); }
+  const ref = [['Kode Sub Kegiatan','Kode Belanja','Sumber Dana','Nama Belanja','PPTK']];
+  STATE.anggaran.forEach(a => ref.push([a.kode_sub_kegiatan, a.kode_belanja, a.sumber_dana, a.nama_belanja, a.pptk]));
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([SG_IMP_KOLOM, ['2026-03-20','', 'CONTOH - hapus baris ini', '(kode sub kegiatan)', '(kode belanja)', 'PAD', 1000000, '', '']]);
+  ws['!cols'] = [12,14,40,22,22,14,16,26,18].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'Realisasi');
+  const ws2 = XLSX.utils.aoa_to_sheet(ref); ws2['!cols'] = [22,22,14,50,28].map(w => ({wch:w})); XLSX.utils.book_append_sheet(wb, ws2, 'Referensi');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Petunjuk'],['Wajib: Tanggal, Kode Sub Kegiatan, Kode Belanja, Sumber Dana, Nominal.'],['Kombinasi Kode Sub Kegiatan + Kode Belanja + Sumber Dana harus sudah ada di Input Anggaran (lihat sheet Referensi).'],['Format tanggal: yyyy-mm-dd atau dd/mm/yyyy. Nominal: angka (tanpa Rp).'],['Baris yang Uraian-nya diawali "CONTOH" dilewati. Tahapan ditentukan otomatis dari tanggal.']]), 'Petunjuk');
+  XLSX.writeFile(wb, 'template_realisasi_' + STATE.tahun + '.xlsx');
+}
+async function sgImpBaca(file){
+  if (!file) return; const box = document.getElementById('sgImpHasil'); box.textContent = 'Membaca file…';
+  try {
+    await sgLoadXlsx(); const wb = XLSX.read(await file.arrayBuffer(), { type:'array' });
+    const ws = wb.Sheets[wb.SheetNames.includes('Realisasi') ? 'Realisasi' : wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, { defval:'', raw:true });
+    if (!raw.length) return box.textContent = 'File kosong.';
+    const peta = {}; Object.keys(raw[0]).forEach(h => { const n = String(h).toLowerCase().replace(/[^a-z0-9]/g,''); for (const k in SG_IMP_ALIAS) if (SG_IMP_ALIAS[k].includes(n) && !peta[k]) peta[k] = h; });
+    const wajib = ['tanggal','sub','bel','sd','nominal'], hilang = wajib.filter(k => !peta[k]);
+    if (hilang.length) return box.innerHTML = `<b style="color:var(--c-danger)">Kolom wajib tidak ditemukan:</b> ${hilang.map(k => SG_IMP_KOLOM[{tanggal:0,sub:3,bel:4,sd:5,nominal:6}[k]]).join(', ')}. Gunakan template.`;
+    window._sgImpRows = raw.map((r, i) => ({ no: i + 2, r, peta })).filter(x => !/^contoh/i.test(String(x.r[peta.uraian] || '')) && Object.values(x.r).some(v => String(v).trim() !== ''));
+    sgImpRender();
+  } catch(e){ box.innerHTML = '<span style="color:var(--c-danger)">Gagal membaca file: ' + escHtml(e.message) + '</span>'; }
+}
+function sgImpAnalisa(){
+  const rows = window._sgImpRows || [], pptkSaya = isUserPPTK() ? getPPTKNama() : null, kunci = new Set(STATE.realisasi.map(x => [x.tanggal, x.kode_sub_kegiatan, x.kode_belanja, x.sumber_dana, Number(x.nominal), (x.uraian||'').trim()].join('|')));
+  const akum = {}; const out = [];
+  rows.forEach(({no, r, peta}) => {
+    const g = k => peta[k] ? r[peta[k]] : '', tgl = sgParseTanggal(g('tanggal')), sub = String(g('sub')).trim(), bel = String(g('bel')).trim(), sdIn = String(g('sd')).trim().toLowerCase(), nom = sgParseNominal(g('nominal'));
+    const ang = STATE.anggaran.find(a => a.kode_sub_kegiatan === sub && a.kode_belanja === bel && String(a.sumber_dana).toLowerCase() === sdIn);
+    const it = { no, tgl, sub, bel, nom, uraian: String(g('uraian')).trim(), ang, sp2d: sgParseTanggal(g('sp2d')), metode: String(g('metode')).trim(), pptkIn: String(g('pptk')).trim(), err: '', warn: '', dup: false };
+    if (!tgl) it.err = 'Tanggal tidak valid'; else if (tgl.slice(0,4) !== String(STATE.tahun)) it.err = 'Tahun tanggal ≠ TA ' + STATE.tahun;
+    else if (!(nom > 0)) it.err = 'Nominal tidak valid'; else if (!ang) it.err = 'Anggaran (sub kegiatan+belanja+sumber dana) tidak ditemukan';
+    else if (pptkSaya && ang.pptk !== pptkSaya) it.err = 'Bukan anggaran PPTK Anda';
+    if (!it.err) {
+      it.tahapan = sgTahapanByDate(tgl); const key = [tgl, sub, bel, ang.sumber_dana, nom, it.uraian].join('|');
+      if (kunci.has(key)) { it.dup = true; } else { kunci.add(key);
+        akum[ang.kode_rekening] = (akum[ang.kode_rekening] || getRealisasiByRekening(ang.kode_rekening)) + nom;
+        if (akum[ang.kode_rekening] > getPagu(ang)) it.warn = 'melebihi pagu'; }
+    }
+    out.push(it);
+  });
+  return out;
+}
+function sgImpRender(){
+  const a = sgImpAnalisa(), ok = a.filter(x => !x.err && !x.dup), box = document.getElementById('sgImpHasil'); window._sgImpOk = ok;
+  const per = {Murni:[0,0], Pergeseran:[0,0], Perubahan:[0,0]}; ok.forEach(x => { per[x.tahapan][0]++; per[x.tahapan][1] += x.nom; });
+  const warna = {Murni:'#4F46E5', Pergeseran:'#BA7517', Perubahan:'#0F766E'};
+  const kartu = Object.keys(per).map(t => `<div style="flex:1;min-width:150px;border:1px solid var(--c-border);border-left:4px solid ${warna[t]};border-radius:10px;padding:8px 12px"><div style="font-size:11px;color:var(--c-text-muted)">${t}</div><b>${per[t][0]} transaksi</b><div style="font:12px var(--font-mono)">${fmt(per[t][1])}</div></div>`).join('');
+  const baris = a.slice(0, 300).map(x => `<tr style="${x.err?'background:#FCEBEB':x.dup?'background:#FAEEDA':''}"><td style="padding:4px 6px">${x.no}</td><td>${escHtml(x.tgl||'-')}</td><td>${x.tahapan?`<span style="color:#fff;background:${warna[x.tahapan]};padding:1px 8px;border-radius:99px;font-size:11px">${x.tahapan}</span>`:'-'}</td><td style="font-size:11px">${escHtml(x.sub)}<br>${escHtml(x.bel)}</td><td>${escHtml(x.ang?x.ang.sumber_dana:'')}</td><td style="text-align:right;font-family:var(--font-mono)">${isNaN(x.nom)?'-':fmt(x.nom)}</td><td style="font-size:11px">${x.err?'❌ '+escHtml(x.err):x.dup?'⚠️ Sudah ada (dilewati)':x.warn?'✅ OK · ⚠️ '+x.warn:'✅ OK'}</td></tr>`).join('');
+  box.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${kartu}</div>
+    <div style="font-size:12px;margin-bottom:8px">Total baris: <b>${a.length}</b> · Siap diimpor: <b style="color:#3B6D11">${ok.length}</b> · Duplikat: <b>${a.filter(x=>x.dup).length}</b> · Error: <b style="color:var(--c-danger)">${a.filter(x=>x.err).length}</b></div>
+    <div style="max-height:340px;overflow:auto;border:1px solid var(--c-border);border-radius:10px"><table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr><th>Baris</th><th>Tanggal</th><th>Tahapan</th><th>Sub Kegiatan / Belanja</th><th>Sumber Dana</th><th style="text-align:right">Nominal</th><th>Status</th></tr></thead><tbody>${baris}</tbody></table></div>
+    ${a.length>300?'<div style="font-size:11px;color:var(--c-text-muted)">Menampilkan 300 baris pertama; seluruh baris tetap diproses.</div>':''}
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-outline" onclick="sgImpClose()">Batal</button><button class="btn btn-blue" id="sgImpGo" onclick="sgImpSimpan()" ${ok.length?'':'disabled'}>✅ Impor ${ok.length} Transaksi</button></div>`;
+}
+async function sgImpSimpan(){
+  const ok = window._sgImpOk || []; if (!ok.length) return; const btn = document.getElementById('sgImpGo'); btn.disabled = true; btn.textContent = 'Menyimpan…';
+  const objs = ok.map(x => ({ id: genId(), tanggal: x.tgl, tanggal_sp2d: x.sp2d || null, uraian: x.uraian, kode_sub_kegiatan: x.sub, kode_belanja: x.bel, sumber_dana: x.ang.sumber_dana, kode_rekening: x.ang.kode_rekening, nama_belanja: x.ang.nama_belanja || '', nominal: x.nom, pptk: x.ang.pptk || x.pptkIn || '', metode_pemilihan: x.metode || null }));
+  try {
+    if (sbClient) for (let i = 0; i < objs.length; i += 200) {
+      const chunk = objs.slice(i, i + 200).map(o => ({...o, tahun: STATE.tahun}));
+      let { error } = await sbClient.from('realisasi').upsert(chunk, { onConflict: 'id' });
+      if (error && /metode_pemilihan/i.test(error.message || '')) ({ error } = await sbClient.from('realisasi').upsert(chunk.map(({metode_pemilihan, ...r}) => r), { onConflict: 'id' }));
+      if (error) throw error;
+    }
+    objs.forEach(o => STATE.realisasi.push(o)); saveState(); sgImpClose(); window._sgImpRows = null;
+    showToast(objs.length + ' transaksi berhasil diimpor ✅'); showPage('realisasi');
+  } catch(e){ btn.disabled = false; btn.textContent = 'Coba lagi'; showToast('Gagal impor: ' + (e.message || e) + ' — tidak ada data lokal yang ditambahkan', 'error'); }
+}
+
+// ===== Login: panel informasi, jam, status koneksi, tahapan hari ini, tampil/sembunyi password, caps-lock, ingat username =====
+(function(){
+  const scr = document.getElementById('loginScreen'), card = scr && scr.querySelector('.login-card'); if (!card) return;
+  const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'], BLN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const slides = [['📋 Anggaran & Realisasi','Input pagu per kegiatan, catat transaksi, dan impor realisasi dari Excel dengan tahapan otomatis sesuai tanggal DPA.'],
+    ['📅 Anggaran Kas per Triwulan','Isi kas langsung per triwulan, bagi rata, hitung manual, dan pantau kesesuaian dengan pagu di rekapitulasi.'],
+    ['📝 Nota Dinas PPTK & PPK','Susun nota dinas dengan isi otomatis dari database, cetak PDF, atau unduh DOCX.'],
+    ['📊 Dashboard & Laporan Kinerja','Pantau serapan anggaran lewat grafik interaktif, lalu ekspor laporan ke PDF atau PPTX.']];
+  const lp = document.createElement('aside'); lp.className = 'lp'; lp.setAttribute('aria-label', 'Informasi aplikasi');
+  lp.innerHTML = `<div class="lp-time" id="lpTime">--:--:--</div><div class="lp-date" id="lpDate"></div>
+    <span class="lp-chip"><i class="lp-dot" id="lpDot"></i><span id="lpConn">Memeriksa koneksi…</span></span><span class="lp-chip" id="lpTahap"></span>
+    <div class="lp-slides" id="lpSlides">${slides.map((s,i)=>`<div class="lp-slide ${i?'':'on'}"><h3>${s[0]}</h3><p>${s[1]}</p></div>`).join('')}</div>
+    <div class="lp-dots" id="lpDots">${slides.map((s,i)=>`<button class="${i?'':'on'}" aria-label="Info ${i+1}"></button>`).join('')}</div>
+    <div class="lp-steps"><div><b>1️⃣</b>Pilih tahun &amp; tahapan</div><div><b>2️⃣</b>Masuk dengan akun Anda</div><div><b>3️⃣</b>Kelola anggaran &amp; laporan</div></div>
+    <p style="font-size:11px;color:#6E6894;margin-top:14px">🔒 Sesi berakhir saat tab ditutup. Jangan bagikan password Anda.</p>`;
+  scr.insertBefore(lp, card);
+  // jam & tanggal
+  const tick = () => { const n = new Date(); document.getElementById('lpTime').textContent = n.toLocaleTimeString('id-ID',{hour12:false}).replace(/\./g,':'); document.getElementById('lpDate').textContent = `${HARI[n.getDay()]}, ${n.getDate()} ${BLN[n.getMonth()]} ${n.getFullYear()}`; };
+  tick(); setInterval(tick, 1000);
+  // carousel
+  let idx = 0, jeda = false; const sl = lp.querySelectorAll('.lp-slide'), dt = lp.querySelectorAll('.lp-dots button');
+  const go = i => { idx = (i + sl.length) % sl.length; sl.forEach((s,k)=>s.classList.toggle('on',k===idx)); dt.forEach((d,k)=>d.classList.toggle('on',k===idx)); };
+  dt.forEach((d,i)=>d.onclick = () => go(i)); lp.querySelector('#lpSlides').onmouseenter = () => jeda = true; lp.querySelector('#lpSlides').onmouseleave = () => jeda = false;
+  setInterval(() => { if (!jeda && scr.style.display !== 'none') go(idx + 1); }, 4800);
+  // status koneksi
+  (async () => { const dot = document.getElementById('lpDot'), t = document.getElementById('lpConn');
+    try { const r = await fetch(sbClient.supabaseUrl + '/auth/v1/health', { headers: { apikey: sbClient.supabaseKey } }); if (!r.ok) throw 0; dot.className = 'lp-dot on'; t.textContent = 'Server terhubung'; }
+    catch(e){ dot.className = 'lp-dot off'; t.textContent = 'Server tidak terjangkau'; } })();
+  // tahapan menurut tanggal hari ini
+  const tahunSel = document.getElementById('loginTahun'), tahapSel = document.getElementById('loginTahapan');
+  const ket = { Murni:'DPA awal sebelum pergeseran', Pergeseran:'berlaku sejak DPA Pergeseran', Perubahan:'berlaku sejak DPA Perubahan' };
+  const infoTahap = () => { const iso = new Date().toISOString().slice(0,10), t = (typeof sgTahapanByDate === 'function') ? sgTahapanByDate(iso, tahunSel.value) : 'Murni';
+    document.getElementById('lpTahap').innerHTML = `📌 Hari ini: <b>${t}</b>`; hint.textContent = `${tahapSel.value}: ${ket[tahapSel.value] || ''}`; return t; };
+  const hint = document.createElement('div'); hint.className = 'lp-hint'; tahapSel.closest('.login-row').after(hint);
+  tahunSel.addEventListener('change', infoTahap); tahapSel.addEventListener('change', infoTahap);
+  const nowT = infoTahap(); if (!localStorage.getItem('sg-last-tahapan') && [...tahapSel.options].some(o=>o.text===nowT)) { tahapSel.value = nowT; infoTahap(); }
+  tahapSel.addEventListener('change', () => { try { localStorage.setItem('sg-last-tahapan', tahapSel.value); } catch(e){} });
+  const lt = localStorage.getItem('sg-last-tahapan'); if (lt) { tahapSel.value = lt; infoTahap(); }
+  // password: tampil/sembunyi + caps lock
+  const pw = document.getElementById('loginPass'), us = document.getElementById('loginUser'), wrap = document.createElement('div'); wrap.className = 'lp-pw';
+  pw.parentNode.insertBefore(wrap, pw); wrap.appendChild(pw);
+  const eye = document.createElement('button'); eye.type = 'button'; eye.className = 'lp-eye'; eye.textContent = '👁️'; eye.setAttribute('aria-label','Tampilkan password');
+  eye.onclick = () => { const s = pw.type === 'password'; pw.type = s ? 'text' : 'password'; eye.textContent = s ? '🙈' : '👁️'; }; wrap.appendChild(eye);
+  const caps = document.createElement('div'); caps.className = 'lp-hint warn'; wrap.after(caps);
+  pw.addEventListener('keyup', e => { caps.textContent = (e.getModifierState && e.getModifierState('CapsLock')) ? '⚠️ Caps Lock aktif' : ''; });
+  [us, pw].forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); }));
+  // ingat username (hanya username, bukan password)
+  const rem = document.createElement('div'); rem.className = 'lp-rem';
+  rem.innerHTML = '<label><input type="checkbox" id="lpRem"> Ingat username</label><a id="lpHelp">Lupa password?</a>'; card.querySelector('.btn-primary').before(rem);
+  const ru = localStorage.getItem('sg-user'); if (ru) { us.value = ru; document.getElementById('lpRem').checked = true; }
+  document.getElementById('lpHelp').onclick = () => showToast('Hubungi Administrator untuk mengatur ulang password Anda.');
+  // umpan balik login: getar bila gagal, simpan username bila berhasil
+  const _dl = doLogin;
+  doLogin = async function(){ const btn = card.querySelector('.btn-primary'), t0 = btn.textContent; btn.textContent = '⏳ Memverifikasi…';
+    try { await _dl.apply(this, arguments); } finally { btn.textContent = t0; }
+    if (document.getElementById('app').classList.contains('visible')) { try { document.getElementById('lpRem').checked ? localStorage.setItem('sg-user', us.value.trim().toLowerCase()) : localStorage.removeItem('sg-user'); } catch(e){} }
+    else { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); } };
+})();
 
 </script>
 </body>
