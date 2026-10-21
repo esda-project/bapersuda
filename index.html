@@ -24451,7 +24451,7 @@ async function loadDataFromSupabase() {
     const [angRes, realRes, kasRes, pengRes] = await Promise.all([
       sbClient.from('anggaran').select('*').eq('tahun', STATE.tahun),
       sbClient.from('realisasi').select('*').eq('tahun', STATE.tahun),
-      sbClient.from('kas_anggaran').select('*').eq('tahun', STATE.tahun),
+      sbClient.from('kas_anggaran').select('*').eq('tahun', STATE.tahun).is('deleted_at', null),
       sbClient.from('sianggaran_profiles').select('*').order('nama'),
     ]);
     if (angRes.error) throw angRes.error;
@@ -24466,15 +24466,20 @@ async function loadDataFromSupabase() {
     STATE.kasAnggaran = {};
     STATE.kasAnggaranPergeseran = {};
     STATE.kasAnggaranPerubahan  = {};
-    (kasRes.data || []).forEach(row => {
-      const tahapan = row.tahapan || 'Murni';
-      if (tahapan === 'Murni' || !row.tahapan) {
-        STATE.kasAnggaran[row.kode_rekening] = row.data || {};
-      } else if (tahapan.startsWith('Pergeseran')) {
-        STATE.kasAnggaranPergeseran[row.kode_rekening] = row.data || {};
-      } else if (tahapan === 'Perubahan') {
-        STATE.kasAnggaranPerubahan[row.kode_rekening] = row.data || {};
-      }
+    // kas_anggaran berstruktur RELASIONAL: 1 baris = rekening + tahapan + bulan + nominal.
+    // Dirakit kembali ke bentuk {kode_rekening: {0..11: nominal}} yang dipakai seluruh menu & laporan.
+    const kasRows = kasRes.data || [];
+    STATE._kasBulanOff = kasRows.some(r => Number(r.bulan) === 0) ? 0 : 1;
+    kasRows.forEach(row => {
+      const tahapan = row.tahapan || 'Murni', m = Number(row.bulan) - STATE._kasBulanOff;
+      if (!(m >= 0 && m <= 11)) return;
+      let store;
+      if (tahapan === 'Murni') store = STATE.kasAnggaran;
+      else if (tahapan.startsWith('Pergeseran')) { store = STATE.kasAnggaranPergeseran; STATE._kasLblPergeseran = tahapan; }
+      else if (tahapan === 'Perubahan') store = STATE.kasAnggaranPerubahan;
+      else return;
+      if (!store[row.kode_rekening]) store[row.kode_rekening] = {};
+      store[row.kode_rekening][m] = Number(row.nominal) || 0;
     });
 
     if ((pengRes.data || []).length > 0) STATE.pengguna = pengRes.data;
@@ -24535,22 +24540,20 @@ async function deleteRealisasiFromSupabase(id) {
 async function saveKasToSupabase() {
   if (!sbClient) return;
   setSyncIndicator('syncing', 'Menyimpan kas...');
-  const allRows = [];
-  const buildRows = (store, tahapan) => {
-    return Object.entries(store || {}).map(([kode_rekening, data]) => ({
-      id: STATE.tahun + '_' + kode_rekening + '_' + tahapan.replace(/\s/g,''),
-      tahun: STATE.tahun,
-      kode_rekening,
-      tahapan,
-      data,
-    }));
-  };
-  allRows.push(...buildRows(STATE.kasAnggaran, 'Murni'));
-  allRows.push(...buildRows(STATE.kasAnggaranPergeseran || {}, 'Pergeseran'));
-  allRows.push(...buildRows(STATE.kasAnggaranPerubahan  || {}, 'Perubahan'));
-  if (allRows.length === 0) { setSyncIndicator('hidden'); return; }
-  const { error } = await sbClient.from('kas_anggaran').upsert(allRows, {onConflict: 'id'});
-  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); return; }
+  const off = STATE._kasBulanOff === 0 ? 0 : 1, now = new Date().toISOString(), uid = STATE.user && STATE.user.id;
+  const rows = [];
+  const buildRows = (store, tahapan) => Object.entries(store || {}).forEach(([kode_rekening, data]) => {
+    Object.entries(data || {}).forEach(([m, v]) => {
+      const idx = Number(m); if (!(idx >= 0 && idx <= 11)) return;
+      rows.push({ tahun: STATE.tahun, kode_rekening, tahapan, bulan: idx + off, nominal: Number(v) || 0, deleted_at: null, updated_at: now, updated_by: uid });
+    });
+  });
+  buildRows(STATE.kasAnggaran, 'Murni');
+  buildRows(STATE.kasAnggaranPergeseran, STATE._kasLblPergeseran || 'Pergeseran');
+  buildRows(STATE.kasAnggaranPerubahan, 'Perubahan');
+  if (rows.length === 0) { setSyncIndicator('hidden'); return; }
+  const { error } = await sbClient.from('kas_anggaran').upsert(rows, { onConflict: 'tahun,kode_rekening,tahapan,bulan' });
+  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); showToast('Gagal menyimpan kas: ' + error.message, 'error'); return; }
   setSyncIndicator('synced', '✅ Kas disimpan');
 }
 
