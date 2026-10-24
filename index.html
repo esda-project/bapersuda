@@ -24023,11 +24023,11 @@ svg rect.sg-svgpart{transform-box:fill-box;transform-origin:50% 100%}
         </div>
         <div class="form-group">
           <label class="form-label">Pagu Pergeseran (Rp)</label>
-          <input class="form-input" id="fPaguPergeseran" type="number" min="0" placeholder="0 (opsional)">
+          <input class="form-input" id="fPaguPergeseran" type="number" min="0" placeholder="Kosong = sama dengan Murni">
         </div>
         <div class="form-group">
           <label class="form-label">Pagu Perubahan (Rp)</label>
-          <input class="form-input" id="fPaguPerubahan" type="number" min="0" placeholder="0 (opsional)">
+          <input class="form-input" id="fPaguPerubahan" type="number" min="0" placeholder="Kosong = sama dengan Pergeseran/Murni">
         </div>
         <div class="form-group">
           <label class="form-label">Sumber Dana</label>
@@ -24284,10 +24284,19 @@ const fmt = n => isNaN(n)||n===null||n===undefined ? '-' : new Intl.NumberFormat
 const fmtPct = n => isNaN(n)||n===null ? '0%' : Math.round(n)+'%';
 const genId = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); });
 
-function getPagu(row) {
-  if (STATE.tahapan === 'Perubahan' && row.pagu_perubahan != null && row.pagu_perubahan !== '') return row.pagu_perubahan;
-  if (STATE.tahapan === 'Pergeseran' && row.pagu_pergeseran != null && row.pagu_pergeseran !== '') return row.pagu_pergeseran;
-  return row.pagu_murni || 0;
+// Pagu sebuah rekening menurut tahapan. Tanpa argumen -> tahapan aktif saat login.
+// Kolom pagu_pergeseran / pagu_perubahan KOSONG (null) = ikut tahapan sebelumnya
+// (Pergeseran ikut Murni; Perubahan ikut Pergeseran lalu Murni). Nilai 0 dianggap diisi 0.
+function getPagu(row, tahapan) {
+  const t = tahapan || STATE.tahapan || 'Murni';
+  const ada = v => v != null && v !== '';
+  if (t === 'Perubahan') {
+    if (ada(row.pagu_perubahan)) return Number(row.pagu_perubahan) || 0;
+    if (ada(row.pagu_pergeseran)) return Number(row.pagu_pergeseran) || 0;
+  } else if (t.startsWith('Pergeseran')) {
+    if (ada(row.pagu_pergeseran)) return Number(row.pagu_pergeseran) || 0;
+  }
+  return Number(row.pagu_murni) || 0;
 }
 
 function getTotalPagu() { return STATE.anggaran.reduce((s,r) => s+getPagu(r),0); }
@@ -25130,7 +25139,7 @@ function renderDashboard() {
   ${buildTrenTriwulanChart(realBulan, totalPagu)}
 </div>
 
-${STATE.kasAnggaran && Object.keys(STATE.kasAnggaran).length > 0 ? buildKasTWSection() : ''}`;
+${Object.keys(getKasStore(STATE.tahapan) || {}).length > 0 ? buildKasTWSection() : ''}`;
 }
 
 function fmtSingkat(n) {
@@ -25471,8 +25480,8 @@ function openModalAnggaran(idx) {
         document.getElementById('fBelanja').value = a.kode_belanja;
         document.getElementById('fKodeRekening').value = a.kode_rekening;
         document.getElementById('fPaguMurni').value = a.pagu_murni||0;
-        document.getElementById('fPaguPergeseran').value = a.pagu_pergeseran||0;
-        document.getElementById('fPaguPerubahan').value = a.pagu_perubahan||0;
+        document.getElementById('fPaguPergeseran').value = a.pagu_pergeseran ?? '';
+        document.getElementById('fPaguPerubahan').value = a.pagu_perubahan ?? '';
         document.getElementById('fSumberDana').value = a.sumber_dana;
         document.getElementById('fPPTK').value = a.pptk;
       },50);
@@ -26181,7 +26190,7 @@ function kasBuildRekListHTML(kasData, tahapan, rekIdx) {
       }
     }
     const tot = getTotalKasRek(store, a.kode_rekening);
-    const p   = getPagu(a);
+    const p   = kasPaguFor(a, getKasTahapan());
     const pctR = p > 0 ? Math.min(tot/p*100,100) : 0;
     const isActive = i === rekIdx;
     const statusColor = pctR >= 90 ? 'var(--c-success)' : pctR > 0 ? '#BA7517' : 'var(--c-text-muted)';
@@ -26223,8 +26232,8 @@ function renderKas() {
   // Deskripsi & aturan per tahapan
   const tahapanInfo = {
     'Murni':      { color:'var(--c-success)', icon:'📋', desc:'Anggaran awal tahun. Pagu tidak berubah.' },
-    'Pergeseran': { color:'#185FA5',          icon:'🔄', desc:'Penyesuaian dalam sub kegiatan yang sama. Pagu total tidak berubah. Bisa dilakukan beberapa kali.' },
-    'Perubahan':  { color:'#854F0B',          icon:'📝', desc:'Dapat menambah/mengurangi pagu, belanja, atau sub kegiatan baru.' },
+    'Pergeseran': { color:'#185FA5',          icon:'🔄', desc:'Pagu sama dengan Murni; anggaran kas boleh sama atau berbeda. Data kas Pergeseran tersimpan terpisah dari Murni.' },
+    'Perubahan':  { color:'#854F0B',          icon:'📝', desc:'Pagu dapat berbeda dari Murni/Pergeseran; anggaran kas Perubahan tersimpan terpisah.' },
   }[tahapan.startsWith('Pergeseran') ? 'Pergeseran' : tahapan] || { color:'#555', icon:'📋', desc:'' };
 
   // Pilihan tahapan — tampilkan juga pergeseran & perubahan jika ada datanya
@@ -26260,6 +26269,7 @@ ${isUserPPTK()?`<div class="section-card" style="padding:8px 14px;margin-bottom:
       ${tahapanInfo.icon} ${tahapanInfo.desc}
     </div>
   </div>
+  ${kasSalinBarHTML(tahapan)}
 </div>
 
 ${kasRekapHTML()}
@@ -26422,6 +26432,46 @@ function kasBuildMainPanelHTML(kasData, rekIdx, tahapan, tw) {
 }
 
 // ── Fungsi kontrol UI kas ──
+// ── Salin anggaran kas antar tahapan (kas bisa sama atau berbeda; hasil salinan bebas diedit) ──
+function kasSumberSalin(t) {
+  const b = String(t).startsWith('Pergeseran') ? 'Pergeseran' : t;
+  return b === 'Pergeseran' ? ['Murni'] : b === 'Perubahan' ? ['Pergeseran','Murni'] : [];
+}
+function kasCloneBulan(src) { const o = {}; for (let m = 0; m < 12; m++) o[m] = Number(src && src[m]) || 0; return o; }
+function kasSalinBarHTML(tahapan) {
+  const sumber = kasSumberSalin(tahapan);
+  if (!sumber.length) return '';
+  const btn = s => `<button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="kasSalinRekening('${s}')">📥 Rekening ini dari ${s}</button>
+    <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="kasSalinSemua('${s}')">📥 Semua rekening dari ${s}</button>`;
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed var(--c-border)">
+    <span style="font-size:12px;color:var(--c-text-muted)">Salin kas ke ${escHtml(tahapan)}:</span>${sumber.map(btn).join('')}
+    <span style="font-size:11px;color:var(--c-text-muted)">Setelah disalin, ubah yang berbeda lalu klik Simpan.</span></div>`;
+}
+function kasSalinRekening(sumber) {
+  const rek = getKasDisplayList()[window._kasUI.rekIdx || 0]; if (!rek) return;
+  const tahapan = getKasTahapan(), dst = getKasStore(tahapan), src = getKasStore(sumber), k = rek.kode_rekening;
+  if (getTotalKasRek(src, k) <= 0) { showToast('Kas ' + sumber + ' untuk rekening ini masih kosong', 'error'); return; }
+  if (getTotalKasRek(dst, k) > 0 && !confirm('Kas ' + tahapan + ' rekening ini sudah terisi dan akan diganti dengan kas ' + sumber + '. Lanjutkan?')) return;
+  dst[k] = kasCloneBulan(src[k]);
+  const pagu = kasPaguFor(rek, tahapan), tot = getTotalKasRek(dst, k);
+  if (tot > pagu) showToast('Disalin, tetapi total kas (' + fmt(tot) + ') melebihi pagu ' + tahapan + ' (' + fmt(pagu) + '). Sesuaikan lalu simpan.', 'error');
+  else showToast('Kas ' + sumber + ' disalin ke ' + tahapan + ' (belum tersimpan — klik Simpan)');
+  showPage('kas');
+}
+function kasSalinSemua(sumber) {
+  const tahapan = getKasTahapan(), dst = getKasStore(tahapan), src = getKasStore(sumber);
+  if (!confirm('Salin kas ' + sumber + ' ke ' + tahapan + ' untuk semua rekening yang kas ' + tahapan + '-nya masih kosong?\nRekening yang sudah terisi tidak diubah.')) return;
+  let salin = 0, lewati = 0, lebih = 0;
+  getFilteredAnggaranForKas().forEach(a => {
+    const k = a.kode_rekening;
+    if (getTotalKasRek(src, k) <= 0) return;
+    if (getTotalKasRek(dst, k) > 0) { lewati++; return; }
+    dst[k] = kasCloneBulan(src[k]); salin++;
+    if (getTotalKasRek(dst, k) > kasPaguFor(a, tahapan)) lebih++;
+  });
+  showToast(salin + ' rekening disalin' + (lewati ? ', ' + lewati + ' sudah terisi (dilewati)' : '') + (lebih ? ', ' + lebih + ' melebihi pagu ' + tahapan : '') + ' — klik Simpan Semua', lebih ? 'error' : undefined);
+  showPage('kas');
+}
 function kasSetTahapan(t) {
   window._kasUI.tahapan = t;
   window._kasUI.tw = 1;
@@ -26457,7 +26507,7 @@ function kasUpdateBulan(bulan, val) {
 }
 function kasUpdateLiveUI(rek, store) {
   const tw = window._kasUI.tw || 1;
-  const pagu = getPagu(rek);
+  const pagu = kasPaguFor(rek, getKasTahapan());
   const twTotals = [1,2,3,4].map(t => getKasTW(store, rek.kode_rekening, t));
   const totalKas = twTotals.reduce((s,v)=>s+v,0);
   const twNom = twTotals[tw-1];
@@ -26493,14 +26543,13 @@ async function kasSimPan() {
   const rek = kasData[window._kasUI.rekIdx || 0];
   if (!rek) return;
   const store = getKasStore(getKasTahapan());
-  const pagu = getPagu(rek);
+  const pagu = kasPaguFor(rek, getKasTahapan());
   const total = getTotalKasRek(store, rek.kode_rekening);
   if (total > pagu) {
     showToast('Total kas ('+fmt(total)+') melebihi pagu '+fmt(pagu)+'. Perbaiki dulu.','error');
     return;
   }
-  // Sync ke STATE.kasAnggaran (untuk kompatibilitas dashboard & Supabase lama)
-  STATE.kasAnggaran[rek.kode_rekening] = store[rek.kode_rekening] || {};
+  // Tiap tahapan punya store sendiri (Murni/Pergeseran/Perubahan) — TIDAK disalin ke store lain.
   saveState();
   if (sbClient) await saveKasToSupabase();
   showToast('Kas '+rek.nama_belanja.split('-')[0]+' disimpan');
@@ -26510,10 +26559,9 @@ async function kasSimPanAll() {
   const store = getKasStore(getKasTahapan());
   let ada_error = false;
   kasData.forEach(a => {
-    const pagu = getPagu(a);
+    const pagu = kasPaguFor(a, getKasTahapan());
     const total = getTotalKasRek(store, a.kode_rekening);
     if (total > pagu) { ada_error = true; }
-    STATE.kasAnggaran[a.kode_rekening] = store[a.kode_rekening] || {};
   });
   if (ada_error) {
     showToast('Ada rekening yang melebihi pagu. Periksa sebelum menyimpan.','error');
@@ -26538,7 +26586,7 @@ function kasExportRekap() {
         <th>Sisa</th>
       </tr></thead><tbody>`;
   kasData.forEach(a => {
-    const p = getPagu(a);
+    const p = kasPaguFor(a, getKasTahapan());
     const tots = [1,2,3,4].map(t => getKasTW(store, a.kode_rekening, t));
     const tot = tots.reduce((s,v)=>s+v,0);
     const sisa = p - tot;
@@ -26673,7 +26721,7 @@ function kasBuildCetakSectionHTML(grp, store) {
   // Hitung nilai tiap baris & agregasi per level kode (2,3,4,5 segmen)
   const levelAgg = { 2: {}, 3: {}, 4: {}, 5: {} };
   const rowCalc = rows.map(a => {
-    const pagu = getPagu(a);
+    const pagu = kasPaguFor(a, getKasTahapan());
     const monthly = BULAN.map((_, m) => (store[a.kode_rekening] || {})[m] || 0);
     const totalRAK = monthly.reduce((s, v) => s + v, 0);
     const segs = (a.kode_belanja || a.kode_rekening || '').split('.');
@@ -26778,8 +26826,9 @@ function kasCetakPerKegiatan() {
 
 // Fungsi lama — tetap ada untuk kompatibilitas
 function updateKas(kodeRek, bulan, val) {
-  if (!STATE.kasAnggaran[kodeRek]) STATE.kasAnggaran[kodeRek] = {};
-  STATE.kasAnggaran[kodeRek][bulan] = parseFloat(val)||0;
+  const st = getKasStore(getKasTahapan());
+  if (!st[kodeRek]) st[kodeRek] = {};
+  st[kodeRek][bulan] = parseFloat(val)||0;
 }
 async function simpanKas() {
   saveState();
@@ -26816,7 +26865,7 @@ function renderKasTWCard(tw) {
 
   // Pagu kas akumulatif s/d TW ini — sama seperti kolom per-bulan di tabel kas
   const pagu = kasData.reduce((sum, a) => {
-    const kas = STATE.kasAnggaran[a.kode_rekening] || {};
+    const kas = (getKasStore(STATE.tahapan) || {})[a.kode_rekening] || {};
     return sum + bulanList.reduce((s, m) => s + (kas[m] || 0), 0);
   }, 0);
 
@@ -32750,10 +32799,10 @@ function kasRecapHTML(){
   if (R.mode === 'sub') {
     const g = {};
     list.forEach((rek,i)=>{ const k = rek.kode_sub_kegiatan || '-'; const o = g[k] || (g[k] = {idx:i, nama:(rek.kode_sub_kegiatan||'')+' '+(rek.sub_kegiatan||''), pagu:0, tw:[0,0,0,0]});
-      o.pagu += getPagu(rek); for (let t=1;t<=4;t++) o.tw[t-1] += getKasTW(store, rek.kode_rekening, t); });
+      o.pagu += kasPaguFor(rek, getKasTahapan()); for (let t=1;t<=4;t++) o.tw[t-1] += getKasTW(store, rek.kode_rekening, t); });
     Object.values(g).forEach(o=>rows.push(o));
   } else {
-    list.forEach((rek,i)=>rows.push({idx:i, nama:(rek.kode_rekening||'')+' '+(rek.nama_belanja||''), sub:rek.sub_kegiatan||'', pagu:getPagu(rek), tw:[1,2,3,4].map(t=>getKasTW(store, rek.kode_rekening, t))}));
+    list.forEach((rek,i)=>rows.push({idx:i, nama:(rek.kode_rekening||'')+' '+(rek.nama_belanja||''), sub:rek.sub_kegiatan||'', pagu:kasPaguFor(rek, getKasTahapan()), tw:[1,2,3,4].map(t=>getKasTW(store, rek.kode_rekening, t))}));
   }
   rows.forEach(r=>{ r.tot = r.tw.reduce((a,b)=>a+b,0); r.st = kasRecapStatus(r.tot, r.pagu); r.sel = r.pagu - r.tot; });
   const cnt = {ok:0,kurang:0,lebih:0,kosong:0}; rows.forEach(r=>cnt[r.st]++);
@@ -32798,12 +32847,7 @@ function kasRecapHTML(){
 
 
 // ===== Rekapitulasi Anggaran Kas per Triwulan vs Pagu (per tahun & tahapan) =====
-function kasPaguFor(row, tahapan){
-  const t = tahapan || 'Murni', has = v => v != null && v !== '';
-  if (t === 'Perubahan' && has(row.pagu_perubahan)) return Number(row.pagu_perubahan) || 0;
-  if (t.startsWith('Pergeseran') && has(row.pagu_pergeseran)) return Number(row.pagu_pergeseran) || 0;
-  return Number(row.pagu_murni) || 0;
-}
+function kasPaguFor(row, tahapan){ return getPagu(row, tahapan || 'Murni'); }
 function kasRekapHitung(tahapan){
   const store = getKasStore(tahapan), list = getFilteredAnggaranForKas();
   const r = {tw:[0,0,0,0], pagu:0, kas:0, sesuai:0, kurang:[], lebih:[], kosong:[]};
