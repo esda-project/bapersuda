@@ -24481,14 +24481,28 @@ function setSyncIndicator(state, msg) {
 // ========================================
 // SUPABASE CRUD OPERATIONS
 // ========================================
+// Muat SEMUA baris (Supabase membatasi 1.000 baris per permintaan; anggaran kas relasional bisa >1.000 baris).
+async function sbFetchAll(table, filterFn, orderCols) {
+  const hasil = [], UKURAN = 1000;
+  for (let dari = 0; ; dari += UKURAN) {
+    let q = filterFn(sbClient.from(table).select('*'));
+    (orderCols || []).forEach(c => { q = q.order(c, { ascending: true }); });
+    const { data, error } = await q.range(dari, dari + UKURAN - 1);
+    if (error) return { data: null, error };
+    hasil.push(...(data || []));
+    if (!data || data.length < UKURAN) break;
+  }
+  return { data: hasil, error: null };
+}
+
 async function loadDataFromSupabase() {
   if (!sbClient) return false;
   setSyncIndicator('syncing', 'Memuat data...');
   try {
     const [angRes, realRes, kasRes, pengRes] = await Promise.all([
-      sbClient.from('anggaran').select('*').eq('tahun', STATE.tahun),
-      sbClient.from('realisasi').select('*').eq('tahun', STATE.tahun),
-      sbClient.from('kas_anggaran').select('*').eq('tahun', STATE.tahun).is('deleted_at', null),
+      sbFetchAll('anggaran', q => q.eq('tahun', STATE.tahun), ['id']),
+      sbFetchAll('realisasi', q => q.eq('tahun', STATE.tahun), ['id']),
+      sbFetchAll('kas_anggaran', q => q.eq('tahun', STATE.tahun).is('deleted_at', null), ['kode_rekening','tahapan','bulan']),
       sbClient.from('sianggaran_profiles').select('*').order('nama'),
     ]);
     if (angRes.error) throw angRes.error;
