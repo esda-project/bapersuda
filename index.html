@@ -29764,6 +29764,7 @@ function toggleSidebarCollapse() {
 const ND_BELANJA_LOOKUP = [
   {
     "nama_belanja": "Belanja Alat/Bahan untuk Kegiatan Kantor-Alat Tulis Kantor (ATK)",
+    "kode_belanja": "5.1.02.01.001.00024",
     "uraian": "Pengadaan belanja alat tulis kantor (atk) untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja alat tulis kantor (atk) secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -29865,6 +29866,7 @@ const ND_BELANJA_LOOKUP = [
   },
   {
     "nama_belanja": "Belanja Makanan dan Minuman Aktivitas Lapangan",
+    "kode_belanja": "5.1.02.01.001.00058",
     "uraian": "Pengadaan belanja makanan dan minuman aktivitas lapangan untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja makanan dan minuman aktivitas lapangan secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -29879,6 +29881,7 @@ const ND_BELANJA_LOOKUP = [
   },
   {
     "nama_belanja": "Belanja Makanan dan Minuman Rapat",
+    "kode_belanja": "5.1.02.01.001.00052",
     "uraian": "Pengadaan belanja makanan dan minuman rapat untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
     "latar_belakang": "Memenuhi kebutuhan belanja makanan dan minuman rapat secara efektif dan efisien.",
     "maksud_tujuan": "Mendukung kelancaran pelaksanaan program dan kegiatan.",
@@ -29890,6 +29893,36 @@ const ND_BELANJA_LOOKUP = [
     "aspek_kualitas": "Memenuhi standar mutu, jumlah, dan ketepatan hasil.",
     "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
     "syarat_penyedia": "Memiliki NIB dan izin usaha/sertifikat yang dipersyaratkan untuk usaha katering atau penyediaan makanan; NPWP. KBLI: 56210, 56290. KBKI: Jasa katering dan penyediaan konsumsi rapat."
+  },
+  {
+    "nama_belanja": "Belanja Natura dan Pakan-Natura",
+    "kode_belanja": "5.1.02.01.001.00043",
+    "uraian": "Pengadaan belanja natura dan pakan-natura berupa bahan logistik kantor (kebutuhan makanan dan minuman perkantoran seperti air minum kemasan, kopi, teh, gula, dan kebutuhan sejenis) untuk mendukung pelaksanaan tugas dan fungsi perangkat daerah.",
+    "latar_belakang": "Memenuhi kebutuhan bahan logistik kantor berupa natura bagi pegawai dan operasional perkantoran secara efektif dan efisien.",
+    "maksud_tujuan": "Menjamin ketersediaan bahan logistik kantor berupa natura guna mendukung kelancaran pelaksanaan program dan kegiatan.",
+    "sasaran": "Perangkat daerah, pegawai, dan pemangku kepentingan terkait.",
+    "ruang_lingkup": "Penyediaan natura (bahan makanan dan minuman kebutuhan kantor) sesuai kebutuhan, jumlah, dan spesifikasi.",
+    "manfaat": "Menunjang kelancaran operasional perkantoran serta kenyamanan dan produktivitas kerja pegawai.",
+    "fungsi": "Sarana pendukung operasional perkantoran terkait kebutuhan bahan logistik kantor berupa natura.",
+    "spesifikasi": "Sesuai spesifikasi teknis, belum melewati masa kedaluwarsa, kemasan baik dan utuh, memiliki izin edar (BPOM/PIRT) dan label halal sepanjang dipersyaratkan, serta memenuhi ketentuan yang berlaku.",
+    "aspek_kualitas": "Memenuhi standar mutu, keamanan pangan, jumlah, dan ketepatan hasil.",
+    "aspek_pelayanan": "Pelayanan responsif, tepat waktu, dan sesuai kontrak.",
+    "syarat_penyedia": "Memiliki NIB yang masih berlaku dengan KBLI perdagangan besar/eceran makanan dan minuman yang sesuai; memiliki NPWP; tidak sedang dikenakan sanksi daftar hitam; mampu menyediakan barang sesuai spesifikasi dan memiliki izin edar. KBLI yang relevan: 46391, 47111. KBKI: Makanan dan minuman kemasan."
+  },
+  {
+    "nama_belanja": "Honorarium Narasumber atau Pembahas, Moderator, Pembawa Acara, dan Panitia",
+    "kode_belanja": "5.1.02.02.001.00003",
+    "uraian": "Pembayaran honorarium narasumber atau pembahas, moderator, pembawa acara, dan panitia untuk mendukung pelaksanaan kegiatan perangkat daerah.",
+    "latar_belakang": "Memenuhi kewajiban pembayaran honorarium kepada narasumber atau pembahas, moderator, pembawa acara, dan panitia atas keterlibatannya dalam pelaksanaan kegiatan secara tertib dan akuntabel.",
+    "maksud_tujuan": "Mendukung kelancaran pelaksanaan kegiatan melalui keterlibatan narasumber atau pembahas, moderator, pembawa acara, dan panitia yang kompeten.",
+    "sasaran": "Narasumber atau pembahas, moderator, pembawa acara, dan panitia kegiatan.",
+    "ruang_lingkup": "Pembayaran honorarium sesuai surat keputusan penetapan dan standar harga yang berlaku, berdasarkan jumlah orang, jam, dan/atau kegiatan.",
+    "manfaat": "Menjamin pelaksanaan kegiatan berjalan lancar, tepat sasaran, dan memenuhi prinsip akuntabilitas pengelolaan keuangan daerah.",
+    "fungsi": "Penghargaan atas pelaksanaan tugas narasumber atau pembahas, moderator, pembawa acara, dan panitia dalam kegiatan.",
+    "spesifikasi": "Sesuai surat keputusan penetapan, standar harga/satuan biaya yang berlaku, dan ketentuan perpajakan.",
+    "aspek_kualitas": "Narasumber atau pembahas kompeten dan sesuai dengan materi kegiatan; pelaksanaan tugas sesuai penetapan.",
+    "aspek_pelayanan": "Pelaksanaan tugas tepat waktu dan sesuai jadwal kegiatan.",
+    "syarat_penyedia": "Tidak memerlukan penyedia barang/jasa karena merupakan pembayaran honorarium kepada perorangan berdasarkan surat keputusan penetapan dan standar harga yang berlaku; pembayaran dikenakan pajak sesuai ketentuan perpajakan (PPh Pasal 21)."
   },
   {
     "nama_belanja": "Belanja Modal Alat Penyimpan Perlengkapan Kantor",
@@ -30796,6 +30829,15 @@ function ndCariLookupBelanja(namaBelanja, kodeBelanja) {
     const byKode = ND_BELANJA_LOOKUP.find(b => b.kode_belanja && b.kode_belanja === kode);
     if (byKode) return byKode;
   }
+  // Bila nama belanja kosong/beda penulisan, pakai nama resmi dari master berdasarkan kode belanja
+  if (kodeBelanja && typeof MASTER !== 'undefined' && MASTER.belanja) {
+    const m = MASTER.belanja.find(x => x.kode_belanja === String(kodeBelanja).trim());
+    if (m && m.nama_belanja) {
+      const tm = ndNormBelanja(m.nama_belanja);
+      const byMaster = ND_BELANJA_LOOKUP.find(b => ndNormBelanja(b.nama_belanja) === tm);
+      if (byMaster) return byMaster;
+    }
+  }
   if (!namaBelanja) return null;
   const target = ndNormBelanja(namaBelanja);
   if (!target) return null;
@@ -30822,7 +30864,7 @@ function ndpIsiOtomatis() {
   }
   const lk = ndCariLookupBelanja(namaBelanja, a.kode_belanja);
   if (!lk) {
-    showToast('Tidak ditemukan data otomatis untuk jenis belanja "' + namaBelanja + '". Silakan isi manual.', 'error');
+    showToast('Tidak ditemukan data otomatis untuk jenis belanja "' + namaBelanja + '"' + (a.kode_belanja ? ' [' + a.kode_belanja + ']' : '') + '. Silakan isi manual.', 'error');
     return;
   }
   const fill = (id, val) => {
