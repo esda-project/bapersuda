@@ -30344,9 +30344,11 @@ function ndGetKPA() {
 
 // Ambil PPTK yang login atau berdasarkan nama
 function ndGetPPTK(nama) {
-  return STATE.pengguna.find(u =>
-    u.role === 'input' && u.nama.trim().toUpperCase() === (nama||'').trim().toUpperCase()
-  ) || null;
+  // Cocokkan nama akun ATAU kolom "Batasi data ke nama PPTK" (spasi ganda/huruf besar-kecil diabaikan).
+  // Bila ada beberapa akun cocok, utamakan yang NIP-nya terisi.
+  const n = normNama(nama);
+  const cocok = STATE.pengguna.filter(u => u.role === 'input' && (normNama(u.nama) === n || (u.pptk_nama && normNama(u.pptk_nama) === n)));
+  return cocok.find(u => u.nip) || cocok[0] || null;
 }
 
 // Format rupiah
