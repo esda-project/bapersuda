@@ -24018,30 +24018,36 @@ svg rect.sg-svgpart{transform-box:fill-box;transform-origin:50% 100%}
           <span class="form-hint">Format: [Sub Kegiatan].[Belanja].[Sumber Dana] — satu belanja bisa didaftarkan 2× dengan sumber dana berbeda</span>
         </div>
         <div class="form-group">
-          <label class="form-label">Pagu Murni (Rp)</label>
-          <input class="form-input" id="fPaguMurni" type="number" min="0" placeholder="0">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Pagu Pergeseran (Rp)</label>
-          <input class="form-input" id="fPaguPergeseran" type="number" min="0" placeholder="Kosong = sama dengan Murni">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Pagu Perubahan (Rp)</label>
-          <input class="form-input" id="fPaguPerubahan" type="number" min="0" placeholder="Kosong = sama dengan Pergeseran/Murni">
-        </div>
-        <div class="form-group">
           <label class="form-label">Sumber Dana</label>
           <select class="form-select" id="fSumberDana" onchange="updateKodeRekening()">
             <option>PAD</option><option>DBH CHT</option>
           </select>
         </div>
-        <div class="form-group span2">
+        <div class="form-group">
           <label class="form-label">PPTK</label>
           <select class="form-select" id="fPPTK">
             <option>TENGKO WOLOK, S.T.</option>
             <option>DIYAH WAHYUNI, S.E., M.M.</option>
             <option>SARI ANAS PUTRI, S.E.</option>
           </select>
+        </div>
+        <div class="form-group span2" id="fPaguInfo" style="display:none" aria-live="polite"></div>
+        <div class="form-group" id="fgMurni">
+          <label class="form-label">Pagu Murni (Rp) <span class="sg-ang-chip" id="chipMurni"></span></label>
+          <input class="form-input" id="fPaguMurni" type="number" min="0" placeholder="0">
+        </div>
+        <div class="form-group" id="fgPergeseran">
+          <label class="form-label">Pagu Pergeseran (Rp) <span class="sg-ang-chip" id="chipPergeseran"></span></label>
+          <input class="form-input" id="fPaguPergeseran" type="number" min="0" placeholder="Kosong = sama dengan Murni" oninput="sgAngDariPagu()">
+        </div>
+        <div class="form-group" id="fgPerubahan">
+          <label class="form-label">Pagu Perubahan (Rp) <span class="sg-ang-chip" id="chipPerubahan"></span></label>
+          <input class="form-input" id="fPaguPerubahan" type="number" min="0" placeholder="Kosong = sama dengan Pergeseran/Murni" oninput="sgAngDariPagu()">
+        </div>
+        <div class="form-group" id="fgSelisih" style="visibility:hidden">
+          <label class="form-label">Penyesuaian +/− (Rp)</label>
+          <input class="form-input" id="fPaguSelisih" type="number" step="any" placeholder="+ tambah / − kurangi" oninput="sgAngDariSelisih()">
+          <span id="fSelisihBadge" style="display:block;margin-top:4px;font-size:12px"></span>
         </div>
         <input type="hidden" id="fAnggaranId">
       </div>
@@ -25339,6 +25345,7 @@ function renderAnggaran() {
   <h2>📋 Input Anggaran</h2>
   <div style="display:flex;gap:8px">
     ${!isUserPPTK() ? `<button class="btn btn-blue" onclick="openModalAnggaran()">➕ Tambah Rekening</button>` : ''}
+    ${sgaCanUse() ? `<button class="btn btn-outline" onclick="sgaOpen()" title="Unggah Excel/CSV anggaran per tahapan">📥 Impor Excel</button>` : ''}
     <button class="btn btn-outline" onclick="cetakAnggaran()">🖨️ Cetak</button>
   </div>
 </div>
@@ -25454,6 +25461,7 @@ function openModalAnggaran(idx) {
   document.getElementById('fPaguPerubahan').value = '';
   document.getElementById('fAnggaranId').value = '';
   document.getElementById('modalAnggaranTitle').textContent = 'Tambah Data Anggaran';
+  sgAngReset();
 
   // Auto-set & lock PPTK field jika user adalah PPTK
   const fPPTKEl = document.getElementById('fPPTK');
@@ -25484,6 +25492,7 @@ function openModalAnggaran(idx) {
         document.getElementById('fPaguPerubahan').value = a.pagu_perubahan ?? '';
         document.getElementById('fSumberDana').value = a.sumber_dana;
         document.getElementById('fPPTK').value = a.pptk;
+        sgAngTerapkan(parseInt(document.getElementById('fAnggaranId').value), false);
       },50);
     },50);
   }
@@ -25543,6 +25552,7 @@ function updateKodeRekening() {
   } else {
     document.getElementById('fKodeRekening').value = '';
   }
+  sgAngCek();
 }
 
 async function saveAnggaran() {
@@ -25580,6 +25590,16 @@ async function saveAnggaran() {
     created_at: idx !== '' ? (STATE.anggaran[parseInt(idx)].created_at || new Date().toISOString()) : new Date().toISOString(),
   };
 
+  // Validasi nilai & jejak perubahan pagu (akuntabilitas)
+  if ([obj.pagu_murni, obj.pagu_pergeseran, obj.pagu_perubahan].some(v => v != null && v < 0)) { showToast('Pagu tidak boleh bernilai negatif','error'); return; }
+  if (idx !== '' && STATE.anggaran.some((a,i) => i !== parseInt(idx) && a.kode_rekening === kodeRek)) { showToast('Rekening dengan sumber dana yang sama sudah ada!','error'); return; }
+  const tpAktif = sgAngTahap();
+  const paguLama = idx !== '' ? getPagu(STATE.anggaran[parseInt(idx)], tpAktif) : null;
+  const paguBaru = getPagu(obj, tpAktif), realBerjalan = getRealisasiByRekening(kodeRek);
+  if (paguBaru < realBerjalan && !confirm('Pagu ' + tpAktif + ' (Rp ' + fmt(paguBaru) + ') lebih kecil dari realisasi tercatat (Rp ' + fmt(realBerjalan) + ').\nTetap simpan?')) return;
+  const jejak = (paguLama !== null && paguLama !== paguBaru)
+    ? ' — Pagu ' + tpAktif + ': Rp ' + fmt(paguLama) + ' → Rp ' + fmt(paguBaru) + ' (' + (paguBaru > paguLama ? '+' : '−') + 'Rp ' + fmt(Math.abs(paguBaru - paguLama)) + ')' : '';
+
   if (idx !== '') {
     STATE.anggaran[parseInt(idx)] = obj;
   } else {
@@ -25592,7 +25612,7 @@ async function saveAnggaran() {
   closeModal('modalAnggaran');
   showToast('Menyimpan...','success');
   if (sbClient) {
-    try { await saveAnggaranToSupabase(obj); showToast('Data anggaran disimpan ✅'); }
+    try { await saveAnggaranToSupabase(obj); showToast('Data anggaran disimpan ✅' + jejak); }
     catch(e) { showToast('Gagal simpan ke Supabase: '+e.message,'error'); }
   } else {
     showToast('Data anggaran disimpan (lokal) ✅');
@@ -33076,6 +33096,407 @@ async function sgImpSimpan(){
     else { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); } };
 })();
 
+
+// ============================================================================
+// INPUT ANGGARAN — pagu terisi otomatis per tahapan + impor Excel/CSV
+//  1) Form Tambah/Edit: bila rekening (Sub Kegiatan + Belanja + Sumber Dana) sudah ada di database,
+//     pagu tahapan sebelumnya tampil otomatis; tahapan aktif tinggal disesuaikan (tetap / tambah / kurang).
+//  2) Impor Excel/CSV per tahapan dengan template dari sistem (sudah berisi data tahapan sebelumnya).
+// Tidak ada perubahan skema database: memakai kolom pagu_murni / pagu_pergeseran / pagu_perubahan yang sudah ada.
+// ============================================================================
+(function(){
+  const st = document.createElement('style');
+  st.textContent = `
+  .sg-ang-chip{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.2px;vertical-align:middle;text-transform:none}
+  .sg-ang-chip.aktif{background:var(--c-primary);color:#fff}
+  .sg-ang-chip.kunci{background:var(--c-surface2);color:var(--c-text-muted);border:1px solid var(--c-border)}
+  .sg-ang-chip.lanjut{background:transparent;color:var(--c-text-muted);border:1px dashed var(--c-border)}
+  .form-group.sg-aktif .form-input{border-color:var(--c-primary);box-shadow:0 0 0 3px rgba(79,70,229,.16)}
+  .form-input.sg-kunci{background:var(--c-surface2);opacity:.78;cursor:not-allowed}
+  #sgAImp table{width:100%;border-collapse:collapse;font-size:12px}
+  #sgAImp th{position:sticky;top:0;background:var(--c-surface2);text-align:left;padding:6px 8px;font-size:11px;z-index:1}
+  #sgAImp td{padding:5px 8px;border-top:1px solid var(--c-border);vertical-align:top}
+  `;
+  document.head.appendChild(st);
+})();
+
+const SG_ANG_FIELD = { Murni:'fPaguMurni', Pergeseran:'fPaguPergeseran', Perubahan:'fPaguPerubahan' };
+const SG_ANG_KOL   = { Murni:'pagu_murni',  Pergeseran:'pagu_pergeseran',  Perubahan:'pagu_perubahan' };
+const SG_ANG_PREV  = { Murni:null, Pergeseran:'Murni', Perubahan:'Pergeseran' };
+
+// Tahapan aktif (hasil login) dinormalkan ke Murni / Pergeseran / Perubahan
+function sgAngTahap(){
+  const t = String(STATE.tahapan || 'Murni');
+  return /^pergeseran/i.test(t) ? 'Pergeseran' : /^perubahan/i.test(t) ? 'Perubahan' : 'Murni';
+}
+// Pagu efektif tahapan sebelumnya = titik awal untuk disesuaikan
+function sgAngDasar(row, t){
+  if (!row) return null;
+  return t === 'Pergeseran' ? getPagu(row, 'Murni') : t === 'Perubahan' ? getPagu(row, 'Pergeseran') : null;
+}
+const sgAngRp  = n => 'Rp ' + fmt(n);
+const sgAngEl  = id => document.getElementById(id);
+
+function sgAngTandaiAktif(){
+  const t = sgAngTahap();
+  ['Murni','Pergeseran','Perubahan'].forEach(k => {
+    const g = sgAngEl('fg' + k), c = sgAngEl('chip' + k); if (!g || !c) return;
+    g.classList.toggle('sg-aktif', k === t);
+    if (k === t) { c.textContent = 'Tahapan aktif'; c.className = 'sg-ang-chip aktif'; }
+  });
+}
+
+function sgAngReset(){
+  window._sgAng = null; window._sgAngAuto = false;
+  const info = sgAngEl('fPaguInfo'); if (info) { info.style.display = 'none'; info.innerHTML = ''; }
+  ['Murni','Pergeseran','Perubahan'].forEach(k => {
+    const f = sgAngEl(SG_ANG_FIELD[k]); if (!f) return;
+    f.readOnly = false; f.classList.remove('sg-kunci'); f.removeAttribute('title');
+    const g = sgAngEl('fg' + k); if (g) g.classList.remove('sg-aktif');
+    const c = sgAngEl('chip' + k); if (c) { c.textContent = ''; c.className = 'sg-ang-chip'; }
+  });
+  const gs = sgAngEl('fgSelisih'); if (gs) gs.style.visibility = 'hidden';
+  const si = sgAngEl('fPaguSelisih'); if (si) si.value = '';
+  const bd = sgAngEl('fSelisihBadge'); if (bd) bd.innerHTML = '';
+  sgAngTandaiAktif();
+}
+
+// Rekening sudah ada -> muat pagu tersimpan, kunci tahapan yang sudah berlalu, siapkan penyesuaian tambah/kurang
+function sgAngTerapkan(idx, prefill){
+  const row = STATE.anggaran[idx]; if (!row) return;
+  const t = sgAngTahap(), base = sgAngDasar(row, t);
+  if (prefill) {
+    sgAngEl('fAnggaranId').value = idx;
+    sgAngEl('modalAnggaranTitle').textContent = 'Lanjutkan Anggaran — Tahapan ' + t;
+    sgAngEl('fPaguMurni').value = row.pagu_murni || 0;
+    sgAngEl('fPaguPergeseran').value = row.pagu_pergeseran ?? '';
+    sgAngEl('fPaguPerubahan').value = row.pagu_perubahan ?? '';
+    if (!isUserPPTK() && row.pptk) { const p = sgAngEl('fPPTK'); if (p) p.value = row.pptk; }
+    window._sgAngAuto = true;
+  }
+  // tahapan aktif belum terisi -> tampilkan nilai tahapan sebelumnya agar tinggal disesuaikan
+  if (t !== 'Murni') { const f = sgAngEl(SG_ANG_FIELD[t]); if (f.value === '') f.value = base; }
+
+  // kunci tahapan yang sudah berlalu (Admin dapat membuka kunci)
+  const kunci = t === 'Murni' ? [] : t === 'Pergeseran' ? ['Murni'] : ['Murni','Pergeseran'];
+  kunci.forEach(k => {
+    const f = sgAngEl(SG_ANG_FIELD[k]); f.readOnly = true; f.classList.add('sg-kunci');
+    f.title = 'Dikunci: tahapan ' + k + ' sudah berlalu';
+    const c = sgAngEl('chip' + k); c.textContent = '🔒 Terkunci'; c.className = 'sg-ang-chip kunci';
+  });
+  ['Murni','Pergeseran','Perubahan'].forEach(k => {
+    if (kunci.includes(k) || k === t) return;
+    const c = sgAngEl('chip' + k); c.textContent = 'Tahap lanjut'; c.className = 'sg-ang-chip lanjut';
+  });
+  sgAngTandaiAktif();
+
+  const gs = sgAngEl('fgSelisih'); gs.style.visibility = t === 'Murni' ? 'hidden' : 'visible';
+  window._sgAng = { idx, t, base, real: getRealisasiByRekening(row.kode_rekening) };
+
+  const nilai = k => { const v = row[SG_ANG_KOL[k]]; return (v == null || v === '') ? (k === 'Murni' ? sgAngRp(0) : '<i>ikut ' + SG_ANG_PREV[k] + '</i>') : sgAngRp(v); };
+  const admin = STATE.user && STATE.user.role === 'admin';
+  const info = sgAngEl('fPaguInfo');
+  info.innerHTML = `<div style="border:1px solid var(--c-primary);background:var(--c-primary-light);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.6">
+    <div style="font-weight:700;color:var(--c-primary)">✅ Rekening sudah terdaftar — data tahapan sebelumnya dimuat otomatis</div>
+    <div>Pagu tersimpan: Murni <b>${nilai('Murni')}</b> · Pergeseran <b>${nilai('Pergeseran')}</b> · Perubahan <b>${nilai('Perubahan')}</b></div>
+    <div>${t === 'Murni'
+      ? 'Tahapan <b>Murni</b>: ubah Pagu Murni bila perlu.'
+      : `Tahapan <b>${t}</b>: nilai awal Pagu ${t} = <b>${sgAngRp(base)}</b> (dari ${SG_ANG_PREV[t]}). Biarkan bila anggaran tetap, atau isi <b>Penyesuaian (+/−)</b> bila bertambah/berkurang.`}</div>
+    <div style="color:var(--c-text-muted)">Realisasi tercatat saat ini: ${sgAngRp(window._sgAng.real)} — pagu tidak boleh lebih kecil dari angka ini.</div>
+    ${admin && kunci.length ? '<div style="margin-top:4px"><a href="#" style="color:var(--c-primary);font-weight:600" onclick="sgAngBukaKunci();return false">🔓 Buka kunci tahapan sebelumnya (Admin)</a></div>' : ''}
+  </div>`;
+  info.style.display = '';
+  sgAngHitung();
+}
+
+function sgAngBukaKunci(){
+  ['Murni','Pergeseran','Perubahan'].forEach(k => {
+    const f = sgAngEl(SG_ANG_FIELD[k]); if (!f || !f.readOnly) return;
+    f.readOnly = false; f.classList.remove('sg-kunci'); f.removeAttribute('title');
+    const c = sgAngEl('chip' + k); c.textContent = '🔓 Dibuka'; c.className = 'sg-ang-chip lanjut';
+  });
+  showToast('Kunci dibuka — perubahan tahapan sebelumnya akan ikut tersimpan', 'error');
+}
+
+// Hint untuk rekening yang belum ada pada tahapan Pergeseran/Perubahan
+function sgAngBaruInfo(){
+  const t = sgAngTahap(), info = sgAngEl('fPaguInfo'); if (!info) return;
+  if (t === 'Murni') { info.style.display = 'none'; info.innerHTML = ''; return; }
+  info.innerHTML = `<div style="border:1px dashed var(--c-border);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--c-text-muted)">
+    ℹ️ Rekening ini belum terdaftar. Anda di tahapan <b>${t}</b>: isi Pagu ${t}; biarkan Pagu Murni 0 bila rekening ini baru muncul pada tahapan ini.</div>`;
+  info.style.display = '';
+}
+
+// Dipanggil dari updateKodeRekening(): deteksi otomatis rekening yang sudah ada
+function sgAngCek(){
+  if (!sgAngEl('fPaguInfo')) return;
+  const idxField = sgAngEl('fAnggaranId').value;
+  if (idxField !== '' && !window._sgAngAuto) return;          // mode edit manual: jangan diganggu
+  const sk = sgAngEl('fSubKegiatan').value, bel = sgAngEl('fBelanja').value, sd = sgAngEl('fSumberDana').value;
+  let idx = -1;
+  if (sk && bel && sd) {
+    const kode = sk + '.' + bel + '.' + sd.replace(/\s+/g, '_');
+    idx = STATE.anggaran.findIndex(a => a.kode_rekening === kode);
+  }
+  if (idx === -1) {
+    if (window._sgAngAuto) {                                   // sebelumnya terdeteksi, kini kombinasi lain -> kembali ke mode tambah
+      sgAngReset();
+      sgAngEl('fAnggaranId').value = '';
+      sgAngEl('modalAnggaranTitle').textContent = 'Tambah Data Anggaran';
+      ['fPaguMurni','fPaguPergeseran','fPaguPerubahan'].forEach(i => sgAngEl(i).value = '');
+    }
+    if (sk && bel && sd) sgAngBaruInfo(); else { const info = sgAngEl('fPaguInfo'); info.style.display = 'none'; info.innerHTML = ''; }
+    return;
+  }
+  if (window._sgAngAuto && Number(idxField) === idx) return;   // rekening sama, tidak perlu muat ulang
+  if (window._sgAngAuto) sgAngReset();
+  sgAngTerapkan(idx, true);
+}
+
+// Lencana selisih (tetap / bertambah / berkurang) terhadap tahapan sebelumnya
+function sgAngHitung(){
+  const a = window._sgAng, bd = sgAngEl('fSelisihBadge'); if (!a || !bd || a.t === 'Murni') { if (bd) bd.innerHTML = ''; return; }
+  const f = sgAngEl(SG_ANG_FIELD[a.t]);
+  const v = f.value === '' ? a.base : (parseFloat(f.value) || 0), d = v - a.base;
+  const pct = a.base > 0 && d !== 0 ? ' (' + (d > 0 ? '+' : '−') + Math.abs(d / a.base * 100).toFixed(1).replace('.', ',') + '%)' : '';
+  let h = d === 0 ? '<span class="badge badge-blue">＝ Tetap</span>'
+        : d > 0 ? `<span class="badge badge-green">▲ Bertambah ${sgAngRp(d)}${pct}</span>`
+                : `<span class="badge badge-orange">▼ Berkurang ${sgAngRp(-d)}${pct}</span>`;
+  if (v < a.real) h += ` <span class="badge badge-red">⚠️ di bawah realisasi ${sgAngRp(a.real)}</span>`;
+  bd.innerHTML = h;
+}
+function sgAngDariSelisih(){
+  const a = window._sgAng; if (!a || a.t === 'Murni') return;
+  const s = sgAngEl('fPaguSelisih'), f = sgAngEl(SG_ANG_FIELD[a.t]);
+  if (s.value === '' || s.value === '-') { f.value = a.base; sgAngHitung(); return; }
+  const d = parseFloat(s.value); if (isNaN(d)) return;
+  let v = a.base + d;
+  if (v < 0) { v = 0; showToast('Pagu tidak boleh negatif — dibatasi sampai Rp 0', 'error'); }
+  f.value = v; sgAngHitung();
+}
+function sgAngDariPagu(){
+  const a = window._sgAng; if (!a || a.t === 'Murni') return;
+  const s = sgAngEl('fPaguSelisih'), f = sgAngEl(SG_ANG_FIELD[a.t]);
+  s.value = f.value === '' ? '' : (parseFloat(f.value) || 0) - a.base;
+  sgAngHitung();
+}
+
+// ============================================================================
+// IMPOR EXCEL / CSV ANGGARAN
+// ============================================================================
+function sgaCanUse(){ const r = STATE.user && STATE.user.role; return (r === 'admin' || r === 'input') && !isUserPPTK(); }
+function sgaClose(){ const m = document.getElementById('sgAImp'); if (m) m.remove(); document.removeEventListener('keydown', sgaEsc); window._sgaRaw = null; window._sgaOk = null; }
+function sgaEsc(e){ if (e.key === 'Escape') sgaClose(); }
+
+function sgaOpen(){
+  if (!sgaCanUse()) return showToast('Hanya Admin/Operator (non-PPTK) yang dapat mengimpor anggaran', 'error');
+  sgaClose(); window._sgaT = sgAngTahap();
+  const m = document.createElement('div'); m.id = 'sgAImp';
+  m.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,8,30,.55);backdrop-filter:blur(4px);display:grid;place-items:center;padding:16px';
+  const sel = 'padding:8px 10px;border:1px solid var(--c-border);border-radius:10px;background:var(--c-surface);color:var(--c-text)';
+  m.innerHTML = `<div style="background:var(--c-surface);color:var(--c-text);width:min(1040px,100%);max-height:92vh;overflow:auto;border-radius:18px;padding:20px 22px;box-shadow:0 30px 80px rgba(0,0,0,.4)" role="dialog" aria-label="Impor Excel Anggaran">
+    <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-family:var(--font-display)">📥 Impor Excel/CSV — Anggaran TA ${escHtml(STATE.tahun)}</h3><button class="btn btn-sm btn-outline" onclick="sgaClose()" aria-label="Tutup">✕</button></div>
+    <p id="sgaKet" style="font-size:12px;color:var(--c-text-muted);margin:6px 0 12px"></p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:12px">
+      <label style="font-size:12px">Tahapan anggaran yang diimpor<br>
+        <select id="sgaTahap" onchange="sgaGantiTahap(this.value)" style="${sel}">
+          ${['Murni','Pergeseran','Perubahan'].map(x => `<option ${x === window._sgaT ? 'selected' : ''}>${x}</option>`).join('')}
+        </select></label>
+      <button class="btn btn-sm btn-outline" onclick="sgaTemplate()">⬇️ Unduh Template Excel</button>
+      <label class="btn btn-sm btn-blue" style="cursor:pointer">📂 Pilih File (.xlsx / .csv)<input type="file" id="sgaFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="sgaBaca(this.files[0]); this.value=''"></label>
+    </div>
+    <div id="sgaHasil" style="font-size:13px;color:var(--c-text-muted)">Unduh template (sudah berisi rekening &amp; pagu tahapan sebelumnya), sesuaikan kolom pagu yang berubah, lalu pilih file untuk melihat pratinjau sebelum disimpan.</div></div>`;
+  document.body.appendChild(m); document.addEventListener('keydown', sgaEsc); sgaKet();
+}
+function sgaKet(){
+  const t = window._sgaT, el = document.getElementById('sgaKet'); if (!el) return;
+  const p = SG_ANG_PREV[t];
+  el.innerHTML = (t === 'Murni'
+    ? 'Tahapan <b>Murni</b>: isi kolom <b>Pagu Murni</b> untuk tiap rekening.'
+    : `Tahapan <b>${t}</b>: template memuat <b>Pagu ${p}</b> sebagai referensi dan kolom <b>Pagu ${t}</b> yang sudah terisi sama; ubah hanya yang bertambah/berkurang. Kolom Pagu ${t} yang dikosongkan = tidak berubah.`)
+    + ' Hanya kolom pagu tahapan terpilih yang diperbarui; tahapan lain, realisasi, dan anggaran kas tidak diubah. Rekening baru wajib mengisi PPTK.';
+}
+function sgaGantiTahap(t){ window._sgaT = t; sgaKet(); if (window._sgaRaw) sgaRender(); }
+
+async function sgaTemplate(){
+  try { await sgLoadXlsx(); } catch(e){ return showToast(e.message, 'error'); }
+  const t = window._sgaT, prev = SG_ANG_PREV[t];
+  const head = ['Kode Sub Kegiatan','Kode Belanja','Sumber Dana','Nama Belanja','PPTK'];
+  if (prev) head.push('Pagu ' + prev + ' (Referensi)');
+  head.push('Pagu ' + t);
+  if (prev) head.push('Selisih (Otomatis)');
+  const aoa = [head];
+  const data = STATE.anggaran.slice().sort((a, b) => String(a.kode_rekening).localeCompare(String(b.kode_rekening)));
+  data.forEach((a, i) => {
+    const r = i + 2, cur = getPagu(a, t), row = [a.kode_sub_kegiatan, a.kode_belanja, a.sumber_dana, a.nama_belanja, a.pptk];
+    if (prev) row.push(sgAngDasar(a, t));
+    row.push(cur);
+    if (prev) row.push({ t:'n', f:`IF(G${r}="","",G${r}-F${r})`, v: cur - sgAngDasar(a, t) });
+    aoa.push(row);
+  });
+  if (!data.length) {
+    const ex = ['4.01.01.2.06.0002','5.1.02.01.001.00024','PAD','CONTOH - hapus baris ini', (MASTER.pptk || [''])[0]];
+    if (prev) ex.push(0); ex.push(1000000); if (prev) ex.push({ t:'n', f:'IF(G2="","",G2-F2)', v:1000000 });
+    aoa.push(ex);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [(22), 22, 13, 52, 28].concat(prev ? [22, 20, 18] : [20]).map(w => ({ wch: w }));
+  const firstNum = 5, lastCol = head.length - 1;
+  for (let r = 1; r < aoa.length; r++) for (let c = firstNum; c <= lastCol; c++) { const cell = ws[XLSX.utils.encode_cell({ r, c })]; if (cell) cell.z = '#,##0'; }
+  ws['!autofilter'] = { ref: ws['!ref'] };
+  const wb = XLSX.utils.book_new(); wb.Workbook = { CalcPr: { fullCalcOnLoad: true } };
+  XLSX.utils.book_append_sheet(wb, ws, 'Anggaran');
+  const refSub = [['Kode Program','Kode Kegiatan','Kegiatan','Kode Sub Kegiatan','Sub Kegiatan']]
+    .concat(MASTER.programKegSubkeg.map(x => [x.kode_program, x.kode_kegiatan, x.kegiatan, x.kode_sub_kegiatan, x.sub_kegiatan]));
+  const w2 = XLSX.utils.aoa_to_sheet(refSub); w2['!cols'] = [12, 16, 44, 20, 70].map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, w2, 'Ref Sub Kegiatan');
+  const refBel = [['Kode Belanja','Nama Belanja']].concat(MASTER.belanja.map(x => [x.kode_belanja, x.nama_belanja]));
+  const w3 = XLSX.utils.aoa_to_sheet(refBel); w3['!cols'] = [24, 80].map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, w3, 'Ref Belanja');
+  const refLain = [['PPTK (isi persis seperti ini)','Sumber Dana']];
+  for (let i = 0; i < Math.max(MASTER.pptk.length, MASTER.sumberDana.length); i++) refLain.push([MASTER.pptk[i] || '', MASTER.sumberDana[i] || '']);
+  const w4 = XLSX.utils.aoa_to_sheet(refLain); w4['!cols'] = [36, 16].map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, w4, 'Ref PPTK & Dana');
+  const pet = [['Petunjuk Impor Anggaran — Tahapan ' + t],
+    ['1. Jangan mengubah nama kolom pada baris pertama sheet "Anggaran".'],
+    ['2. Rekening dikenali dari gabungan Kode Sub Kegiatan + Kode Belanja + Sumber Dana. Rekening yang sudah ada akan DIPERBARUI pada kolom Pagu ' + t + ' saja.'],
+    ['3. Rekening yang belum ada akan DIBUAT baru; kode harus ada di sheet Ref Sub Kegiatan / Ref Belanja dan kolom PPTK wajib diisi persis seperti sheet Ref PPTK & Dana.'],
+    ['4. Pagu berupa angka (tanpa "Rp"); 0 diperbolehkan. Pagu yang dikosongkan dianggap tidak berubah.'],
+    ['5. Sumber Dana: ' + MASTER.sumberDana.join(' / ') + '. Baris yang Nama Belanja-nya diawali "CONTOH" dilewati.'],
+    ['6. Kolom Referensi dan Selisih hanya informasi; tidak dibaca saat impor.'],
+    ['7. Format CSV: gunakan pemisah koma dan simpan dengan kolom yang sama seperti sheet "Anggaran".']];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pet), 'Petunjuk');
+  XLSX.writeFile(wb, 'template_anggaran_' + t.toLowerCase() + '_' + STATE.tahun + '.xlsx');
+}
+
+async function sgaBaca(file){
+  if (!file) return; const box = document.getElementById('sgaHasil'); box.textContent = 'Membaca file…';
+  try {
+    await sgLoadXlsx(); const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames.includes('Anggaran') ? 'Anggaran' : wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
+    if (!raw.length) return box.textContent = 'File kosong.';
+    window._sgaRaw = raw; sgaRender();
+  } catch(e){ box.innerHTML = '<span style="color:var(--c-danger)">Gagal membaca file: ' + escHtml(e.message) + '</span>'; }
+}
+
+function sgaPeta(headers, t){
+  const alias = { sub:['kodesubkegiatan','kodesubkeg','kdsubkegiatan','kodesub'], bel:['kodebelanja','kdbelanja','kodebel'], sd:['sumberdana','sd'], pptk:['pptk'],
+                  pagu:['pagu' + t.toLowerCase(), 'pagutahapanini', 'paguanggaran', 'pagu'] };
+  const peta = {};
+  headers.forEach(h => { const n = String(h).toLowerCase().replace(/[^a-z0-9]/g, ''); for (const k in alias) if (!peta[k] && alias[k].includes(n)) peta[k] = h; });
+  return peta;
+}
+
+function sgaAnalisa(){
+  const raw = window._sgaRaw || [], t = window._sgaT;
+  const peta = sgaPeta(Object.keys(raw[0] || {}), t);
+  const wajib = { sub:'Kode Sub Kegiatan', bel:'Kode Belanja', sd:'Sumber Dana', pagu:'Pagu ' + t };
+  const hilang = Object.keys(wajib).filter(k => !peta[k]).map(k => wajib[k]);
+  if (hilang.length) return { hilang, items: [], peta };
+  const sdList = MASTER.sumberDana || ['PAD', 'DBH CHT'], nsd = s => String(s || '').toUpperCase().replace(/[\s_]+/g, '');
+  const seen = new Set(), items = [];
+  raw.forEach((r, i) => {
+    if (!Object.values(r).some(v => String(v).trim() !== '')) return;
+    if (Object.values(r).some(v => /^contoh/i.test(String(v).trim()))) return;
+    const g = k => peta[k] ? r[peta[k]] : '';
+    const sub = String(g('sub')).trim(), bel = String(g('bel')).trim(), sdIn = String(g('sd')).trim();
+    const sd = sdList.find(x => nsd(x) === nsd(sdIn)) || '', rawPagu = g('pagu');
+    const it = { no: i + 2, sub, bel, sd, kodeRek: '', status: '', err: '', warn: '', ex: null, cur: null, base: null, baru: null, pptk: '', nama: '' };
+    if (!sub || !bel) it.err = 'Kode Sub Kegiatan / Kode Belanja kosong';
+    else if (!sd) it.err = 'Sumber Dana tidak dikenali (' + (sdIn || 'kosong') + ')';
+    else {
+      it.kodeRek = sub + '.' + bel + '.' + sd.replace(/\s+/g, '_');
+      it.ex = STATE.anggaran.find(a => a.kode_rekening === it.kodeRek) || null;
+      if (seen.has(it.kodeRek)) it.err = 'Duplikat di dalam file'; else seen.add(it.kodeRek);
+    }
+    if (!it.err) {
+      if (rawPagu === '' || rawPagu == null || String(rawPagu).trim() === '') it.status = 'kosong';
+      else { const v = sgParseNominal(rawPagu); if (!(v >= 0)) it.err = 'Pagu tidak valid (harus angka ≥ 0)'; else it.baru = v; }
+    }
+    if (!it.err && it.status !== 'kosong') {
+      if (it.ex) {
+        it.nama = it.ex.nama_belanja || ''; it.cur = getPagu(it.ex, t); it.base = sgAngDasar(it.ex, t);
+        it.status = it.baru === it.cur ? 'tetap' : 'ubah';
+        const real = getRealisasiByRekening(it.kodeRek);
+        if (it.status === 'ubah' && it.baru < real) it.warn = 'di bawah realisasi (Rp ' + fmt(real) + ')';
+      } else {
+        const pku = MASTER.programKegSubkeg.find(x => x.kode_sub_kegiatan === sub), bo = MASTER.belanja.find(x => x.kode_belanja === bel);
+        const pp = String(g('pptk')).trim(), ppm = MASTER.pptk.find(x => normNama(x) === normNama(pp));
+        if (!pku) it.err = 'Kode Sub Kegiatan tidak ada di master';
+        else if (!bo) it.err = 'Kode Belanja tidak ada di master';
+        else if (!ppm) it.err = 'Rekening baru: PPTK wajib diisi (' + MASTER.pptk.join(' / ') + ')';
+        else { it.status = 'baru'; it.pku = pku; it.bo = bo; it.pptk = ppm; it.nama = bo.nama_belanja; if (t !== 'Murni') it.warn = 'rekening baru — Pagu Murni diisi 0'; }
+      }
+    }
+    if (it.err) it.status = 'error';
+    items.push(it);
+  });
+  return { hilang: [], items, peta };
+}
+
+function sgaRender(){
+  const box = document.getElementById('sgaHasil'), t = window._sgaT, a = sgaAnalisa();
+  if (a.hilang.length) {
+    window._sgaOk = [];
+    return box.innerHTML = `<b style="color:var(--c-danger)">Kolom wajib tidak ditemukan:</b> ${a.hilang.map(escHtml).join(', ')}.<br>Pastikan tahapan yang dipilih (<b>${t}</b>) sama dengan template yang diunduh, atau gunakan tombol Unduh Template.`;
+  }
+  const items = a.items, ok = items.filter(x => x.status === 'baru' || x.status === 'ubah'); window._sgaOk = ok;
+  const cnt = s => items.filter(x => x.status === s).length;
+  const sebelum = STATE.anggaran.reduce((s, r) => s + getPagu(r, t), 0);
+  const sesudah = sebelum + ok.reduce((s, x) => s + (x.baru - (x.status === 'ubah' ? x.cur : 0)), 0), net = sesudah - sebelum;
+  const warna = { baru:'#0F766E', ubah:'#4F46E5', tetap:'#64748B', kosong:'#94A3B8', error:'#B91C1C' };
+  const label = { baru:'Baru', ubah:'Ubah', tetap:'Tetap', kosong:'Dilewati', error:'Error' };
+  const kartu = ['baru','ubah','tetap','kosong','error'].map(s => `<div style="flex:1;min-width:110px;border:1px solid var(--c-border);border-left:4px solid ${warna[s]};border-radius:10px;padding:8px 12px"><div style="font-size:11px;color:var(--c-text-muted)">${label[s]}</div><b style="font-size:16px">${cnt(s)}</b></div>`).join('');
+  const sel = x => x.status === 'ubah' ? x.baru - x.cur : x.status === 'baru' ? x.baru : null;
+  const baris = items.slice(0, 400).map(x => {
+    const d = sel(x), ds = d == null ? '' : (d > 0 ? '+' : d < 0 ? '−' : '') + fmt(Math.abs(d));
+    const ket = x.err ? '❌ ' + escHtml(x.err) : x.status === 'kosong' ? 'Pagu kosong → tidak berubah' : x.status === 'tetap' ? 'Sama dengan pagu saat ini' : '✅ Siap' + (x.warn ? ' · ⚠️ ' + escHtml(x.warn) : '');
+    return `<tr style="${x.status === 'error' ? 'background:rgba(185,28,28,.10)' : x.warn ? 'background:rgba(186,117,23,.12)' : ''}">
+      <td>${x.no}</td><td><span style="color:#fff;background:${warna[x.status]};padding:1px 8px;border-radius:99px;font-size:11px">${label[x.status]}</span></td>
+      <td style="font-family:var(--font-mono);font-size:11px">${escHtml(x.sub)}<br>${escHtml(x.bel)}</td><td style="max-width:260px">${escHtml(x.nama)}</td><td>${escHtml(x.sd)}</td>
+      <td style="text-align:right;font-family:var(--font-mono)">${x.cur == null ? '-' : fmt(x.cur)}</td>
+      <td style="text-align:right;font-family:var(--font-mono)">${x.baru == null ? '-' : fmt(x.baru)}</td>
+      <td style="text-align:right;font-family:var(--font-mono);color:${d > 0 ? '#0F766E' : d < 0 ? '#B45309' : 'inherit'}">${ds}</td><td style="font-size:11px">${ket}</td></tr>`;
+  }).join('');
+  box.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${kartu}</div>
+    <div style="font-size:12px;margin-bottom:8px">Total Pagu ${t}: <b>${sgAngRp(sebelum)}</b> → <b>${sgAngRp(sesudah)}</b> (${net > 0 ? '▲ +' : net < 0 ? '▼ −' : '＝ '}${sgAngRp(Math.abs(net))}) · Baris dibaca: <b>${items.length}</b> · Siap disimpan: <b style="color:#0F766E">${ok.length}</b></div>
+    <div style="max-height:360px;overflow:auto;border:1px solid var(--c-border);border-radius:10px"><table><thead><tr><th>Baris</th><th>Status</th><th>Sub Kegiatan / Belanja</th><th>Nama Belanja</th><th>Dana</th><th style="text-align:right">Pagu Saat Ini</th><th style="text-align:right">Pagu Baru</th><th style="text-align:right">Selisih</th><th>Keterangan</th></tr></thead><tbody>${baris}</tbody></table></div>
+    ${items.length > 400 ? '<div style="font-size:11px;color:var(--c-text-muted)">Menampilkan 400 baris pertama; seluruh baris tetap diproses.</div>' : ''}
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-outline" onclick="sgaClose()">Batal</button><button class="btn btn-blue" id="sgaGo" onclick="sgaSimpan()" ${ok.length ? '' : 'disabled'}>✅ Simpan ${ok.length} Rekening (${t})</button></div>`;
+}
+
+async function sgaSimpan(){
+  const ok = window._sgaOk || []; if (!ok.length) return;
+  const t = window._sgaT, kol = SG_ANG_KOL[t], btn = document.getElementById('sgaGo');
+  if (!confirm('Simpan ' + ok.length + ' rekening pada tahapan ' + t + '?\nHanya kolom pagu ' + t + ' yang diperbarui.')) return;
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  const now = new Date().toISOString();
+  const ubah = ok.filter(x => x.status === 'ubah').map(x => ({ ...x.ex, [kol]: x.baru }));
+  const baru = ok.filter(x => x.status === 'baru').map(x => ({
+    id: genId(), kode_program: x.pku.kode_program, program: x.pku.program || '', kode_kegiatan: x.pku.kode_kegiatan, kegiatan: x.pku.kegiatan || '',
+    kode_sub_kegiatan: x.sub, sub_kegiatan: x.pku.sub_kegiatan || '', kode_belanja: x.bel, nama_belanja: x.bo.nama_belanja || '', kode_rekening: x.kodeRek,
+    pagu_murni: t === 'Murni' ? x.baru : 0, pagu_pergeseran: t === 'Pergeseran' ? x.baru : null, pagu_perubahan: t === 'Perubahan' ? x.baru : null,
+    sumber_dana: x.sd, pptk: x.pptk, created_at: now }));
+  try {
+    if (sbClient) {
+      setSyncIndicator('syncing', 'Menyimpan...');
+      for (const daftar of [ubah, baru]) for (let i = 0; i < daftar.length; i += 200) {
+        const chunk = daftar.slice(i, i + 200).map(o => ({ ...o, tahun: STATE.tahun }));
+        const { error } = await sbClient.from('anggaran').upsert(chunk, { onConflict: 'id' });
+        if (error) throw error;
+      }
+      setSyncIndicator('synced', '✅ Tersimpan');
+    }
+    ubah.forEach(o => { const i = STATE.anggaran.findIndex(a => a.id === o.id); if (i > -1) STATE.anggaran[i] = o; });
+    baru.forEach(o => STATE.anggaran.push(o));
+    saveState(); sgaClose();
+    showToast(`Impor ${t} selesai ✅ — ${ubah.length} diperbarui, ${baru.length} rekening baru`); showPage('anggaran');
+  } catch(e){
+    setSyncIndicator('error', '⚠️ ' + (e.message || e));
+    showToast('Gagal impor: ' + (e.message || e) + ' — memuat ulang data; impor aman diulang (baris yang sudah tersimpan terbaca "Tetap")', 'error');
+    try { await loadDataFromSupabase(); } catch(_) {}
+    btn.disabled = false; btn.textContent = 'Coba lagi';
+    if (window._sgaRaw) sgaRender();
+  }
+}
 </script>
 </body>
 </html>
