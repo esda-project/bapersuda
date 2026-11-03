@@ -24971,7 +24971,7 @@ const PAGE_META = {
   realisasi: {title:'Input Realisasi',sub:'Catat transaksi realisasi belanja'},
   rekap: {title:'Rekap Realisasi',sub:'Rekapitulasi seluruh realisasi anggaran'},
   lra: {title:'Laporan LRA',sub:'Laporan Realisasi Anggaran resmi SKPD'},
-  kinerja: {title:'Laporan Kinerja',sub:'Analisis kinerja triwulanan/tahunan — slide PPT/PDF & infografis'},
+  kinerja: {title:'Laporan Kinerja',sub:'Analisis kinerja triwulanan/tahunan — kendala & solusi, slide PPT/PDF & infografis'},
   pengguna: {title:'Manajemen Pengguna',sub:'Kelola akun dan hak akses pengguna'},
   cari: {title:'Pencarian Data',sub:'Cari realisasi dan sisa anggaran berdasarkan kegiatan, sub kegiatan, atau belanja'},
   notaPPTK: {title:'Nota Dinas PPTK',sub:'Persiapan pengadaan barang/jasa — dari PPTK ke PPK'},
@@ -28059,6 +28059,434 @@ function buildKinerjaNarasi(data, pptkFilter) {
   return t;
 }
 
+// ========================================
+// KENDALA & ALTERNATIF SOLUSI (Laporan Kinerja)
+// A. Indikasi otomatis dari data  B. Catatan lapangan yang diisi tim (tersimpan di Supabase)
+// ========================================
+const KINERJA_KENDALA = { items: [], mode: 'server', editId: null, key: '' };
+
+const KIN_LIB_JENIS = {
+  perjadin: { label: 'Belanja Perjalanan Dinas',
+    kendala: 'Pelaksanaan perjalanan dinas bergantung pada jadwal undangan, rapat koordinasi, dan penugasan pimpinan sehingga waktu pelaksanaannya tidak dapat direncanakan merata sepanjang periode.',
+    solusi: ['Susun kalender perjalanan dinas per triwulan di awal periode dan sinkronkan dengan agenda pimpinan.', 'Ajukan SPD/SPPD dan selesaikan pertanggungjawaban segera setelah kegiatan selesai.', 'Manfaatkan rapat/koordinasi daring bila kehadiran fisik tidak wajib, dan geser anggaran yang tidak terpakai ke kegiatan prioritas.'] },
+  modal: { label: 'Belanja Modal',
+    kendala: 'Belanja modal memerlukan tahapan panjang (perencanaan teknis, HPS, pemilihan penyedia, kontrak, serah terima) sehingga pencairan umumnya baru terjadi di akhir pelaksanaan pekerjaan.',
+    solusi: ['Mulai persiapan dokumen perencanaan dan HPS sejak awal tahun, tanpa menunggu triwulan berjalan.', 'Gunakan e-katalog/pengadaan langsung bila nilai dan jenis barangnya memungkinkan agar proses lebih singkat.', 'Terapkan pembayaran termin sesuai progres dan pantau progres fisik secara berkala.', 'Koordinasikan sejak dini dengan unit pengadaan barang/jasa mengenai jadwal pemilihan penyedia.'] },
+  barang: { label: 'Belanja Barang/Bahan Habis Pakai',
+    kendala: 'Pengadaan barang/bahan habis pakai masih mengikuti kebutuhan sesaat dan ketersediaan penyedia, sehingga pembelian belum terjadwal merata.',
+    solusi: ['Susun rencana kebutuhan dan jadwal pembelian per triwulan berdasarkan pola pemakaian.', 'Gunakan pengadaan langsung/e-katalog agar proses pemesanan lebih singkat.', 'Lakukan pembelian terjadwal secara berkala (bulanan/triwulanan) agar realisasi merata.', 'Tinjau kebutuhan riil; anggaran yang berlebih diusulkan untuk digeser.'] },
+  jasa: { label: 'Belanja Jasa',
+    kendala: 'Belanja jasa (honorarium, narasumber, sewa, jasa lainnya) bergantung pada terbitnya SK/kontrak, jadwal kegiatan, dan kelengkapan administrasi penagihan sehingga pencairan sering tertunda.',
+    solusi: ['Terbitkan SK tim/kegiatan dan kontrak/SPK di awal periode.', 'Bakukan daftar periksa kelengkapan dokumen penagihan dan tetapkan batas waktu penyampaiannya oleh penyedia/penerima.', 'Ajukan pembayaran sesuai termin segera setelah prestasi pekerjaan terpenuhi.'] },
+  pemeliharaan: { label: 'Belanja Pemeliharaan',
+    kendala: 'Pemeliharaan (kendaraan, gedung, peralatan) dilakukan menurut kondisi dan kerusakan yang muncul serta bergantung pada ketersediaan bengkel/rekanan dan kelengkapan tagihan, sehingga realisasi tidak teratur.',
+    solusi: ['Susun jadwal pemeliharaan berkala (preventif) berdasarkan riwayat servis dan kondisi aset.', 'Tetapkan rekanan/bengkel melalui kontrak atau pengadaan langsung sejak awal tahun.', 'Catat dan proses tagihan pemeliharaan setiap bulan agar tidak menumpuk di akhir periode.'] },
+  pegawai: { label: 'Belanja Pegawai',
+    kendala: 'Belanja pegawai mengikuti ketentuan penggajian dan tambahan penghasilan, sehingga penyerapannya dipengaruhi formasi/mutasi pegawai dan bukan sepenuhnya oleh pelaksana kegiatan.',
+    solusi: ['Cocokkan data pegawai dan kebutuhan pembayaran tiap bulan dengan bagian kepegawaian/bendahara.', 'Proyeksikan sisa anggaran akibat mutasi atau jabatan kosong dan usulkan pergeseran bila diperlukan.'] },
+  lainnya: { label: 'Belanja Lainnya',
+    kendala: 'Rincian belanja pada kelompok ini belum terealisasi sesuai rencana karena jadwal pelaksanaan kegiatan atau kelengkapan dokumen pencairan belum terpenuhi.',
+    solusi: ['Konfirmasi jadwal pelaksanaan dengan PPTK dan pelaksana kegiatan.', 'Lengkapi dokumen pencairan dan ajukan segera setelah kegiatan selesai.', 'Usulkan pergeseran anggaran bila kegiatan tidak dapat dilaksanakan.'] },
+};
+
+// Contoh kendala umum — hanya bahan pilihan; tim memilih yang sesuai lalu menyuntingnya.
+const KIN_TEMPLATE_UMUM = [
+  { judul: 'Keterlambatan proses pengadaan barang/jasa',
+    kendala: 'Penyusunan spesifikasi teknis, HPS, pemilihan penyedia, dan penandatanganan kontrak memakan waktu lebih lama dari jadwal sehingga pelaksanaan kegiatan mundur.',
+    solusi: 'Mulai persiapan dokumen pengadaan sejak awal tahun anggaran\nGunakan e-katalog/pengadaan langsung untuk paket yang memenuhi syarat\nKoordinasi rutin dengan unit pengadaan barang/jasa untuk memantau jadwal paket' },
+  { judul: 'Keterbatasan SDM / rangkap tugas',
+    kendala: 'Jumlah pelaksana teknis terbatas dan sebagian pegawai merangkap tugas, sehingga penyelesaian kegiatan dan administrasi pencairan tidak optimal.',
+    solusi: 'Petakan beban kerja dan bagi tugas pelaksana secara merata\nTetapkan tim pendukung administrasi (bendahara pembantu/operator) untuk kegiatan padat\nIkutkan pegawai dalam bimbingan teknis pengelolaan keuangan dan pengadaan' },
+  { judul: 'Perubahan regulasi / kebijakan dan penyesuaian anggaran',
+    kendala: 'Perubahan kebijakan, petunjuk teknis, atau penyesuaian/efisiensi anggaran di tengah tahun menyebabkan kegiatan harus disesuaikan ulang sehingga pelaksanaan tertunda.',
+    solusi: 'Pantau regulasi dan surat edaran terbaru secara berkala\nSegera usulkan pergeseran/perubahan anggaran agar sesuai kebijakan baru\nSosialisasikan perubahan kepada seluruh PPTK dan pelaksana' },
+  { judul: 'Keterlambatan penyaluran dana / ketersediaan kas',
+    kendala: 'Penyaluran dana (khususnya sumber dana transfer) dan penjadwalan pencairan tidak selalu sesuai rencana kas sehingga kegiatan menunggu ketersediaan dana.',
+    solusi: 'Koordinasi dengan BPKAD mengenai jadwal penyaluran dan ketersediaan kas\nSusun rencana kas yang realistis dan perbarui bila jadwal kegiatan berubah\nPrioritaskan kegiatan yang dananya sudah tersedia' },
+  { judul: 'Ketergantungan pada pihak lain (OPD, instansi vertikal, mitra)',
+    kendala: 'Sebagian kegiatan memerlukan data, persetujuan, atau jadwal dari pihak lain sehingga waktu pelaksanaan tidak sepenuhnya dapat dikendalikan.',
+    solusi: 'Buat kesepakatan jadwal tertulis dengan pihak terkait sejak awal\nTunjuk narahubung tetap pada tiap pihak\nSiapkan alternatif jadwal/metode (misalnya daring) bila terjadi penundaan' },
+  { judul: 'Keterlambatan administrasi pertanggungjawaban dan penagihan',
+    kendala: 'Kelengkapan bukti, SPJ, dan tagihan penyedia diserahkan terlambat sehingga proses SPP/SPM/SP2D tertunda dan realisasi menumpuk di akhir periode.',
+    solusi: 'Tetapkan batas waktu penyerahan SPJ/tagihan paling lambat beberapa hari kerja setelah kegiatan\nGunakan daftar periksa kelengkapan dokumen pencairan\nLakukan verifikasi dokumen secara bertahap, tidak menunggu akhir periode' },
+  { judul: 'Perubahan prioritas dan kebutuhan mendesak',
+    kendala: 'Munculnya kegiatan prioritas atau kebutuhan mendesak dari pimpinan menyebabkan jadwal dan komposisi kegiatan yang telah direncanakan harus disesuaikan.',
+    solusi: 'Sediakan ruang fleksibilitas dalam jadwal kegiatan\nUsulkan pergeseran anggaran untuk kegiatan mendesak melalui mekanisme yang berlaku\nDokumentasikan perubahan prioritas sebagai dasar evaluasi' },
+  { judul: 'Kendala teknis dan kondisi eksternal',
+    kendala: 'Gangguan aplikasi/jaringan, ketersediaan penyedia, fluktuasi harga, atau kondisi cuaca menghambat pelaksanaan kegiatan sesuai jadwal.',
+    solusi: 'Siapkan jadwal cadangan untuk kegiatan yang peka terhadap kondisi eksternal\nCatat kendala teknis dan laporkan ke admin sistem sedini mungkin\nCari penyedia/alternatif cadangan untuk kebutuhan penting' },
+];
+
+function kinPeriodeKey() { return KINERJA_STATE.periode === 'tahunan' ? 'tahunan' : 'TW' + KINERJA_STATE.tw; }
+
+function kinBulanBerjalan() {
+  const now = new Date(), y = parseInt(STATE.tahun);
+  if (now.getFullYear() > y) return 12;
+  if (now.getFullYear() < y) return 0;
+  return now.getMonth() + 1;
+}
+
+function kinJenisBelanja(kode, nama) {
+  const k = String(kode || ''), n = String(nama || '').toLowerCase();
+  if (k.startsWith('5.2')) return 'modal';
+  if (k.startsWith('5.1.02.04') || /perjalanan dinas|perjadin/.test(n)) return 'perjadin';
+  if (k.startsWith('5.1.02.03') || /pemeliharaan|perawatan|servis/.test(n)) return 'pemeliharaan';
+  if (k.startsWith('5.1.01') || /gaji|tunjangan|tambahan penghasilan/.test(n)) return 'pegawai';
+  if (k.startsWith('5.1.02.02') || /jasa|honorarium|narasumber|sewa|konsultan/.test(n)) return 'jasa';
+  if (k.startsWith('5.1.02.01') || /alat tulis|bahan|makanan|minuman|cetak|bbm|bahan bakar/.test(n)) return 'barang';
+  return 'lainnya';
+}
+
+// Analisis otomatis: kembalikan daftar {sev, judul, uraian, solusi[]} berdasarkan data periode yang tampil.
+// Realisasi dihitung KUMULATIF (1 Januari s.d. akhir periode) agar sebanding dengan target proporsional.
+function buildKinerjaKendala(data) {
+  const out = [];
+  const y = STATE.tahun, awalTahun = `${y}-01-01`;
+  const kumMap = {};
+  STATE.realisasi.forEach(r => {
+    if (r.tanggal_sp2d && r.tanggal_sp2d >= awalTahun && r.tanggal_sp2d <= data.sampai)
+      kumMap[r.kode_rekening] = (kumMap[r.kode_rekening] || 0) + (Number(r.nominal) || 0);
+  });
+
+  const rows = [];
+  Object.values(data.programs).forEach(p => Object.values(p.kegiatan).forEach(k => Object.values(k.subkeg).forEach(sk =>
+    sk.belanja.forEach(b => {
+      const kum = kumMap[b.kode_rekening] || 0;
+      rows.push({ program: p.nama, subkeg: sk.nama, nama: b.nama, kode_rekening: b.kode_rekening, sumber_dana: b.sumber_dana || '-',
+        pagu: b.pagu, kum, sisa: b.pagu - kum, jenis: kinJenisBelanja(b.kode_rekening, b.nama) });
+    }))));
+  if (!rows.length) return out;
+
+  const bulanBerjalan = kinBulanBerjalan();
+  const ambang = Math.min(data.target, Math.round(bulanBerjalan / 12 * 100));
+  if (ambang <= 0) return out;
+
+  const totalPagu = rows.reduce((s, r) => s + r.pagu, 0);
+  const totalKum = rows.reduce((s, r) => s + r.kum, 0);
+  const kumPct = totalPagu > 0 ? totalKum / totalPagu * 100 : 0;
+  const hariIni = new Date().toISOString().slice(0, 10);
+  const tglAkhir = new Date(data.sampai < hariIni ? data.sampai : hariIni).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  const top = (arr, n) => arr.slice(0, n);
+  const daftar = arr => arr.map(r => `${trunc(r.nama, 45)}`).join('; ');
+
+  // 1. Penyerapan keseluruhan di bawah target proporsional
+  if (kumPct < ambang) {
+    const gap = ambang - kumPct;
+    out.push({ sev: gap >= 20 ? 'tinggi' : 'sedang', judul: 'Penyerapan anggaran belum mencapai target proporsional',
+      uraian: `Realisasi kumulatif s.d. ${tglAkhir} baru ${fmtPct(kumPct)} (Rp ${fmt(totalKum)}) dari pagu Rp ${fmt(totalPagu)}, di bawah target proporsional ${ambang}%. Selisih terhadap target sekitar Rp ${fmt(totalPagu * ambang / 100 - totalKum)}.`,
+      solusi: ['Tetapkan target realisasi bulanan per PPTK dan bahas dalam rapat evaluasi rutin (minimal sebulan sekali).', 'Prioritaskan kegiatan yang sudah siap dilaksanakan dan percepat proses pencairan (SPP/SPM/SP2D).', 'Perjelas pembagian tugas pelaksana untuk kegiatan yang tertunda agar jadwal dapat dikejar.', 'Bila ada anggaran yang tidak dapat dilaksanakan, usulkan pergeseran/perubahan anggaran melalui TAPD sebelum batas waktu yang berlaku.'] });
+  }
+
+  // 2. Realisasi di bawah rencana Anggaran Kas
+  try {
+    const store = getKasStore(STATE.tahapan || 'Murni') || {};
+    const endM = Math.min(parseInt(data.sampai.slice(5, 7)), bulanBerjalan);
+    let rencanaKas = 0;
+    rows.forEach(r => { const kas = store[r.kode_rekening] || {}; for (let m = 0; m < endM; m++) rencanaKas += Number(kas[m]) || 0; });
+    if (rencanaKas > 0 && totalKum < rencanaKas * 0.9) {
+      out.push({ sev: 'sedang', judul: 'Realisasi di bawah rencana Anggaran Kas',
+        uraian: `Realisasi kumulatif Rp ${fmt(totalKum)} baru ${fmtPct(totalKum / rencanaKas * 100)} dari rencana Anggaran Kas s.d. bulan ke-${endM} sebesar Rp ${fmt(rencanaKas)}, selisih Rp ${fmt(rencanaKas - totalKum)}. Hal ini menandakan jadwal pelaksanaan riil tidak sesuai dengan rencana kas yang disusun.`,
+        solusi: ['Evaluasi kembali rencana kas per rekening dan sesuaikan dengan jadwal pelaksanaan yang realistis.', 'Perbarui Anggaran Kas pada tahapan berjalan bila jadwal kegiatan berubah.', 'Pantau kesesuaian kas dan realisasi tiap bulan, lalu tindak lanjuti rekening yang selisihnya besar.'] });
+    }
+  } catch (e) { /* data kas tidak tersedia — lewati */ }
+
+  // 3. Rincian belanja yang belum terealisasi sama sekali
+  const nol = rows.filter(r => r.pagu > 0 && r.kum <= 0).sort((a, b) => b.pagu - a.pagu);
+  if (nol.length) {
+    const paguNol = nol.reduce((s, r) => s + r.pagu, 0);
+    out.push({ sev: totalPagu > 0 && paguNol / totalPagu >= 0.25 ? 'tinggi' : 'sedang', judul: 'Rincian belanja yang belum terealisasi',
+      uraian: `${nol.length} dari ${rows.length} rincian belanja (pagu Rp ${fmt(paguNol)}, ${fmtPct(totalPagu > 0 ? paguNol / totalPagu * 100 : 0)} dari total pagu) belum memiliki realisasi sama sekali. Terbesar: ${daftar(top(nol, 4))}.`,
+      solusi: ['Konfirmasi jadwal pelaksanaan setiap rincian dengan PPTK dan tetapkan tanggal pelaksanaan yang pasti.', 'Mulai proses pengadaan/administrasi paket-paket besar lebih awal.', 'Rincian yang tidak mungkin dilaksanakan diusulkan untuk digeser ke kegiatan yang siap dilaksanakan.'] });
+  }
+
+  // 4. Sub kegiatan dengan penyerapan rendah
+  const sub = {};
+  rows.forEach(r => { const k = r.program + '||' + r.subkeg; sub[k] = sub[k] || { nama: r.subkeg, pagu: 0, kum: 0 }; sub[k].pagu += r.pagu; sub[k].kum += r.kum; });
+  const subRendah = Object.values(sub).filter(s => s.pagu > 0 && s.kum / s.pagu * 100 < ambang * 0.6 && s.pagu - s.kum > 0)
+    .sort((a, b) => (b.pagu - b.kum) - (a.pagu - a.kum));
+  if (subRendah.length) {
+    out.push({ sev: 'sedang', judul: 'Sub kegiatan dengan penyerapan rendah',
+      uraian: `${subRendah.length} sub kegiatan penyerapannya jauh di bawah target. Sisa anggaran terbesar: ${top(subRendah, 3).map(s => `${trunc(s.nama, 50)} (${fmtPct(s.kum / s.pagu * 100)}, sisa Rp ${fmt(s.pagu - s.kum)})`).join('; ')}.`,
+      solusi: ['Lakukan telaah bersama PPTK untuk mengetahui penyebab spesifik tiap sub kegiatan (jadwal, dokumen, penyedia, atau perubahan kebutuhan).', 'Susun rencana aksi dengan tenggat dan penanggung jawab yang jelas untuk setiap sub kegiatan tersebut.', 'Pertimbangkan penyesuaian ruang lingkup atau pergeseran anggaran bila target tidak lagi realistis.'] });
+  }
+
+  // 5. Kendala menurut jenis belanja (memakai pustaka penjelasan + alternatif solusi per jenis)
+  const jenis = {};
+  rows.forEach(r => { const j = jenis[r.jenis] = jenis[r.jenis] || { pagu: 0, kum: 0, items: [] }; j.pagu += r.pagu; j.kum += r.kum; j.items.push(r); });
+  const totalSisa = Math.max(1, totalPagu - totalKum);
+  Object.entries(jenis).map(([k, v]) => ({ k, ...v, sisa: v.pagu - v.kum, pct: v.pagu > 0 ? v.kum / v.pagu * 100 : 0 }))
+    .filter(j => j.pagu > 0 && j.pct < ambang && j.sisa > 0 && j.sisa / totalSisa >= 0.1)
+    .sort((a, b) => b.sisa - a.sisa).slice(0, 3).forEach(j => {
+      const lib = KIN_LIB_JENIS[j.k] || KIN_LIB_JENIS.lainnya;
+      const contoh = daftar(top(j.items.filter(r => r.sisa > 0).sort((a, b) => b.sisa - a.sisa), 3));
+      out.push({ sev: 'sedang', judul: `${lib.label}: realisasi belum optimal`,
+        uraian: `${lib.kendala} Indikasi dari data: realisasi ${fmtPct(j.pct)} dari pagu Rp ${fmt(j.pagu)} (sisa Rp ${fmt(j.sisa)}), antara lain ${contoh}.`,
+        solusi: lib.solusi });
+    });
+
+  // 6. Realisasi melebihi pagu
+  const lebih = rows.filter(r => r.kum > r.pagu + 0.5);
+  if (lebih.length) {
+    out.push({ sev: 'tinggi', judul: 'Realisasi melebihi pagu pada sebagian rincian',
+      uraian: `${lebih.length} rincian belanja realisasinya melebihi pagu (total kelebihan Rp ${fmt(lebih.reduce((s, r) => s + (r.kum - r.pagu), 0))}), antara lain ${daftar(top(lebih, 3))}.`,
+      solusi: ['Periksa kemungkinan salah input kode rekening, nominal, atau pencatatan ganda pada rincian tersebut.', 'Bila memang melebihi pagu, usulkan pergeseran antarrekening agar pagu mencukupi.', 'Pastikan pengajuan SPP baru telah memeriksa sisa pagu rekening sebelum diproses.'] });
+  }
+
+  // 7. Realisasi menumpuk di akhir periode
+  const rekSet = new Set(rows.map(r => r.kode_rekening));
+  const perBulan = Array(12).fill(0);
+  STATE.realisasi.forEach(r => {
+    if (rekSet.has(r.kode_rekening) && r.tanggal_sp2d && r.tanggal_sp2d >= data.dari && r.tanggal_sp2d <= data.sampai)
+      perBulan[parseInt(r.tanggal_sp2d.slice(5, 7)) - 1] += Number(r.nominal) || 0;
+  });
+  const totalPeriode = perBulan.reduce((s, v) => s + v, 0);
+  if (totalPeriode > 0) {
+    const akhirIdx = parseInt(data.sampai.slice(5, 7)) - 1;
+    const tahunan = KINERJA_STATE.periode === 'tahunan';
+    const bagian = tahunan ? perBulan[9] + perBulan[10] + perBulan[11] : perBulan[akhirIdx];
+    const batas = tahunan ? 0.4 : 0.5;
+    if (bagian / totalPeriode > batas) {
+      out.push({ sev: 'sedang', judul: 'Realisasi menumpuk di akhir periode',
+        uraian: `${fmtPct(bagian / totalPeriode * 100)} realisasi pada periode ini terjadi ${tahunan ? 'pada Oktober–Desember' : 'di bulan terakhir periode'} (Rp ${fmt(bagian)} dari Rp ${fmt(totalPeriode)}). Penumpukan meningkatkan risiko keterlambatan dan kesalahan administrasi.`,
+        solusi: ['Jadwalkan pencairan secara merata per bulan sesuai rencana kas.', 'Ajukan SPP segera setelah prestasi pekerjaan selesai, jangan dikumpulkan di akhir periode.', 'Tetapkan batas waktu internal penyampaian dokumen pencairan kepada bendahara.'] });
+    }
+  }
+
+  // 8. Selisih antarsumber dana
+  const sd = {};
+  rows.forEach(r => { const o = sd[r.sumber_dana] = sd[r.sumber_dana] || { pagu: 0, kum: 0 }; o.pagu += r.pagu; o.kum += r.kum; });
+  const sdArr = Object.entries(sd).filter(([, v]) => v.pagu > 0).map(([n, v]) => ({ n, ...v, pct: v.kum / v.pagu * 100 }));
+  if (sdArr.length >= 2) {
+    const maks = Math.max(...sdArr.map(s => s.pct));
+    sdArr.filter(s => s.pct < ambang && maks - s.pct >= 15).forEach(s => {
+      out.push({ sev: 'sedang', judul: `Sumber dana ${s.n}: penyerapan tertinggal`,
+        uraian: `Sumber dana ${s.n} baru terserap ${fmtPct(s.pct)} dari pagu Rp ${fmt(s.pagu)}, sedangkan sumber dana lain mencapai ${fmtPct(maks)}. Dana yang terikat peruntukan umumnya menuntut kesesuaian dengan petunjuk teknis dan bergantung pada penyalurannya.`,
+        solusi: ['Koordinasikan dengan BPKAD/pengelola kas mengenai ketersediaan dan jadwal penyaluran dana.', 'Periksa kesesuaian kegiatan dengan peruntukan/petunjuk teknis dan lengkapi dokumen persyaratannya.', 'Dahulukan kegiatan bersumber dana ini dalam jadwal pelaksanaan.'] });
+    });
+  }
+
+  // 9. Risiko sisa anggaran akhir tahun
+  if (ambang >= 75 && kumPct < 100 && (KINERJA_STATE.periode === 'tahunan' || KINERJA_STATE.tw === 4)) {
+    out.push({ sev: kumPct < ambang ? 'tinggi' : 'info', judul: 'Risiko sisa anggaran (SiLPA) akhir tahun',
+      uraian: `Sisa pagu yang belum terealisasi Rp ${fmt(totalPagu - totalKum)} (${fmtPct(100 - kumPct)}) dengan waktu pelaksanaan yang tinggal sedikit.`,
+      solusi: ['Inventarisasi sisa anggaran per rekening dan pilah yang masih dapat dilaksanakan sebelum tutup tahun.', 'Perhatikan batas akhir pengajuan SPP/SPM tahun berjalan sesuai ketentuan BPKAD.', 'Anggaran yang tidak mungkin dilaksanakan segera diusulkan pergeserannya dan catat penyebabnya sebagai bahan evaluasi.'] });
+  }
+
+  const urut = { tinggi: 0, sedang: 1, info: 2 };
+  return out.sort((a, b) => urut[a.sev] - urut[b.sev]);
+}
+
+function kinSevBadge(sev) {
+  return sev === 'tinggi' ? '<span class="badge badge-red">Prioritas tinggi</span>'
+    : sev === 'sedang' ? '<span class="badge badge-orange">Perlu perhatian</span>'
+    : '<span class="badge badge-blue">Informasi</span>';
+}
+
+function kinKendalaAutoHtml(list) {
+  if (!list.length) return `<div style="font-size:12px;color:var(--c-text-muted);padding:10px 12px;background:var(--c-surface2);border-radius:8px">Tidak ditemukan indikasi kendala signifikan dari data pada periode ini; realisasi sudah sesuai atau melampaui target proporsional.</div>`;
+  const warna = { tinggi: 'var(--c-danger)', sedang: 'var(--c-warning)', info: 'var(--c-primary)' };
+  return list.map(it => `<div style="border:1px solid var(--c-border);border-left:4px solid ${warna[it.sev]};border-radius:8px;padding:12px 14px;margin-bottom:10px;background:var(--c-surface)">
+    <div style="margin-bottom:6px">${kinSevBadge(it.sev)} <b style="font-size:13px;margin-left:4px">${escHtml(it.judul)}</b></div>
+    <div style="font-size:12.5px;line-height:1.7;color:var(--c-text)">${escHtml(it.uraian)}</div>
+    <div style="font-size:12px;font-weight:700;margin:8px 0 2px;color:var(--c-text-muted)">Alternatif solusi:</div>
+    <ol style="margin:0;padding-left:20px;font-size:12.5px;line-height:1.7">${it.solusi.map(s => `<li>${escHtml(s)}</li>`).join('')}</ol>
+  </div>`).join('');
+}
+
+// ---------- Catatan lapangan (B) ----------
+function kinBolehEdit() { return !!(STATE.user && ['admin', 'input'].includes(STATE.user.role)); }
+function kinTabelHilang(e) { return /does not exist|schema cache|PGRST205|42P01/i.test((e && (e.code + ' ' + e.message)) || ''); }
+function kinLocalKey() { return 'sianggaranKinerjaKendala:' + STATE.tahun; }
+function kinLocalAll() { try { return JSON.parse(localStorage.getItem(kinLocalKey()) || '[]'); } catch (e) { return []; } }
+function kinLocalSave(arr) { try { localStorage.setItem(kinLocalKey(), JSON.stringify(arr)); } catch (e) {} }
+
+async function kinKendalaLoad() {
+  const key = kinPeriodeKey();
+  KINERJA_KENDALA.key = STATE.tahun + '|' + key;
+  KINERJA_KENDALA.mode = 'server';
+  if (sbClient && STATE.user) {
+    try {
+      const { data, error } = await sbClient.from('sg_kinerja_kendala').select('*')
+        .eq('tahun', STATE.tahun).eq('periode', key).order('created_at');
+      if (error) throw error;
+      KINERJA_KENDALA.items = data || [];
+      return;
+    } catch (e) {
+      console.error('kinKendalaLoad', e);
+      if (kinTabelHilang(e)) KINERJA_KENDALA.mode = 'lokal';
+      else { KINERJA_KENDALA.mode = 'error'; KINERJA_KENDALA.items = []; return; }
+    }
+  } else KINERJA_KENDALA.mode = 'lokal';
+  KINERJA_KENDALA.items = kinLocalAll().filter(i => i.periode === key);
+}
+
+function kinKendalaInit() {
+  const el = document.getElementById('kinKendalaManual');
+  if (!el) return;
+  el.innerHTML = '<div style="font-size:12px;color:var(--c-text-muted)">Memuat catatan…</div>';
+  kinKendalaLoad().then(kinKendalaRenderManual);
+}
+
+function kinKendalaItemsTampil() {
+  const f = normNama(KINERJA_STATE.pptk);
+  return (KINERJA_KENDALA.items || []).filter(i => !f || normNama(i.pptk) === f);
+}
+
+function kinProgramNames() {
+  const f = normNama(KINERJA_STATE.pptk);
+  return [...new Set(STATE.anggaran.filter(a => !f || normNama(a.pptk) === f).map(a => a.program).filter(Boolean))];
+}
+
+function kinKendalaRenderManual() {
+  const el = document.getElementById('kinKendalaManual');
+  if (!el) return;
+  const boleh = kinBolehEdit();
+  const items = kinKendalaItemsTampil();
+  const ed = KINERJA_KENDALA.editId ? KINERJA_KENDALA.items.find(i => i.id === KINERJA_KENDALA.editId) : null;
+  let info = '';
+  if (KINERJA_KENDALA.mode === 'lokal') info = `<div style="font-size:11.5px;padding:8px 10px;border-radius:6px;background:var(--c-warning-light);margin-bottom:10px">⚠️ Tabel <b>sg_kinerja_kendala</b> belum dibuat di Supabase, sehingga catatan hanya tersimpan di browser ini. Jalankan <b>07_kinerja_kendala.sql</b> agar catatan tersimpan di server dan terlihat semua pengguna.</div>`;
+  else if (KINERJA_KENDALA.mode === 'error') info = `<div style="font-size:11.5px;padding:8px 10px;border-radius:6px;background:var(--c-danger-light);margin-bottom:10px">❌ Catatan gagal dimuat dari server. Periksa koneksi lalu klik “Susun Laporan”.</div>`;
+
+  const daftar = items.length ? items.map((it, i) => `<div style="border:1px solid var(--c-border);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:var(--c-surface)">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+        <div style="font-size:11.5px;color:var(--c-text-muted)"><b>#${i + 1}</b> · ${escHtml(it.pptk || 'Rekap SKPD')}${it.program ? ' · ' + escHtml(trunc(it.program, 60)) : ''} · oleh ${escHtml(it.created_by || '-')}</div>
+        ${boleh && (STATE.user.role === 'admin' || it.created_by === STATE.user.username) ? `<div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="kinKendalaEdit('${it.id}')">✏️ Ubah</button><button class="btn btn-red btn-sm" onclick="kinKendalaHapus('${it.id}')">🗑️ Hapus</button></div>` : ''}
+      </div>
+      <div style="font-size:12.5px;line-height:1.7"><b>Kendala:</b> ${escHtml(it.kendala).replace(/\n/g, '<br>')}</div>
+      <div style="font-size:12px;font-weight:700;margin:6px 0 2px;color:var(--c-text-muted)">Alternatif solusi:</div>
+      <ol style="margin:0;padding-left:20px;font-size:12.5px;line-height:1.7">${String(it.solusi || '').split('\n').filter(s => s.trim()).map(s => `<li>${escHtml(s.trim())}</li>`).join('')}</ol>
+    </div>`).join('')
+    : `<div style="font-size:12px;color:var(--c-text-muted);padding:10px 12px;background:var(--c-surface2);border-radius:8px;margin-bottom:10px">Belum ada catatan kendala lapangan untuk periode ini${boleh ? '. Tambahkan melalui formulir di bawah.' : '.'}</div>`;
+
+  const progOpts = kinProgramNames().map(p => `<option value="${escHtml(p)}" ${ed && ed.program === p ? 'selected' : ''}>${escHtml(trunc(p, 90))}</option>`).join('');
+  const tplOpts = KIN_TEMPLATE_UMUM.map((t, i) => `<option value="${i}">${escHtml(t.judul)}</option>`).join('');
+  const form = boleh ? `<div style="border:1px dashed var(--c-border);border-radius:8px;padding:12px 14px;background:var(--c-surface2)">
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px">${ed ? '✏️ Ubah catatan' : '➕ Tambah kendala & solusi'}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-bottom:10px">
+        <select class="form-input" id="kinKTpl" onchange="kinKendalaPakaiTemplate()"><option value="">— Isi dari contoh kendala umum (opsional) —</option>${tplOpts}</select>
+        <select class="form-input" id="kinKProg"><option value="">— Terkait semua program —</option>${progOpts}</select>
+      </div>
+      <textarea class="form-input" id="kinKKendala" rows="3" style="width:100%;margin-bottom:8px" placeholder="Kendala yang dihadapi sehingga pelaksanaan kegiatan/realisasi anggaran belum maksimal">${ed ? escHtml(ed.kendala) : ''}</textarea>
+      <textarea class="form-input" id="kinKSolusi" rows="4" style="width:100%;margin-bottom:8px" placeholder="Alternatif solusi — tulis satu solusi per baris">${ed ? escHtml(ed.solusi) : ''}</textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-blue" onclick="kinKendalaSimpan()">💾 ${ed ? 'Simpan Perubahan' : 'Simpan Catatan'}</button>
+        ${ed ? '<button class="btn btn-outline" onclick="kinKendalaBatal()">Batal</button>' : ''}
+      </div>
+    </div>` : `<div style="font-size:11.5px;color:var(--c-text-muted)">Akun Anda hanya dapat melihat catatan; penambahan catatan dilakukan oleh Admin atau PPTK.</div>`;
+  el.innerHTML = info + daftar + form;
+}
+
+function kinKendalaPakaiTemplate() {
+  const i = document.getElementById('kinKTpl').value;
+  if (i === '') return;
+  const t = KIN_TEMPLATE_UMUM[parseInt(i)];
+  document.getElementById('kinKKendala').value = t.kendala;
+  document.getElementById('kinKSolusi').value = t.solusi;
+}
+
+function kinKendalaEdit(id) { KINERJA_KENDALA.editId = id; kinKendalaRenderManual(); document.getElementById('kinKKendala')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+function kinKendalaBatal() { KINERJA_KENDALA.editId = null; kinKendalaRenderManual(); }
+
+async function kinKendalaSimpan() {
+  if (!kinBolehEdit()) { showToast('Akun Anda tidak dapat menambah catatan', 'error'); return; }
+  const kendala = document.getElementById('kinKKendala').value.trim();
+  const solusi = document.getElementById('kinKSolusi').value.trim();
+  const program = document.getElementById('kinKProg').value;
+  if (!kendala) { showToast('Kendala wajib diisi', 'error'); return; }
+  if (!solusi) { showToast('Alternatif solusi wajib diisi', 'error'); return; }
+  const ed = KINERJA_KENDALA.editId ? KINERJA_KENDALA.items.find(i => i.id === KINERJA_KENDALA.editId) : null;
+  const pptkBaru = STATE.user.role === 'input' ? (STATE.user.pptk_nama || STATE.user.nama || '') : (KINERJA_STATE.pptk || '');
+  const row = {
+    id: ed ? ed.id : genId(), tahun: STATE.tahun, periode: kinPeriodeKey(),
+    pptk: ed ? (ed.pptk || '') : pptkBaru, program: program || '', kendala, solusi,
+    created_by: ed ? ed.created_by : STATE.user.username, updated_at: new Date().toISOString(),
+  };
+  if (!ed) row.created_at = row.updated_at;
+  let simpanLokal = KINERJA_KENDALA.mode === 'lokal';
+  if (!simpanLokal) {
+    const { error } = await sbClient.from('sg_kinerja_kendala').upsert(row, { onConflict: 'id' });
+    if (error) {
+      if (kinTabelHilang(error)) { KINERJA_KENDALA.mode = 'lokal'; simpanLokal = true; }
+      else { showToast('Gagal menyimpan: ' + (error.message || 'periksa koneksi'), 'error'); return; }
+    }
+  }
+  if (simpanLokal) {
+    const all = kinLocalAll().filter(i => i.id !== row.id); all.push(row); kinLocalSave(all);
+  }
+  const idx = KINERJA_KENDALA.items.findIndex(i => i.id === row.id);
+  if (idx >= 0) KINERJA_KENDALA.items[idx] = { ...KINERJA_KENDALA.items[idx], ...row }; else KINERJA_KENDALA.items.push(row);
+  KINERJA_KENDALA.editId = null;
+  kinKendalaRenderManual();
+  showToast(simpanLokal ? 'Catatan tersimpan di browser ini (tabel server belum dibuat)' : 'Catatan kendala tersimpan');
+}
+
+async function kinKendalaHapus(id) {
+  if (!confirm('Hapus catatan kendala ini?')) return;
+  if (KINERJA_KENDALA.mode !== 'lokal') {
+    const { error } = await sbClient.from('sg_kinerja_kendala').delete().eq('id', id);
+    if (error) { showToast('Gagal menghapus: ' + (error.message || 'periksa koneksi'), 'error'); return; }
+  } else kinLocalSave(kinLocalAll().filter(i => i.id !== id));
+  KINERJA_KENDALA.items = KINERJA_KENDALA.items.filter(i => i.id !== id);
+  if (KINERJA_KENDALA.editId === id) KINERJA_KENDALA.editId = null;
+  kinKendalaRenderManual();
+  showToast('Catatan dihapus');
+}
+
+// Gabungan A + B untuk ekspor PDF/PPTX: [{tipe, kendala, solusi[]}]
+function kinKendalaRows(data) {
+  const rows = buildKinerjaKendala(data).map(a => ({ tipe: 'Data', judul: a.judul, kendala: a.uraian, solusi: a.solusi }));
+  kinKendalaItemsTampil().forEach(i => rows.push({
+    tipe: 'Lapangan', judul: (i.program ? trunc(i.program, 70) : ''), kendala: i.kendala,
+    solusi: String(i.solusi || '').split('\n').map(s => s.trim()).filter(Boolean),
+  }));
+  return rows;
+}
+
+function kinKendalaSlidesHtml(rows, tglCetak) {
+  if (!rows.length) return '';
+  const per = 4, out = [];
+  for (let i = 0; i < rows.length; i += per) {
+    const chunk = rows.slice(i, i + per);
+    out.push(`<div class="slide">
+      <div class="kop">KENDALA &amp; ALTERNATIF SOLUSI</div>
+      <h2>⚠️ Kendala yang Dihadapi dan Alternatif Solusi${rows.length > per ? ` (${Math.floor(i / per) + 1}/${Math.ceil(rows.length / per)})` : ''}</h2>
+      <table><thead><tr><th class="center" style="width:34px">No</th><th style="width:48%">Kendala</th><th>Alternatif Solusi</th></tr></thead><tbody>
+      ${chunk.map((r, j) => `<tr>
+        <td class="center">${i + j + 1}</td>
+        <td style="font-size:11px;line-height:1.6;vertical-align:top">${r.judul ? `<b>${escHtml(r.judul)}</b><br>` : ''}${escHtml(r.kendala).replace(/\n/g, '<br>')}<br><span style="font-size:9px;color:#94a3b8">${r.tipe === 'Data' ? 'Indikasi dari data' : 'Catatan lapangan'}</span></td>
+        <td style="font-size:11px;line-height:1.6;vertical-align:top"><ul style="padding-left:16px">${r.solusi.map(s => `<li>${escHtml(s)}</li>`).join('')}</ul></td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="foot"><span>Bagian Perekonomian dan Sumber Daya Alam — Sekretariat Daerah Kota Batu</span><span>Dicetak ${tglCetak}</span></div>
+    </div>`);
+  }
+  return out.join('');
+}
+
+function kinKendalaPptxSlides(pres, rows, C) {
+  if (!rows.length) return;
+  const per = 5;
+  for (let i = 0; i < rows.length; i += per) {
+    const chunk = rows.slice(i, i + per);
+    const sl = pres.addSlide();
+    sl.addText('KENDALA & ALTERNATIF SOLUSI', { x: 0.6, y: 0.3, w: 12, h: 0.35, fontSize: 12, bold: true, color: C.BLUE });
+    sl.addText('Kendala yang Dihadapi dan Alternatif Solusi' + (rows.length > per ? ` (${Math.floor(i / per) + 1}/${Math.ceil(rows.length / per)})` : ''), { x: 0.6, y: 0.65, w: 12, h: 0.55, fontSize: 20, bold: true, color: C.DARK });
+    const head = ['No', 'Kendala', 'Alternatif Solusi'].map(h => ({ text: h, options: { bold: true, fill: { color: 'EFF4FB' }, fontSize: 10 } }));
+    const body = chunk.map((r, j) => {
+      const kRuns = [];
+      if (r.judul) kRuns.push({ text: r.judul, options: { bold: true, breakLine: true } });
+      kRuns.push({ text: r.kendala, options: { breakLine: true } });
+      kRuns.push({ text: '(' + (r.tipe === 'Data' ? 'Indikasi dari data' : 'Catatan lapangan') + ')', options: { fontSize: 8, color: '94A3B8' } });
+      return [
+        { text: String(i + j + 1), options: { fontSize: 9, align: 'center', valign: 'top' } },
+        { text: kRuns, options: { fontSize: 9, valign: 'top' } },
+        { text: r.solusi.map((s, k) => ({ text: '• ' + s, options: { breakLine: k < r.solusi.length - 1 } })), options: { fontSize: 9, valign: 'top' } },
+      ];
+    });
+    sl.addTable([head, ...body], { x: 0.5, y: 1.3, w: 12.3, colW: [0.5, 5.4, 6.4], border: { type: 'solid', color: 'E2E8F0', pt: 0.5 }, autoPage: false });
+  }
+}
+
 function svgDonutKinerja(pct, size) {
   size = size || 150;
   const r = size/2 - 16, c = size/2, circ = 2*Math.PI*r;
@@ -28096,6 +28524,7 @@ function svgBarKinerja(items, opts) {
 
 function renderKinerja() {
   const pptkOptions = MASTER.pptk.map(p=>`<option value="${p}" ${KINERJA_STATE.pptk===p?'selected':''}>${p}</option>`).join('');
+  setTimeout(kinKendalaInit, 0);
   return `
 <div class="page-header">
   <h2>📈 Laporan Kinerja</h2>
@@ -28143,7 +28572,9 @@ function refreshKinerja() {
   KINERJA_STATE.periode = document.getElementById('kinPeriode').value;
   KINERJA_STATE.tw = parseInt(document.getElementById('kinTW').value) || 1;
   KINERJA_STATE.pptk = document.getElementById('kinPPTK').value;
+  KINERJA_KENDALA.editId = null;
   document.getElementById('kinerjaContent').innerHTML = buildKinerjaContent();
+  kinKendalaInit();
 }
 
 function buildKinerjaContent() {
@@ -28198,6 +28629,14 @@ function buildKinerjaContent() {
 <div class="section-card" style="padding:16px;margin-bottom:14px">
   <div style="font-size:12px;font-weight:700;color:var(--c-text-muted);margin-bottom:8px">REALISASI PER SUMBER DANA</div>
   ${svgBarKinerja(sdArr, {padL:140})}
+</div>
+<div class="section-card" style="padding:16px;margin-bottom:14px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:var(--c-text-muted)">⚠️ KENDALA YANG DIHADAPI &amp; ALTERNATIF SOLUSI — ${data.label}</div>
+  <div style="font-size:12px;color:var(--c-text-muted);margin-bottom:14px;line-height:1.6">Hal-hal yang menyebabkan pelaksanaan program/kegiatan dan realisasi anggaran belum maksimal, beserta alternatif solusi yang dapat ditempuh.</div>
+  <div style="font-size:12px;font-weight:700;margin-bottom:8px">A. Indikasi kendala berdasarkan data aplikasi</div>
+  ${kinKendalaAutoHtml(buildKinerjaKendala(data))}
+  <div style="font-size:12px;font-weight:700;margin:18px 0 8px">B. Kendala lapangan &amp; alternatif solusi (diisi tim)</div>
+  <div id="kinKendalaManual"><div style="font-size:12px;color:var(--c-text-muted)">Memuat catatan…</div></div>
 </div>
 <div class="table-wrap">
   <div class="table-toolbar"><h4>Rincian Program → Kegiatan → Sub Kegiatan → Belanja</h4></div>
@@ -28322,6 +28761,7 @@ function cetakKinerja() {
     </div>
     <div class="foot"><span>Bagian Perekonomian dan Sumber Daya Alam — Sekretariat Daerah Kota Batu</span><span>Dicetak ${tglCetak}</span></div>
   </div>
+  ${kinKendalaSlidesHtml(kinKendalaRows(data), tglCetak)}
   ${tableSlides}`;
 
   const w = window.open('', '_blank', 'width=1200,height=850,scrollbars=yes');
@@ -28419,6 +28859,9 @@ async function unduhKinerjaPPTX() {
     x:6.9, y:1.5, w:5.8, h:5.4, barDir:'col', chartColors:[C_BLUE,'CBD5E1'],
     showValue:false, catAxisLabelFontSize:9, showLegend:true, legendPos:'b',
   });
+
+  // Slide Kendala & Alternatif Solusi
+  kinKendalaPptxSlides(pres, kinKendalaRows(data), { BLUE: C_BLUE, DARK: C_DARK });
 
   // Slide per Program: tabel rincian
   progArr.forEach(p => {
