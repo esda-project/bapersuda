@@ -23916,6 +23916,9 @@ svg rect.sg-svgpart{transform-box:fill-box;transform-origin:50% 100%}
       <div class="nav-item" onclick="showPage('pengguna')" id="nav-pengguna" data-label="Pengguna">
         <span class="icon">👥</span> Pengguna
       </div>
+      <div class="nav-item" onclick="showPage('riwayat')" id="nav-riwayat" data-label="Riwayat Aktivitas" style="display:none">
+        <span class="icon">🕘</span> Riwayat Aktivitas
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div class="sidebar-meta">
@@ -24912,6 +24915,8 @@ function updateSidebar() {
   if (adminSection && adminSection.classList.contains('nav-section')) {
     adminSection.style.display = isAdmin ? '' : 'none';
   }
+  const navRiwayat = document.getElementById('nav-riwayat');
+  if (navRiwayat) navRiwayat.style.display = isAdmin ? '' : 'none';
 
   // Menu Nota Dinas: admin, input, kpa
   const canNota = isAdmin || isInput || isKPA;
@@ -25000,6 +25005,7 @@ const PAGE_META = {
   lra: {title:'Laporan LRA',sub:'Laporan Realisasi Anggaran resmi SKPD'},
   kinerja: {title:'Laporan Kinerja',sub:'Analisis kinerja triwulanan/tahunan — kendala & solusi, slide PPT/PDF & infografis'},
   pengguna: {title:'Manajemen Pengguna',sub:'Kelola akun dan hak akses pengguna'},
+  riwayat: {title:'Riwayat Aktivitas',sub:'Jejak siapa menambah, mengubah, dan menghapus data anggaran, realisasi & anggaran kas'},
   cari: {title:'Pencarian Data',sub:'Cari realisasi dan sisa anggaran berdasarkan kegiatan, sub kegiatan, atau belanja'},
   notaPPTK: {title:'Nota Dinas PPTK',sub:'Persiapan pengadaan barang/jasa — dari PPTK ke PPK'},
   notaPPK:  {title:'Nota Dinas PPK',sub:'Pelaksanaan pengadaan barang/jasa — dari PPK ke Pejabat Pengadaan'},
@@ -25009,6 +25015,10 @@ function showPage(page) {
   // Guard: halaman Pengguna hanya untuk admin
   if (page === 'pengguna' && STATE.user && STATE.user.role !== 'admin') {
     showToast('Akses ditolak. Halaman Pengguna hanya untuk Administrator.', 'error');
+    return;
+  }
+  if (page === 'riwayat' && STATE.user && STATE.user.role !== 'admin') {
+    showToast('Akses ditolak. Riwayat Aktivitas hanya untuk Administrator.', 'error');
     return;
   }
   // Guard: Nota PPTK hanya admin & input
@@ -25038,6 +25048,7 @@ function showPage(page) {
     lra: renderLRA,
     kinerja: renderKinerja,
     pengguna: renderPengguna,
+    riwayat: renderRiwayat,
     cari: renderCari,
     notaPPTK: renderNotaPPTK,
     notaPPK:  renderNotaPPK,
@@ -34087,6 +34098,129 @@ async function sgaSimpan(){
     btn.disabled = false; btn.textContent = 'Coba lagi';
     if (window._sgaRaw) sgaRender();
   }
+}
+
+// ============================================================================
+// RIWAYAT AKTIVITAS — jejak tambah / ubah / hapus (dibaca dari tabel sianggaran_riwayat)
+// Pencatatan dilakukan TRIGGER di database (lihat 08_riwayat_aktivitas.sql), bukan oleh aplikasi,
+// sehingga tidak bisa dilewati. Hanya Administrator yang dapat membuka menu ini.
+// ============================================================================
+const SG_RW_TABEL = { anggaran:'Anggaran', realisasi:'Realisasi', kas_anggaran:'Anggaran Kas' };
+const SG_RW_AKSI  = { INSERT:['Tambah','badge-green'], UPDATE:['Ubah','badge-blue'], DELETE:['Hapus','badge-red'] };
+const SG_RW_KOL   = { pagu_murni:'Pagu Murni', pagu_pergeseran:'Pagu Pergeseran', pagu_perubahan:'Pagu Perubahan', nominal:'Nominal',
+  kode_rekening:'Kode Rekening', kode_sub_kegiatan:'Sub Kegiatan', kode_belanja:'Belanja', sumber_dana:'Sumber Dana', pptk:'PPTK',
+  uraian:'Uraian', tanggal:'Tanggal', tanggal_sp2d:'Tanggal SP2D', tahapan:'Tahapan', bulan:'Bulan', deleted_at:'Dihapus (soft)' };
+window._sgRw = { rows: [], f: { tabel:'', aksi:'', user:'', q:'', dari:'', sampai:'' }, error: '', loading: true };
+
+function sgRwNilai(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'number') return fmt(v);
+  const t = String(v);
+  if (/^-?\d+(\.\d+)?$/.test(t) && t.replace(/\D/g,'').length >= 4) return fmt(Number(t));
+  return t.length > 48 ? t.slice(0, 45) + '…' : t;
+}
+function sgRwRingkas(r) {
+  const lama = r.data_lama || {}, baru = r.data_baru || {};
+  if (r.aksi === 'UPDATE') {
+    const kol = (r.kolom_berubah || []).filter(k => k !== 'created_at');
+    if (!kol.length) return '<i>perubahan teknis</i>';
+    return kol.map(k => `<div><span style="color:var(--c-text-muted)">${escHtml(SG_RW_KOL[k] || k)}:</span> ${escHtml(sgRwNilai(lama[k]))} <b>→</b> <b>${escHtml(sgRwNilai(baru[k]))}</b></div>`).join('');
+  }
+  const d = r.aksi === 'INSERT' ? baru : lama;
+  if (r.tabel === 'anggaran')
+    return `Pagu M ${escHtml(sgRwNilai(d.pagu_murni))} · G ${escHtml(sgRwNilai(d.pagu_pergeseran))} · P ${escHtml(sgRwNilai(d.pagu_perubahan))}<br><span style="color:var(--c-text-muted)">${escHtml(d.sumber_dana || '')} · ${escHtml(d.pptk || '')}</span>`;
+  if (r.tabel === 'realisasi')
+    return `Nominal ${escHtml(sgRwNilai(d.nominal))}<br><span style="color:var(--c-text-muted)">${escHtml(sgRwNilai(d.uraian))} · SP2D ${escHtml(sgRwNilai(d.tanggal_sp2d))}</span>`;
+  return `${escHtml(d.tahapan || '')} bulan ${escHtml(sgRwNilai(d.bulan))}: ${escHtml(sgRwNilai(d.nominal))}`;
+}
+
+function renderRiwayat() {
+  setTimeout(sgRwMuat, 0);
+  const f = window._sgRw.f;
+  const op = (v, t, cur) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
+  return `
+<div class="page-header">
+  <h2>🕘 Riwayat Aktivitas</h2>
+  <div style="display:flex;gap:8px"><button class="btn btn-outline" onclick="sgRwMuat()">🔄 Muat Ulang</button></div>
+</div>
+<div class="section-card" style="padding:12px 14px;margin-bottom:12px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+    <div><div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px">DATA</div>
+      <select class="form-input" style="width:100%" onchange="sgRwSet('tabel',this.value)">${op('', 'Semua', f.tabel)}${op('anggaran','Anggaran',f.tabel)}${op('realisasi','Realisasi',f.tabel)}${op('kas_anggaran','Anggaran Kas',f.tabel)}</select></div>
+    <div><div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px">AKSI</div>
+      <select class="form-input" style="width:100%" onchange="sgRwSet('aksi',this.value)">${op('', 'Semua', f.aksi)}${op('INSERT','Tambah',f.aksi)}${op('UPDATE','Ubah',f.aksi)}${op('DELETE','Hapus',f.aksi)}</select></div>
+    <div><div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px">PENGGUNA (username)</div>
+      <input class="form-input" style="width:100%" value="${escHtml(f.user)}" placeholder="mis. admin" onchange="sgRwSet('user',this.value)"></div>
+    <div><div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px">KODE REKENING / BELANJA</div>
+      <input class="form-input" style="width:100%" value="${escHtml(f.q)}" placeholder="mis. 5.1.02.01.004.00036" onchange="sgRwSet('q',this.value)"></div>
+    <div><div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px">DARI TANGGAL</div>
+      <input type="date" class="form-input" style="width:100%" value="${escHtml(f.dari)}" onchange="sgRwSet('dari',this.value)"></div>
+    <div><div style="font-size:10.5px;font-weight:600;color:var(--c-text-muted);margin-bottom:4px">SAMPAI TANGGAL</div>
+      <input type="date" class="form-input" style="width:100%" value="${escHtml(f.sampai)}" onchange="sgRwSet('sampai',this.value)"></div>
+  </div>
+</div>
+<div class="section-card" style="padding:0">
+  <div id="sgRwHasil" style="padding:14px">Memuat riwayat…</div>
+</div>`;
+}
+
+function sgRwSet(k, v) { window._sgRw.f[k] = (v || '').trim(); sgRwMuat(); }
+
+async function sgRwMuat() {
+  const box = document.getElementById('sgRwHasil'); if (!box) return;
+  if (!sbClient) { box.innerHTML = 'Riwayat memerlukan koneksi Supabase.'; return; }
+  box.textContent = 'Memuat riwayat…';
+  const f = window._sgRw.f;
+  let q = sbClient.from('sianggaran_riwayat').select('*').order('waktu', { ascending: false }).limit(500);
+  if (f.tabel)  q = q.eq('tabel', f.tabel);
+  if (f.aksi)   q = q.eq('aksi', f.aksi);
+  if (f.user)   q = q.ilike('username', '%' + f.user.replace(/[%,]/g, '') + '%');
+  if (f.q)      q = q.ilike('kode_rekening', '%' + f.q.replace(/[%,]/g, '') + '%');
+  if (f.dari)   q = q.gte('waktu', f.dari + 'T00:00:00+07:00');
+  if (f.sampai) q = q.lte('waktu', f.sampai + 'T23:59:59+07:00');
+  const { data, error } = await q;
+  if (error) {
+    const belum = /sianggaran_riwayat|relation|does not exist|schema cache/i.test(error.message || '');
+    box.innerHTML = belum
+      ? `<b>Fitur riwayat belum dipasang di database.</b><br>Jalankan <code>08_riwayat_aktivitas.sql</code> di Supabase &gt; SQL Editor, lalu klik Muat Ulang.<br><span style="color:var(--c-text-muted);font-size:11px">${escHtml(error.message || '')}</span>`
+      : `<b style="color:var(--c-danger)">Gagal memuat riwayat:</b> ${escHtml(error.message || '')}`;
+    return;
+  }
+  window._sgRw.rows = data || [];
+  sgRwTampil();
+}
+
+function sgRwTampil() {
+  const box = document.getElementById('sgRwHasil'); if (!box) return;
+  const rows = window._sgRw.rows;
+  if (!rows.length) { box.innerHTML = '<div style="padding:8px;color:var(--c-text-muted)">Belum ada aktivitas yang tercatat untuk filter ini. Riwayat mulai tercatat sejak 08_riwayat_aktivitas.sql dijalankan.</div>'; return; }
+  const baris = rows.map(r => {
+    const [lbl, kls] = SG_RW_AKSI[r.aksi] || [r.aksi, 'badge-blue'];
+    const wkt = new Date(r.waktu).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'medium' });
+    const bisaBatal = ['anggaran', 'realisasi'].includes(r.tabel);
+    return `<tr>
+      <td style="white-space:nowrap;font-size:11.5px">${escHtml(wkt)}</td>
+      <td><b>${escHtml(r.nama || r.username || '-')}</b><br><span style="font-size:11px;color:var(--c-text-muted)">${escHtml(r.username || '')}${r.role ? ' · ' + escHtml(r.role) : ''}</span></td>
+      <td><span class="badge ${kls}">${lbl}</span><br><span style="font-size:11px;color:var(--c-text-muted)">${escHtml(SG_RW_TABEL[r.tabel] || r.tabel)}</span></td>
+      <td style="font-family:var(--font-mono);font-size:11px;word-break:break-all">${escHtml(r.kode_rekening || '-')}<br><span style="color:var(--c-text-muted)">TA ${escHtml(r.tahun || '-')}</span></td>
+      <td style="font-size:12px">${sgRwRingkas(r)}</td>
+      <td>${bisaBatal ? `<button class="btn btn-sm btn-outline" title="Kembalikan ke kondisi sebelum aktivitas ini" onclick="sgRwBatal(${Number(r.id)})">↩️ Batalkan</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `<div style="font-size:11px;color:var(--c-text-muted);margin-bottom:8px">Menampilkan ${rows.length} aktivitas terbaru${rows.length >= 500 ? ' (dibatasi 500 — persempit dengan filter)' : ''}. Waktu dalam WIB.</div>
+    <div class="table-scroll"><table><thead><tr><th>Waktu</th><th>Pengguna</th><th>Aksi</th><th>Kode Rekening</th><th>Perubahan</th><th style="width:100px"></th></tr></thead><tbody>${baris}</tbody></table></div>`;
+}
+
+async function sgRwBatal(id) {
+  const r = (window._sgRw.rows || []).find(x => Number(x.id) === Number(id)); if (!r) return;
+  const uraian = r.aksi === 'UPDATE' ? 'mengembalikan nilai ke kondisi SEBELUM perubahan itu'
+               : r.aksi === 'INSERT' ? 'MENGHAPUS baris yang ditambahkan' : 'MENGEMBALIKAN baris yang dihapus';
+  if (!confirm('Batalkan aktivitas #' + id + ' (' + (SG_RW_AKSI[r.aksi] || [r.aksi])[0] + ' ' + (SG_RW_TABEL[r.tabel] || r.tabel) + ')?\n\nTindakan ini ' + uraian + '.\nPembatalan juga tercatat di riwayat.')) return;
+  const { data, error } = await sbClient.rpc('sg_riwayat_batalkan', { p_id: id });
+  if (error) { showToast('Gagal membatalkan: ' + sgAngPesanDb(error), 'error'); return; }
+  showToast(data || 'Aktivitas dibatalkan ✅');
+  try { await loadDataFromSupabase(); } catch (_) {}
+  sgRwMuat();
 }
 </script>
 </body>
