@@ -24324,7 +24324,8 @@ function showToast(msg, type='success') {
   const t = document.getElementById('toast');
   t.innerHTML = (type==='success'?'✅':'❌') + ' ' + msg;
   t.className = 'show';
-  setTimeout(() => t.className = '', 2500);
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.className = '', type==='success' ? 2500 : 7000);
 }
 
 // ========================================
@@ -24545,12 +24546,38 @@ async function loadDataFromSupabase() {
   }
 }
 
-async function saveAnggaranToSupabase(obj) {
+// Pesan galat database yang mudah dipahami (foreign key = rekening sudah dipakai tabel lain)
+function sgAngPesanDb(e) {
+  const m = (e && e.message) ? e.message : String(e);
+  if (/foreign key|_fkey/i.test(m)) {
+    const tabel = /realisasi_anggaran_fkey|on table "realisasi"/i.test(m) ? 'Realisasi'
+                : /kas_anggaran/i.test(m) ? 'Anggaran Kas' : 'tabel lain';
+    return 'Rekening ini sudah dipakai oleh data ' + tabel + ', sehingga kode rekening/baris tidak bisa diubah atau dihapus. ' +
+           'Untuk koreksi nominal, cukup ubah pagu tanpa mengganti Sub Kegiatan / Belanja / Sumber Dana. (Detail: ' + m + ')';
+  }
+  return m;
+}
+
+async function saveAnggaranToSupabase(obj, isEdit, kodeRekLama) {
   if (!sbClient) return;
   setSyncIndicator('syncing', 'Menyimpan...');
-  const row = {...obj, tahun: STATE.tahun};
-  const { error } = await sbClient.from('anggaran').upsert(row, {onConflict: 'id'});
-  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  if (isEdit) {
+    // EDIT: UPDATE kolom non-kunci saja. 'tahun' TIDAK dikirim ulang dan kode_rekening hanya dikirim bila
+    // memang berubah, supaya baris yang sudah dipakai Realisasi / Anggaran Kas tidak ditolak foreign key.
+    const { id, ...kolom } = obj;
+    delete kolom.tahun;
+    if (kodeRekLama && kolom.kode_rekening === kodeRekLama) delete kolom.kode_rekening;
+    const { data, error } = await sbClient.from('anggaran').update(kolom).eq('id', id).select('id');
+    if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+    if (!data || !data.length) {
+      const { error: e2 } = await sbClient.from('anggaran').insert({...obj, tahun: STATE.tahun});
+      if (e2) { setSyncIndicator('error', '⚠️ ' + e2.message); throw e2; }
+    }
+  } else {
+    const row = {...obj, tahun: STATE.tahun};
+    const { error } = await sbClient.from('anggaran').insert(row);
+    if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  }
   setSyncIndicator('synced', '✅ Tersimpan');
 }
 
@@ -25534,7 +25561,9 @@ function openModalAnggaran(idx) {
         document.getElementById('fPaguMurni').value = a.pagu_murni||0;
         document.getElementById('fPaguPergeseran').value = a.pagu_pergeseran ?? '';
         document.getElementById('fPaguPerubahan').value = a.pagu_perubahan ?? '';
-        document.getElementById('fSumberDana').value = a.sumber_dana;
+        const sdEl = document.getElementById('fSumberDana');
+        if (a.sumber_dana && ![...sdEl.options].some(o => o.value === a.sumber_dana)) sdEl.add(new Option(a.sumber_dana, a.sumber_dana));
+        sdEl.value = a.sumber_dana;
         document.getElementById('fPPTK').value = a.pptk;
         sgAngTerapkan(parseInt(document.getElementById('fAnggaranId').value), false);
       },50);
@@ -25553,11 +25582,13 @@ async function hapusAnggaran(id) {
   if (!confirm('Hapus rekening belanja ini?')) return;
   const i = STATE.anggaran.findIndex(a => a.id === id);
   if (i === -1) { showToast('Data tidak ditemukan (mungkin sudah dihapus)','error'); return; }
+  const nReal = STATE.realisasi.filter(r => r.kode_rekening === STATE.anggaran[i].kode_rekening).length;
+  if (nReal > 0) { showToast('Tidak bisa dihapus: rekening ini sudah memiliki ' + nReal + ' data Realisasi. Hapus/pindahkan realisasinya lebih dulu, atau koreksi saja nominal pagunya.','error'); return; }
+  if (sbClient) {
+    try { await deleteAnggaranFromSupabase(id); } catch(e) { showToast('Gagal hapus: '+sgAngPesanDb(e),'error'); return; }
+  }
   STATE.anggaran.splice(i,1);
   saveState();
-  if (sbClient) {
-    try { await deleteAnggaranFromSupabase(id); } catch(e) { showToast('Gagal hapus: '+e.message,'error'); return; }
-  }
   showToast('Data anggaran dihapus');
   showPage('anggaran');
 }
@@ -25610,8 +25641,13 @@ async function saveAnggaran() {
 
   const pku = MASTER.programKegSubkeg.find(r=>r.kode_sub_kegiatan===sk);
   const belObj = MASTER.belanja.find(b=>b.kode_belanja===bel);
+  if (!sd) { showToast('Sumber Dana belum dipilih','error'); return; }
   const sdSuffix = sd.replace(/\s+/g,'_');
-  const kodeRek = sk + '.' + bel + '.' + sdSuffix;
+  const rowLama = idx !== '' ? STATE.anggaran[parseInt(idx)] : null;
+  // Bila Sub Kegiatan, Belanja & Sumber Dana TIDAK diubah, kode_rekening tersimpan dipakai apa adanya
+  // (data lama bisa berformat berbeda). Mengubah kode_rekening sembarangan = ditolak foreign key bila sudah ada realisasi.
+  const pilihanSama = !!rowLama && rowLama.kode_sub_kegiatan === sk && rowLama.kode_belanja === bel && rowLama.sumber_dana === sd;
+  const kodeRek = pilihanSama ? rowLama.kode_rekening : (sk + '.' + bel + '.' + sdSuffix);
 
   const obj = {
     id: idx !== '' ? STATE.anggaran[parseInt(idx)].id : genId(),
@@ -25637,6 +25673,16 @@ async function saveAnggaran() {
   // Validasi nilai & jejak perubahan pagu (akuntabilitas)
   if ([obj.pagu_murni, obj.pagu_pergeseran, obj.pagu_perubahan].some(v => v != null && v < 0)) { showToast('Pagu tidak boleh bernilai negatif','error'); return; }
   if (idx !== '' && STATE.anggaran.some((a,i) => i !== parseInt(idx) && a.kode_rekening === kodeRek)) { showToast('Rekening dengan sumber dana yang sama sudah ada!','error'); return; }
+  if (rowLama && kodeRek !== rowLama.kode_rekening) {
+    const nReal = STATE.realisasi.filter(r => r.kode_rekening === rowLama.kode_rekening).length;
+    const adaKas = [STATE.kasAnggaran, STATE.kasAnggaranPergeseran, STATE.kasAnggaranPerubahan]
+      .some(st => st && st[rowLama.kode_rekening] && Object.values(st[rowLama.kode_rekening]).some(v => Number(v) !== 0));
+    if (nReal > 0 || adaKas) {
+      showToast('Sub Kegiatan / Belanja / Sumber Dana tidak bisa diganti: rekening ' + rowLama.kode_rekening + ' sudah dipakai ' +
+        (nReal > 0 ? nReal + ' data Realisasi' : 'Anggaran Kas') + '. Kembalikan pilihan seperti semula dan ubah nominal pagunya saja.','error');
+      return;
+    }
+  }
   const tpAktif = sgAngTahap();
   const paguLama = idx !== '' ? getPagu(STATE.anggaran[parseInt(idx)], tpAktif) : null;
   const paguBaru = getPagu(obj, tpAktif), realBerjalan = getRealisasiByRekening(kodeRek);
@@ -25644,6 +25690,7 @@ async function saveAnggaran() {
   const jejak = (paguLama !== null && paguLama !== paguBaru)
     ? ' — Pagu ' + tpAktif + ': Rp ' + fmt(paguLama) + ' → Rp ' + fmt(paguBaru) + ' (' + (paguBaru > paguLama ? '+' : '−') + 'Rp ' + fmt(Math.abs(paguBaru - paguLama)) + ')' : '';
 
+  const kodeRekLama = rowLama ? rowLama.kode_rekening : null;
   if (idx !== '') {
     STATE.anggaran[parseInt(idx)] = obj;
   } else {
@@ -25656,8 +25703,12 @@ async function saveAnggaran() {
   closeModal('modalAnggaran');
   showToast('Menyimpan...','success');
   if (sbClient) {
-    try { await saveAnggaranToSupabase(obj); showToast('Data anggaran disimpan ✅' + jejak); }
-    catch(e) { showToast('Gagal simpan ke Supabase: '+e.message,'error'); }
+    try { await saveAnggaranToSupabase(obj, idx !== '', kodeRekLama); showToast('Data anggaran disimpan ✅' + jejak); }
+    catch(e) {
+      showToast('Gagal simpan, perubahan DIBATALKAN: '+sgAngPesanDb(e),'error');
+      // tampilan jangan menyimpang dari database: muat ulang dari Supabase
+      try { await loadDataFromSupabase(); } catch(_) {}
+    }
   } else {
     showToast('Data anggaran disimpan (lokal) ✅');
   }
