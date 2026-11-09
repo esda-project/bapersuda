@@ -24500,13 +24500,37 @@ async function sbFetchAll(table, filterFn, orderCols) {
   return { data: hasil, error: null };
 }
 
+// Muat baris AKTIF saja. Database memakai trigger hapus-lunak (c_softdel): DELETE hanya menandai kolom
+// deleted_at, barisnya tidak hilang. Karena itu baris ber-deleted_at WAJIB disaring saat memuat data.
+// Bila suatu tabel tidak punya kolom deleted_at, otomatis dimuat tanpa saringan itu.
+async function sbFetchAllAktif(table, filterFn, orderCols) {
+  const r = await sbFetchAll(table, q => filterFn(q).is('deleted_at', null), orderCols);
+  if (r.error && /deleted_at/i.test(r.error.message || '')) return sbFetchAll(table, filterFn, orderCols);
+  return r;
+}
+
+// Hapus 1 baris & PASTIKAN benar-benar terhapus di server. Dua kondisi dianggap berhasil:
+//  (a) server mengembalikan baris yang terhapus (hapus keras), atau
+//  (b) DELETE dibatalkan trigger hapus-lunak (0 baris) tetapi baris kini bertanda deleted_at / sudah tak terlihat.
+// Selain itu (mis. ditolak RLS) -> error, sehingga data tidak pura-pura terhapus.
+async function sgHapusBaris(table, id) {
+  const { data, error } = await sbClient.from(table).delete().eq('id', id).select('id');
+  if (error) throw error;
+  if (data && data.length) return true;
+  let cek = await sbClient.from(table).select('id,deleted_at').eq('id', id).maybeSingle();
+  if (cek.error && /deleted_at/i.test(cek.error.message || '')) cek = await sbClient.from(table).select('id').eq('id', id).maybeSingle();
+  if (cek.error) throw cek.error;
+  if (!cek.data || cek.data.deleted_at) return true;
+  throw new Error('Data TIDAK terhapus di server (ditolak izin/RLS). Hubungi admin sistem.');
+}
+
 async function loadDataFromSupabase() {
   if (!sbClient) return false;
   setSyncIndicator('syncing', 'Memuat data...');
   try {
     const [angRes, realRes, kasRes, pengRes] = await Promise.all([
-      sbFetchAll('anggaran', q => q.eq('tahun', STATE.tahun), ['id']),
-      sbFetchAll('realisasi', q => q.eq('tahun', STATE.tahun), ['id']),
+      sbFetchAllAktif('anggaran', q => q.eq('tahun', STATE.tahun), ['id']),
+      sbFetchAllAktif('realisasi', q => q.eq('tahun', STATE.tahun), ['id']),
       sbFetchAll('kas_anggaran', q => q.eq('tahun', STATE.tahun).is('deleted_at', null), ['kode_rekening','tahapan','bulan']),
       sbClient.from('sianggaran_profiles').select('*').order('nama'),
     ]);
@@ -24587,14 +24611,8 @@ async function saveAnggaranToSupabase(obj, isEdit, kodeRekLama) {
 async function deleteAnggaranFromSupabase(id) {
   if (!sbClient) return;
   setSyncIndicator('syncing', 'Menghapus...');
-  // .select('id') -> server mengembalikan baris yang BENAR-BENAR terhapus. Bila kosong, penghapusan
-  // diblokir RLS/izin (Supabase TIDAK mengirim error untuk kasus ini) sehingga data akan muncul lagi saat login ulang.
-  const { data, error } = await sbClient.from('anggaran').delete().eq('id', id).select('id');
-  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
-  if (!data || !data.length) {
-    const e0 = new Error('Data TIDAK terhapus di server (ditolak izin/RLS atau sudah tidak ada). Jalankan 11_perbaiki_hapus_realisasi.sql di Supabase, lalu coba lagi.');
-    setSyncIndicator('error', '⚠️ Gagal hapus'); throw e0;
-  }
+  try { await sgHapusBaris('anggaran', id); }
+  catch(e) { setSyncIndicator('error', '⚠️ Gagal hapus'); throw e; }
   setSyncIndicator('synced', '✅ Dihapus');
 }
 
@@ -24620,13 +24638,8 @@ async function saveRealisasiToSupabase(obj) {
 async function deleteRealisasiFromSupabase(id) {
   if (!sbClient) return;
   setSyncIndicator('syncing', 'Menghapus...');
-  // .select('id') -> hanya baris yang benar-benar terhapus di server yang dikembalikan (lihat catatan di anggaran).
-  const { data, error } = await sbClient.from('realisasi').delete().eq('id', id).select('id');
-  if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
-  if (!data || !data.length) {
-    const e0 = new Error('Data TIDAK terhapus di server (ditolak izin/RLS atau sudah tidak ada). Jalankan 11_perbaiki_hapus_realisasi.sql di Supabase, lalu coba lagi.');
-    setSyncIndicator('error', '⚠️ Gagal hapus'); throw e0;
-  }
+  try { await sgHapusBaris('realisasi', id); }
+  catch(e) { setSyncIndicator('error', '⚠️ Gagal hapus'); throw e; }
   setSyncIndicator('synced', '✅ Dihapus');
 }
 
@@ -28502,9 +28515,8 @@ async function kinKendalaSimpan() {
 async function kinKendalaHapus(id) {
   if (!confirm('Hapus catatan kendala ini?')) return;
   if (KINERJA_KENDALA.mode !== 'lokal') {
-    const { data: terhapus, error } = await sbClient.from('sg_kinerja_kendala').delete().eq('id', id).select('id');
-    if (error) { showToast('Gagal menghapus: ' + (error.message || 'periksa koneksi'), 'error'); return; }
-    if (!terhapus || !terhapus.length) { showToast('Catatan tidak terhapus di server (ditolak izin/RLS).', 'error'); return; }
+    try { await sgHapusBaris('sg_kinerja_kendala', id); }
+    catch (e) { showToast('Gagal menghapus: ' + (e.message || 'periksa koneksi'), 'error'); return; }
   } else kinLocalSave(kinLocalAll().filter(i => i.id !== id));
   KINERJA_KENDALA.items = KINERJA_KENDALA.items.filter(i => i.id !== id);
   if (KINERJA_KENDALA.editId === id) KINERJA_KENDALA.editId = null;
