@@ -24587,8 +24587,14 @@ async function saveAnggaranToSupabase(obj, isEdit, kodeRekLama) {
 async function deleteAnggaranFromSupabase(id) {
   if (!sbClient) return;
   setSyncIndicator('syncing', 'Menghapus...');
-  const { error } = await sbClient.from('anggaran').delete().eq('id', id);
+  // .select('id') -> server mengembalikan baris yang BENAR-BENAR terhapus. Bila kosong, penghapusan
+  // diblokir RLS/izin (Supabase TIDAK mengirim error untuk kasus ini) sehingga data akan muncul lagi saat login ulang.
+  const { data, error } = await sbClient.from('anggaran').delete().eq('id', id).select('id');
   if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  if (!data || !data.length) {
+    const e0 = new Error('Data TIDAK terhapus di server (ditolak izin/RLS atau sudah tidak ada). Jalankan 11_perbaiki_hapus_realisasi.sql di Supabase, lalu coba lagi.');
+    setSyncIndicator('error', '⚠️ Gagal hapus'); throw e0;
+  }
   setSyncIndicator('synced', '✅ Dihapus');
 }
 
@@ -24614,8 +24620,13 @@ async function saveRealisasiToSupabase(obj) {
 async function deleteRealisasiFromSupabase(id) {
   if (!sbClient) return;
   setSyncIndicator('syncing', 'Menghapus...');
-  const { error } = await sbClient.from('realisasi').delete().eq('id', id);
+  // .select('id') -> hanya baris yang benar-benar terhapus di server yang dikembalikan (lihat catatan di anggaran).
+  const { data, error } = await sbClient.from('realisasi').delete().eq('id', id).select('id');
   if (error) { setSyncIndicator('error', '⚠️ ' + error.message); throw error; }
+  if (!data || !data.length) {
+    const e0 = new Error('Data TIDAK terhapus di server (ditolak izin/RLS atau sudah tidak ada). Jalankan 11_perbaiki_hapus_realisasi.sql di Supabase, lalu coba lagi.');
+    setSyncIndicator('error', '⚠️ Gagal hapus'); throw e0;
+  }
   setSyncIndicator('synced', '✅ Dihapus');
 }
 
@@ -27451,11 +27462,17 @@ function editRealisasi(i) { openModalRealisasi(i); }
 
 async function hapusRealisasi(i) {
   if (!confirm('Hapus transaksi ini?')) return;
-  const id = STATE.realisasi[i].id;
-  STATE.realisasi.splice(i,1); saveState();
+  const target = STATE.realisasi[i];
+  if (!target) { showToast('Data tidak ditemukan (mungkin sudah dihapus)','error'); return; }
+  const id = target.id;
+  // Hapus di server DULU & pastikan berhasil; baru dibuang dari tampilan. Jika gagal, data tetap tampil (tidak menipu).
   if (sbClient) {
-    try { await deleteRealisasiFromSupabase(id); } catch(e) { showToast('Gagal hapus: '+e.message,'error'); return; }
+    try { await deleteRealisasiFromSupabase(id); }
+    catch(e) { showToast('Gagal hapus: '+e.message,'error'); return; }
   }
+  const j = STATE.realisasi.findIndex(r => r.id === id);
+  if (j > -1) STATE.realisasi.splice(j,1);
+  saveState();
   showToast('Transaksi dihapus'); showPage('realisasi');
 }
 
@@ -28485,8 +28502,9 @@ async function kinKendalaSimpan() {
 async function kinKendalaHapus(id) {
   if (!confirm('Hapus catatan kendala ini?')) return;
   if (KINERJA_KENDALA.mode !== 'lokal') {
-    const { error } = await sbClient.from('sg_kinerja_kendala').delete().eq('id', id);
+    const { data: terhapus, error } = await sbClient.from('sg_kinerja_kendala').delete().eq('id', id).select('id');
     if (error) { showToast('Gagal menghapus: ' + (error.message || 'periksa koneksi'), 'error'); return; }
+    if (!terhapus || !terhapus.length) { showToast('Catatan tidak terhapus di server (ditolak izin/RLS).', 'error'); return; }
   } else kinLocalSave(kinLocalAll().filter(i => i.id !== id));
   KINERJA_KENDALA.items = KINERJA_KENDALA.items.filter(i => i.id !== id);
   if (KINERJA_KENDALA.editId === id) KINERJA_KENDALA.editId = null;
