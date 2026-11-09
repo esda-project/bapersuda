@@ -24858,6 +24858,7 @@ function importJSON(input) {
 
 async function doLogout() {
   STATE._loggingOut = true;
+  try { sessionStorage.removeItem('sg-ctx'); } catch(e) {}
   try { if (sbClient) await sbClient.auth.signOut(); } catch(e) {}
   location.reload(); // membersihkan seluruh data dari memori
 }
@@ -29791,20 +29792,40 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
   // Always use hardcoded credentials — no config screen needed
   initSupabase(SUPABASE_URL, SUPABASE_KEY);
   document.getElementById('loginScreen').style.display = '';
+  // Default Tahun di form login: tahun terakhir dipakai, kalau belum ada -> tahun berjalan (bukan opsi pertama 2030)
+  try {
+    const st = document.getElementById('loginTahun');
+    const lt = localStorage.getItem('sg-last-tahun') || String(new Date().getFullYear());
+    if ([...st.options].some(o => o.text === lt)) st.value = lt;
+  } catch(e) {}
   // Pulihkan sesi setelah refresh (tanpa login ulang)
   try {
     const { data: ss } = await sbClient.auth.getSession();
     if (ss && ss.session) {
       const { data: prof } = await sbClient.from('sianggaran_profiles').select('*').eq('id', ss.session.user.id).maybeSingle();
-      if (prof) { await sgEnterApp(prof); return; }
+      if (prof) { await sgEnterApp(prof, true); return; }
       await sbClient.auth.signOut();
     }
   } catch(e) { console.warn('restore sesi gagal', e); }
 })();
 
-async function sgEnterApp(prof) {
-  STATE.tahun = document.getElementById('loginTahun').value;
-  STATE.tahapan = document.getElementById('loginTahapan').value;
+async function sgEnterApp(prof, pulihSesi) {
+  const selTahun = document.getElementById('loginTahun'), selTahapan = document.getElementById('loginTahapan');
+  // Saat halaman di-refresh, pilihan Tahun/Tahapan di form login kembali ke nilai awal. Agar data yang tampil
+  // SAMA dengan saat pertama login, pilihan terakhir disimpan di sessionStorage dan dipulihkan di sini.
+  if (pulihSesi) {
+    try {
+      const ctx = JSON.parse(sessionStorage.getItem('sg-ctx') || 'null');
+      if (ctx && [...selTahun.options].some(o => o.text === String(ctx.tahun))) selTahun.value = String(ctx.tahun);
+      if (ctx && [...selTahapan.options].some(o => o.text === String(ctx.tahapan))) selTahapan.value = String(ctx.tahapan);
+    } catch(e) {}
+  }
+  STATE.tahun = selTahun.value;
+  STATE.tahapan = selTahapan.value;
+  try {
+    sessionStorage.setItem('sg-ctx', JSON.stringify({ tahun: STATE.tahun, tahapan: STATE.tahapan }));
+    localStorage.setItem('sg-last-tahun', STATE.tahun);
+  } catch(e) {}
   STATE.user = prof;
   const dark = STATE.darkMode || document.getElementById('loginMode').value === 'dark';
   document.documentElement.classList.toggle('dark', !!dark); STATE.darkMode = !!dark;
